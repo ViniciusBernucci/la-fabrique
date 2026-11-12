@@ -1,3 +1,6 @@
+## 2026-11-12 — E13: compensação de efeitos parciais por risco (T13-05)
+Compensação idempotente de baixo risco pelo ledger, sensível só com autorização, irreversível preservado; falha conserva o trabalho e bloqueia operações agravantes. Adaptadores reais NOT_RUN. [Entrega](entregas/2026-11-12-E13-compensacao.md) · [ADR-0029](adr/0029-compensacao-de-efeitos-por-risco.md).
+
 ## 2026-11-12 — E07: seleção de fluxo e subfluxo por regras (T07-04)
 Regras ordenadas com atributos normalizados, padrão explícito, simulação e rastro persistido com o motivo; corrige o snapshot de publicação sem agentes. [Entrega](entregas/2026-11-12-E07-selecao-por-regras.md) · [ADR-0028](adr/0028-selecao-de-fluxo-por-regras.md).
 
