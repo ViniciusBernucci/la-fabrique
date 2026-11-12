@@ -1,0 +1,126 @@
+openapi: 3.0.3
+info:
+  title: Le Fabrique — API interna
+  version: 0.1.0
+  description: |
+    Contrato interno entre o painel web e a API Go. Cresce a cada épico; esta
+    versão cobre o T03 (fundação): saúde, sessão e leitura de projetos.
+    Toda rota fora de /api/healthz e /api/readyz exige o cookie de sessão
+    `lf_session` (HttpOnly, SameSite=Strict). Erros seguem `ErrorBody`.
+servers:
+  - url: /api
+tags:
+  - name: operacao
+  - name: sessao
+  - name: projetos
+paths:
+  /healthz:
+    get:
+      tags: [operacao]
+      summary: Liveness do processo
+      security: []
+      responses:
+        "200": {description: Processo vivo, content: {application/json: {schema: {$ref: "#/components/schemas/Status"}}}}
+  /readyz:
+    get:
+      tags: [operacao]
+      summary: Readiness (inclui o PostgreSQL)
+      security: []
+      responses:
+        "200": {description: Pronto, content: {application/json: {schema: {$ref: "#/components/schemas/Status"}}}}
+        "503": {$ref: "#/components/responses/Error"}
+  /session:
+    get:
+      tags: [sessao]
+      summary: Sessão administrativa atual
+      responses:
+        "200": {description: Sessão válida, content: {application/json: {schema: {$ref: "#/components/schemas/Session"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+  /dev/session:
+    post:
+      tags: [sessao]
+      summary: "[SOMENTE DEV] Emite sessão sem senha"
+      description: |
+        Existe apenas com DEV_AUTH_ENABLED=true, que a API recusa fora de
+        APP_ENV=development. Será removido quando o login (T04-01) existir.
+      security: []
+      responses:
+        "201": {description: Sessão criada e cookie definido, content: {application/json: {schema: {$ref: "#/components/schemas/Session"}}}}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects:
+    get:
+      tags: [projetos]
+      summary: Lista projetos (mais novos primeiro), paginada por cursor
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: cursor, in: query, schema: {type: string}, description: "Valor de next_cursor da página anterior"}
+        - {name: state, in: query, schema: {$ref: "#/components/schemas/ProjectState"}}
+      responses:
+        "200": {description: Página de projetos, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectPage"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+  /projects/{id}:
+    get:
+      tags: [projetos]
+      summary: Detalhe de um projeto
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Projeto, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+security:
+  - sessionCookie: []
+components:
+  securitySchemes:
+    sessionCookie: {type: apiKey, in: cookie, name: lf_session}
+  responses:
+    Error:
+      description: Falha. `correlation_id` repete o cabeçalho X-Request-ID.
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorBody"}}}
+  schemas:
+    Status:
+      type: object
+      required: [status]
+      properties: {status: {type: string}}
+    ErrorBody:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, correlation_id]
+          properties:
+            code: {type: string, description: "Código legível por máquina", example: unauthorized}
+            message: {type: string}
+            action: {type: string, description: "Ação sugerida"}
+            correlation_id: {type: string}
+    Session:
+      type: object
+      required: [id, admin_id, username, expires_at]
+      properties:
+        id: {type: string, format: uuid}
+        admin_id: {type: string, format: uuid}
+        username: {type: string}
+        expires_at: {type: string, format: date-time}
+    ProjectState:
+      type: string
+      enum: [draft, active, paused, archived]
+    Project:
+      type: object
+      required: [id, slug, name, state, priority, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        slug: {type: string}
+        name: {type: string}
+        state: {$ref: "#/components/schemas/ProjectState"}
+        priority: {type: integer, minimum: 0, maximum: 4}
+        version: {type: integer, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ProjectPage:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/Project"}}
+        next_cursor: {type: string}

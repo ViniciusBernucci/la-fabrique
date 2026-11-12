@@ -1,25 +1,39 @@
-# La fabrique — Fábrica de Software
+# La fabrique
 
-[Abra o Manual Vivo](docs/01-README.md) para entender fluxo, arquitetura, módulos e limites. [LEIA-ME-PRIMEIRO](docs/00-LEIA-ME-PRIMEIRO.md) organiza as trilhas; [índice completo](docs/02-INDEX.md) localiza arquivos.
+Painel pessoal que gerencia a execução de desenvolvimento assistido por IA em projetos de software (Jira/ClickUp → plano → execução isolada → Draft PR no GitHub). Especificação completa em [docs/NEW MVP](docs/NEW%20MVP/00-LEIA-ME.md); progresso em [07-CHECKLIST.md](docs/NEW%20MVP/07-CHECKLIST.md).
 
-React + TypeScript + Vite; API NestJS; worker Node/TypeScript separado; PostgreSQL e Redis/BullMQ, na mesma VPS. A API não executa clientes, builds ou testes. Assinaturas oficiais primeiro, APIs de IA/extras/recarga/fallback pago desligados.
+**Stack:** Go (API + worker) · React/TypeScript/Vite · PostgreSQL · Docker Compose.
 
-Código existe no monorepo. Tenancy/RLS/broker são propostas posteriores, sem eficácia comprovada. [Estado conferido em a2cc5e0](docs/02-arquitetura/01-as-is.md) distingue código, proposta e validação operacional. Aceites FAC continuam no [backlog real](docs/08-desenvolvimento/09-backlog.md); [changelog](docs/04-CHANGELOG.md) preserva cronologia.
+## Começar (dev)
 
-## Conta do usuário
+Requisitos: Docker, Go 1.27, Node 24, make.
 
-O avatar Minha conta e o menu Usuários abrem perfil, conta/equipe, convites, projetos/permissões, integrações privadas, notificações, dados, plano e segurança individuais. [Feature FAC-038](docs/04-features/01-control-settings.md#painel-da-conta-do-usuário--fac-038) e [rollout](docs/07-operacao/01-deploy.md#rollout-da-camada-de-conta--fac-038). Migration aditiva preparada; não aplicada no banco ativo nesta entrega. Rotas globais anteriores continuam sob token administrativo separado.
+```sh
+make bootstrap   # cria .env e instala dependências
+make up          # sobe postgres, api, worker e web (hot reload)
+make seed        # projetos fictícios (opcional)
+```
 
-## Desenvolvimento
+Abra <http://127.0.0.1:5180> e use **Entrar (somente dev)**. Portas (configuráveis no `.env`): web 5180 · API 8480 · Postgres 5442 — as padrão 5173/5432 estão ocupadas nesta máquina.
 
-[Setup e comandos reais](docs/08-desenvolvimento/01-ambiente-local.md). Requer Node 22.20.0, npm 10.9.3 e Docker Compose. Checks de software: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`. Migrations/ativação são ações explícitas separadas; não são parte da reorganização.
+```sh
+make lint test            # qualidade (sem banco)
+make test-integration     # com PostgreSQL real (precisa do make up)
+make down                 # derruba o stack
+```
 
-## Documentar e revisar
+## VPS
 
-Abrir as [duas políticas](docs/00-governanca/00-README.md). Novas entregas em docs/09-entregas; módulos/contratos atuais e lessons aplicadas acompanham a alteração. [Prompt de entrega](prompts/PROMPT-ENTREGA.md), [prompt mestre de migração](prompts/PROMPT-MESTRE-MIGRACAO.md), [guia de integração](docs/00-governanca/03-GUIA-DE-INTEGRACAO.md).
+`cp .env.production.example .env`, preencha `POSTGRES_PASSWORD` e rode `make up-prod`. Só o web é publicado. Detalhes em [docs/operacao/ambientes-docker.md](docs/operacao/ambientes-docker.md).
 
-Validação: `python3 scripts/validar-documentacao.py`. Esse comando verifica links, anchors, fences e hashes; revisão semântica e aceite humano continuam necessários. [Entrega DOC-MV-001](docs/09-entregas/2026/2026-10-07-DOC-MV-001-migracao-manual-vivo.md).
+## Estrutura
 
-## Skills do projeto
+```text
+apps/web/        painel React        cmd/{api,worker,migrate}/   binários Go
+internal/        domínio e infra     db/migrations/              SQL versionado
+contracts/       OpenAPI             infra/{compose,images,proxy}/  Docker
+tests/           contrato, integração, fixtures      skills/      skills de agentes
+docs/            manual, ADRs, operação, spec do MVP
+```
 
-As versões adaptadas para a La fabrique estão em [skills/](skills/00-perfil-la-fabrique.md). Guias de agentes exigem leitura explícita dessas fontes; descoberta automática não foi verificada. Consulte o [catálogo de papéis](docs/00-governanca/05-fontes-carregamento.md#skills-adaptadas-para-a-fábrica).
+Para agentes de IA: [CLAUDE.md](CLAUDE.md) · [AGENTS.md](AGENTS.md) · [ANTIGRAVITY.md](ANTIGRAVITY.md). Índice: [docs/README.md](docs/README.md).

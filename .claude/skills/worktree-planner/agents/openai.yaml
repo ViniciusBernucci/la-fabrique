@@ -1,0 +1,6 @@
+interface:
+  display_name: "Planejador de Worktrees"
+  short_description: "Base, branches, prompts por worktree e plano de integração"
+  default_prompt: "Use $worktree-planner para planejar as worktrees, os prompts por frente e a integração destes tickets."
+policy:
+  allow_implicit_invocation: true

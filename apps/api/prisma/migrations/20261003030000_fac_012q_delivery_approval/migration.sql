@@ -1,2 +1,0 @@
-ALTER TABLE "runs" ADD COLUMN "approval" JSONB;
-ALTER TYPE "RunStatus" ADD VALUE 'DONE';

@@ -1,0 +1,5 @@
+[
+  {"slug": "exemplo-api", "name": "Exemplo — API de pagamentos", "state": "active", "priority": 3},
+  {"slug": "exemplo-site", "name": "Exemplo — Site institucional", "state": "draft", "priority": 2},
+  {"slug": "exemplo-legado", "name": "Exemplo — Sistema legado", "state": "paused", "priority": 1}
+]
