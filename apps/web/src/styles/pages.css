@@ -318,3 +318,71 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Assistente de cadastro (E05) */
+.stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+.stepper-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  color: var(--hud-text-muted);
+  border: 1px solid var(--hud-line-strong);
+  border-radius: var(--hud-radius-pill);
+  background: transparent;
+  font: 500 13px var(--hud-font-mono);
+  cursor: pointer;
+}
+.stepper-item[aria-current="step"] {
+  color: var(--hud-teal);
+  border-color: var(--hud-teal);
+}
+.fieldset-plain {
+  display: contents;
+}
+.fieldset-plain:disabled {
+  opacity: 0.6;
+}
+.form-note {
+  grid-column: 1 / -1;
+}
+.checklist {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+.checklist-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--hud-line-strong);
+  border-radius: var(--hud-radius);
+}
+.checklist-item small {
+  display: block;
+  color: var(--hud-text-muted);
+}
+.checklist-mark {
+  font: 600 14px var(--hud-font-mono);
+}
+.checklist-item--ok .checklist-mark {
+  color: var(--hud-teal);
+}
+.checklist-item--pending {
+  border-color: var(--hud-amber);
+}
+.checklist-item--pending .checklist-mark {
+  color: var(--hud-amber);
+}
+.badge--draft {
+  color: var(--hud-text-muted);
+}

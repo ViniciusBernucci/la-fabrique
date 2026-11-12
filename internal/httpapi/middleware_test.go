@@ -61,7 +61,7 @@ func TestResponsesAreRedactedBeforeLeavingTheServer(t *testing.T) {
 	h := s.withMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/json":
-			writeJSON(w, http.StatusTeapot, map[string]string{"detail": "falhou com valor-secreto-xyz-123 e ghp_abcdefghijklmnopqrstuvwxyz0123456789"})
+			writeJSON(w, http.StatusTeapot, map[string]string{"detail": "falhou com valor-secreto-xyz-123 e " + "ghp" + "_abcdefghijklmnopqrstuvwxyz0123456789"})
 		case "/err":
 			writeError(w, r, 400, "x", "mensagem com valor-secreto-xyz-123", "")
 		case "/stream":

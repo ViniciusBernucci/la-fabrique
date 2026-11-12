@@ -1,5 +1,7 @@
-// Package projects implementa o cadastro de projetos (estado, versão e leitura
-// paginada). O assistente de cadastro e as integrações pertencem ao E05.
+// Package projects implementa o cadastro de projetos: rascunho do assistente,
+// validação local de preenchimento, ativação/suspensão com trilha e leitura
+// paginada (E05). A validação de acesso remoto (T05-02) e de recursos (T05-03)
+// entra como novos itens do mesmo relatório.
 package projects
 
 import (
@@ -27,30 +29,70 @@ var (
 	validStates = map[string]bool{StateDraft: true, StateActive: true, StatePaused: true, StateArchived: true}
 )
 
-// Project é o agregado de cadastro.
+// Etapas do assistente de cadastro, na ordem.
+const (
+	StepBasics     = "basics"
+	StepRepository = "repository"
+	StepSource     = "source"
+	StepReview     = "review"
+)
+
+var validSteps = map[string]bool{StepBasics: true, StepRepository: true, StepSource: true, StepReview: true}
+
+// Repository é o repositório GitHub atendido. Vazio = ainda não preenchido.
+type Repository struct {
+	Owner        string  `json:"owner"`
+	Name         string  `json:"name"`
+	BaseBranch   string  `json:"base_branch"`
+	ConnectionID *string `json:"connection_id"`
+}
+
+// Source é a origem oficial de tarefas (uma por projeto): Jira ou ClickUp.
+type Source struct {
+	Kind         string  `json:"kind"`
+	ConnectionID *string `json:"connection_id"`
+	Container    string  `json:"container"`
+}
+
+func (s Source) empty() bool { return s.Kind == "" && s.ConnectionID == nil && s.Container == "" }
+
+// Project é o agregado de cadastro. Nasce sem vínculos de agentes, workflows
+// ou recursos globais; credenciais aparecem só como referência de conexão.
 type Project struct {
-	ID        string    `json:"id"`
-	Slug      string    `json:"slug"`
-	Name      string    `json:"name"`
-	State     string    `json:"state"`
-	Priority  int       `json:"priority"`
-	Version   int       `json:"version"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID          string     `json:"id"`
+	Slug        string     `json:"slug"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	State       string     `json:"state"`
+	Priority    int        `json:"priority"`
+	WizardStep  string     `json:"wizard_step"`
+	Repository  Repository `json:"repository"`
+	Source      Source     `json:"source"`
+	Version     int        `json:"version"`
+	ActivatedAt *time.Time `json:"activated_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 // NewProject reúne os dados de criação.
 type NewProject struct {
-	Slug     string
-	Name     string
-	Priority int
+	Slug        string
+	Name        string
+	Description string
+	Priority    *int // nil = padrão (2); 0 é uma prioridade válida
 }
 
-const columns = `id, slug, name, state, priority, version, created_at, updated_at`
+const columns = `id, slug, name, description, state, priority, wizard_step,
+	repo_owner, repo_name, base_branch, repo_connection_id,
+	COALESCE(source_kind, ''), source_connection_id, source_container,
+	version, activated_at, created_at, updated_at`
 
 func scan(row interface{ Scan(...any) error }) (Project, error) {
 	var p Project
-	err := row.Scan(&p.ID, &p.Slug, &p.Name, &p.State, &p.Priority, &p.Version, &p.CreatedAt, &p.UpdatedAt)
+	err := row.Scan(&p.ID, &p.Slug, &p.Name, &p.Description, &p.State, &p.Priority, &p.WizardStep,
+		&p.Repository.Owner, &p.Repository.Name, &p.Repository.BaseBranch, &p.Repository.ConnectionID,
+		&p.Source.Kind, &p.Source.ConnectionID, &p.Source.Container,
+		&p.Version, &p.ActivatedAt, &p.CreatedAt, &p.UpdatedAt)
 	return p, persistence.MapError(err)
 }
 
@@ -59,17 +101,26 @@ func Create(ctx context.Context, db persistence.DBTX, in NewProject) (Project, e
 	in.Slug = strings.TrimSpace(in.Slug)
 	in.Name = strings.TrimSpace(in.Name)
 	if !slugPattern.MatchString(in.Slug) || len(in.Slug) > 63 {
-		return Project{}, fmt.Errorf("%w: slug deve usar a-z, 0-9 e hífens", persistence.ErrInvalidInput)
+		return Project{}, &FieldError{Field: "slug", Message: "O identificador deve usar letras minúsculas, números e hífens (até 63 caracteres)."}
 	}
 	if in.Name == "" || len(in.Name) > 120 {
-		return Project{}, fmt.Errorf("%w: nome deve ter entre 1 e 120 caracteres", persistence.ErrInvalidInput)
+		return Project{}, &FieldError{Field: "name", Message: "O nome deve ter entre 1 e 120 caracteres."}
 	}
-	if in.Priority == 0 {
-		in.Priority = 2
+	in.Description = strings.TrimSpace(in.Description)
+	if len(in.Description) > 500 {
+		return Project{}, &FieldError{Field: "description", Message: "A descrição deve ter até 500 caracteres."}
 	}
+	priority := 2
+	if in.Priority != nil {
+		priority = *in.Priority
+	}
+	if priority < 0 || priority > 4 {
+		return Project{}, &FieldError{Field: "priority", Message: "A prioridade deve estar entre 0 e 4."}
+	}
+	// Criar conclui a etapa "Dados": o assistente retoma em "Repositório".
 	return scan(db.QueryRow(ctx,
-		`INSERT INTO projects (slug, name, priority) VALUES ($1, $2, $3) RETURNING `+columns,
-		in.Slug, in.Name, in.Priority))
+		`INSERT INTO projects (slug, name, description, priority, wizard_step) VALUES ($1, $2, $3, $4, 'repository') RETURNING `+columns,
+		in.Slug, in.Name, in.Description, priority))
 }
 
 // Get lê um projeto por ID.
@@ -77,33 +128,8 @@ func Get(ctx context.Context, db persistence.DBTX, id string) (Project, error) {
 	return scan(db.QueryRow(ctx, `SELECT `+columns+` FROM projects WHERE id = $1`, id))
 }
 
-// Patch descreve alterações; campos nil permanecem.
-type Patch struct {
-	Name     *string
-	State    *string
-	Priority *int
-}
-
-// Update altera o projeto com controle otimista: se expectedVersion não for a
-// atual, devolve persistence.ErrVersionConflict.
-func Update(ctx context.Context, db persistence.DBTX, id string, expectedVersion int, p Patch) (Project, error) {
-	if p.State != nil && !validStates[*p.State] {
-		return Project{}, fmt.Errorf("%w: estado desconhecido", persistence.ErrInvalidInput)
-	}
-	updated, err := scan(db.QueryRow(ctx, `
-		UPDATE projects SET
-			name = COALESCE($3, name),
-			state = COALESCE($4, state),
-			priority = COALESCE($5, priority),
-			version = version + 1, updated_at = now()
-		WHERE id = $1 AND version = $2
-		RETURNING `+columns, id, expectedVersion, p.Name, p.State, p.Priority))
-	if err == persistence.ErrNotFound {
-		if _, getErr := Get(ctx, db, id); getErr == nil {
-			return Project{}, persistence.ErrVersionConflict
-		}
-	}
-	return updated, err
+func getForUpdate(ctx context.Context, db persistence.DBTX, id string) (Project, error) {
+	return scan(db.QueryRow(ctx, `SELECT `+columns+` FROM projects WHERE id = $1 FOR UPDATE`, id))
 }
 
 // ListParams controla filtro e paginação por cursor.

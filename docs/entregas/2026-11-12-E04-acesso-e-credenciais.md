@@ -30,7 +30,7 @@ make lint && make test && make test-integration
 | `make test-integration` — 40 testes em PostgreSQL real (inclui migração com/sem `dev-admin`) | PASS |
 | `go test -race` unidade + contrato + integração (concorrência) | PASS |
 | `tsc -b` e `npm run build` | PASS |
-| `make check-secrets` | PASS |
+| `make check-secrets` | **FAIL no commit `b2eaff0`** (corrigido na entrega do E05) — fixtures de teste do redator imitavam tokens reais; o relato original de PASS estava errado. Hoje: PASS |
 | Stack dev reconstruído (`healthy`), migrations 3–4 aplicadas; 401 sem sessão, `/api/dev/session` 404, login inexistente 401, origem estrangeira 403 | PASS |
 | `nginx -t` (imagem de produção, `set_real_ip_from`) | PASS |
 | Login/2FA contra GitHub, Jira e ClickUp **reais** | **NOT_RUN** (sem credenciais autorizadas; os testes usam servidores falsos) |

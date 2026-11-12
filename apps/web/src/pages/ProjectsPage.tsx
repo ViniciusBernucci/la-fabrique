@@ -22,13 +22,23 @@ export function ProjectsPage() {
 
   return (
     <div className="page">
-      <PageHeader label="Projetos" title="Projetos" lead="Os projetos atendidos pela fábrica." />
+      <PageHeader
+        label="Projetos"
+        title="Projetos"
+        lead="Os projetos atendidos pela fábrica."
+        actions={
+          <Link className="button-link" to="/projects/new">
+            Novo projeto
+          </Link>
+        }
+      />
       <section className="panel" aria-label="Lista de projetos">
         {state.status === "loading" && <LoadingState label="Carregando projetos…" />}
         {state.status === "error" && <ErrorState error={state.error} onRetry={reload} />}
         {state.status === "ready" && state.data.items.length === 0 && (
           <EmptyState title="Nenhum projeto cadastrado">
-            O cadastro de projetos chega com o épico E05. Até lá, a lista permanece vazia.
+            Cadastre o primeiro projeto com “Novo projeto”. Ele começa em rascunho, sem agentes ou
+            workflows associados.
           </EmptyState>
         )}
         {state.status === "ready" && state.data.items.length > 0 && (

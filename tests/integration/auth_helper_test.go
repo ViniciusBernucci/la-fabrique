@@ -101,6 +101,8 @@ type client struct {
 	http *http.Client
 	csrf string
 	ua   string
+	// secret é o segredo TOTP da última autenticação, para novos logins do mesmo admin.
+	secret []byte
 }
 
 func (e *authEnv) newClient() *client {
@@ -216,6 +218,7 @@ func (c *client) login(secret []byte) loginResult {
 		c.e.t.Fatalf("estágio inesperado: %q", stage.Status)
 	}
 	c.csrf = res.Session.CSRFToken
+	c.secret = res.Secret
 	return res
 }
 

@@ -128,6 +128,13 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/projects", s.protected(s.listProjects))
 	mux.HandleFunc("GET /api/projects/{id}", s.protected(s.getProject))
+	mux.HandleFunc("POST /api/projects", s.protected(s.createProject))
+	mux.HandleFunc("PATCH /api/projects/{id}", s.protected(s.updateProject))
+	mux.HandleFunc("GET /api/projects/{id}/validation", s.protected(s.validateProject))
+	mux.HandleFunc("GET /api/projects/{id}/changes", s.protected(s.listProjectChanges))
+	mux.HandleFunc("POST /api/projects/{id}/activate", s.protected(s.activateProject()))
+	mux.HandleFunc("POST /api/projects/{id}/suspend", s.protected(s.suspendProject()))
+	mux.HandleFunc("POST /api/projects/{id}/resume", s.protected(s.resumeProject()))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "Rota inexistente.", "Consulte contracts/openapi.yaml.")
 	})

@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
+	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
 )
 
@@ -40,7 +41,17 @@ func writeError(w http.ResponseWriter, r *http.Request, status int, code, messag
 // writeDomainError traduz erros de persistência para respostas HTTP sem expor detalhes internos.
 func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err error) {
 	var locked *security.LockedError
+	var field *projects.FieldError
+	var invalid *projects.ValidationError
 	switch {
+	case errors.As(err, &field):
+		writeError(w, r, http.StatusBadRequest, "invalid_request", field.Message, "Corrija o campo \""+field.Field+"\" e tente novamente.")
+	case errors.As(err, &invalid):
+		writeError(w, r, http.StatusUnprocessableEntity, "validation_failed", "O projeto tem pendências e não pode ser ativado.", "Resolva os itens pendentes em GET /api/projects/{id}/validation.")
+	case errors.Is(err, projects.ErrActiveLocked):
+		writeError(w, r, http.StatusConflict, "project_active", "O projeto está ativo: repositório e origem não podem mudar agora.", "Suspenda o projeto, altere a configuração e ative novamente.")
+	case errors.Is(err, projects.ErrInvalidState):
+		writeError(w, r, http.StatusConflict, "invalid_state", "O estado atual do projeto não permite esta operação.", "Recarregue o projeto e confira o estado.")
 	case errors.As(err, &locked):
 		secs := int(locked.RetryAfter.Seconds()) + 1
 		w.Header().Set("Retry-After", strconv.Itoa(secs))

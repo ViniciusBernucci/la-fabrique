@@ -19,9 +19,14 @@ const project: Project = {
   id: "11111111-1111-4111-8111-111111111111",
   slug: "exemplo-api",
   name: "Exemplo — API",
+  description: "",
   state: "active",
   priority: 3,
+  wizard_step: "review",
+  repository: { owner: "org", name: "api", base_branch: "main", connection_id: null },
+  source: { kind: "", connection_id: null, container: "" },
   version: 2,
+  activated_at: "2026-11-02T10:00:00Z",
   created_at: "2026-11-01T10:00:00Z",
   updated_at: "2026-11-02T10:00:00Z",
 };
@@ -140,6 +145,10 @@ describe("com sessão", () => {
     stubApi({ ...base, "/projects": () => json({ items: [] }) });
     renderAt("/projects");
     expect(await screen.findByText("Nenhum projeto cadastrado")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Novo projeto" })).toHaveAttribute(
+      "href",
+      "/projects/new",
+    );
   });
 
   it("lista de projetos: erro com nova tentativa que recupera", async () => {
@@ -164,7 +173,12 @@ describe("com sessão", () => {
   });
 
   it("detalhe do projeto mostra os dados", async () => {
-    stubApi({ ...base, [`/projects/${project.id}`]: () => json(project) });
+    stubApi({
+      ...base,
+      [`/projects/${project.id}`]: () => json(project),
+      "/connections": () => json({ items: [] }),
+      [`/projects/${project.id}/changes`]: () => json({ items: [] }),
+    });
     renderAt(`/projects/${project.id}`);
     expect(
       await screen.findByRole("heading", { name: "Exemplo — API", level: 1 }),

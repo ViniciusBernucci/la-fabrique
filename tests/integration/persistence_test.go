@@ -40,7 +40,11 @@ func TestMigrationPathPreservesData(t *testing.T) {
 		t.Fatalf("migrate até 1: %v", err)
 	}
 	pool := connect(t, dbURL)
-	p := mustProject(t, pool, "legado")
+	// Insert direto: no schema 1 a tabela ainda não tem as colunas do cadastro (T05-01).
+	var p projects.Project
+	if err := pool.QueryRow(ctx, `INSERT INTO projects (slug, name) VALUES ('legado', 'Projeto legado') RETURNING id`).Scan(&p.ID); err != nil {
+		t.Fatalf("criar projeto legado: %v", err)
+	}
 
 	// Upgrade para o schema atual.
 	if _, err := m.Up(ctx); err != nil {
@@ -50,12 +54,15 @@ func TestMigrationPathPreservesData(t *testing.T) {
 	if err != nil || got.Slug != "legado" || got.Version != 1 {
 		t.Fatalf("projeto deveria sobreviver ao upgrade: %+v err=%v", got, err)
 	}
+	if got.WizardStep != "basics" || got.Source.Kind != "" || got.Repository.ConnectionID != nil {
+		t.Fatalf("projeto legado deve ganhar rascunho vazio de vínculos: %+v", got)
+	}
 	if _, err := persistence.CreateFeature(ctx, pool, p.ID, "EXT-1", "Feature nova"); err != nil {
 		t.Fatalf("tabelas da migration 2 deveriam existir: %v", err)
 	}
 
-	// Rollback e reaplicação (dev): as migrations 4, 3 e 2 saem e voltam.
-	for i := 0; i < 3; i++ {
+	// Rollback e reaplicação (dev): as migrations 5, 4, 3 e 2 saem e voltam.
+	for i := 0; i < 4; i++ {
 		if _, err := m.Down(ctx); err != nil {
 			t.Fatalf("down %d: %v", i+1, err)
 		}

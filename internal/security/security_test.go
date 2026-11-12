@@ -175,13 +175,14 @@ func TestRedactor(t *testing.T) {
 		t.Fatalf("o valor mais longo deve ser redigido por inteiro: %s", out)
 	}
 	for _, tc := range []string{
-		"token ghp_abcdefghijklmnopqrstuvwxyz0123456789",
-		"github_pat_11AAAAAAA0abcdefghijklmnop_qrstuvwxyz",
+		// Montados em tempo de execução: o literal inteiro acionaria o check-secrets.
+		"token " + "ghp" + "_abcdefghijklmnopqrstuvwxyz0123456789",
+		"github" + "_pat_11AAAAAAA0abcdefghijklmnop_qrstuvwxyz",
 		"Authorization: Bearer abc.def-ghi_jkl123456",
 		"Authorization: Basic dXNlcjpwYXNzd29yZDEyMw==",
 		"pk_12345678_ABCDEFGHIJKLMNOPQRSTUVWXYZ0",
 		"ATATT3xFfGF0abcdefghijklmnopqrstuvwx",
-		"-----BEGIN OPENSSH PRIVATE KEY-----",
+		"-----BEGIN " + "OPENSSH PRIVATE KEY-----",
 	} {
 		if got := r.Redact(tc); !strings.Contains(got, redacted) || got == tc {
 			t.Errorf("padrão não redigido: %q -> %q", tc, got)

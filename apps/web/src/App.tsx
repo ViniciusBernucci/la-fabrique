@@ -7,8 +7,10 @@ import { DecisionsPage } from "./pages/DecisionsPage";
 import { HomePage } from "./pages/HomePage";
 import { LibraryPage } from "./pages/LibraryPage";
 import { LoginPage } from "./pages/LoginPage";
+import { NewProjectPage } from "./pages/NewProjectPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { ProjectDetailPage } from "./pages/ProjectDetailPage";
+import { ProjectSetupPage } from "./pages/ProjectSetupPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { SecurityPage } from "./pages/SecurityPage";
 
@@ -47,7 +49,9 @@ export function App() {
       <Route element={<AppShell />}>
         <Route index element={<HomePage />} />
         <Route path="projects" element={<ProjectsPage />} />
+        <Route path="projects/new" element={<NewProjectPage />} />
         <Route path="projects/:id" element={<ProjectDetailPage />} />
+        <Route path="projects/:id/setup" element={<ProjectSetupPage />} />
         <Route path="library" element={<LibraryPage />} />
         <Route path="decisions" element={<DecisionsPage />} />
         <Route path="connections" element={<ConnectionsPage />} />

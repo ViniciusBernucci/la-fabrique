@@ -273,6 +273,18 @@ paths:
         "403": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
   /projects:
+    post:
+      tags: [projetos]
+      summary: Cria um projeto em rascunho, vazio de vínculos (agentes, workflows, recursos)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/NewProject"}}}
+      responses:
+        "201": {description: Projeto em rascunho, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
     get:
       tags: [projetos]
       summary: Lista projetos (mais novos primeiro), paginada por cursor
@@ -294,6 +306,102 @@ paths:
         "200": {description: Projeto, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}
         "401": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
+    patch:
+      tags: [projetos]
+      summary: Persiste uma etapa do assistente ou ajusta dados do projeto
+      description: >
+        Controle otimista por `expected_version` (409 `version_conflict`). `repository` e `source`
+        substituem o grupo inteiro; campos vazios são aceitos no rascunho e viram pendências.
+        Alterar `repository` ou `source` de projeto ativo devolve 409 `project_active`.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ProjectPatch"}}}
+      responses:
+        "200": {description: Projeto atualizado, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /projects/{id}/validation:
+    get:
+      tags: [projetos]
+      summary: Relatório de validação do preenchimento (pendências com ação concreta)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Relatório, content: {application/json: {schema: {$ref: "#/components/schemas/ValidationReport"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/changes:
+    get:
+      tags: [projetos]
+      summary: Trilha de criação, alterações, mudança de origem, ativação e suspensão
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Alterações, da mais recente para a mais antiga
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/ProjectChange"}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/activate:
+    post:
+      tags: [projetos]
+      summary: Ativa um rascunho; bloqueado (422) enquanto houver pendências obrigatórias
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ExpectedVersion"}}}
+      responses:
+        "200": {description: Projeto ativo, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /projects/{id}/suspend:
+    post:
+      tags: [projetos]
+      summary: Suspende um projeto ativo
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ExpectedVersion"}}}
+      responses:
+        "200": {description: Projeto suspenso, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /projects/{id}/resume:
+    post:
+      tags: [projetos]
+      summary: Reativa um projeto suspenso, revalidando a configuração
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ExpectedVersion"}}}
+      responses:
+        "200": {description: Projeto ativo, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
 security:
   - sessionCookie: []
 components:
@@ -461,18 +569,91 @@ components:
     ProjectState:
       type: string
       enum: [draft, active, paused, archived]
+    WizardStep:
+      type: string
+      enum: [basics, repository, source, review]
+    Repository:
+      type: object
+      required: [owner, name, base_branch, connection_id]
+      properties:
+        owner: {type: string, description: "Usuário ou organização GitHub; vazio = não preenchido"}
+        name: {type: string}
+        base_branch: {type: string}
+        connection_id: {type: [string, "null"], format: uuid, description: "Referência de conexão GitHub (nunca o segredo)"}
+    Source:
+      type: object
+      required: [kind, connection_id, container]
+      properties:
+        kind: {type: string, enum: ["", jira, clickup]}
+        connection_id: {type: [string, "null"], format: uuid}
+        container: {type: string, description: "Chave do projeto Jira ou ID da lista ClickUp"}
     Project:
       type: object
-      required: [id, slug, name, state, priority, version, created_at, updated_at]
+      required: [id, slug, name, description, state, priority, wizard_step, repository, source, version, activated_at, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         slug: {type: string}
         name: {type: string}
+        description: {type: string}
         state: {$ref: "#/components/schemas/ProjectState"}
         priority: {type: integer, minimum: 0, maximum: 4}
+        wizard_step: {$ref: "#/components/schemas/WizardStep"}
+        repository: {$ref: "#/components/schemas/Repository"}
+        source: {$ref: "#/components/schemas/Source"}
         version: {type: integer, minimum: 1}
+        activated_at: {type: [string, "null"], format: date-time}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
+    NewProject:
+      type: object
+      required: [slug, name]
+      additionalProperties: false
+      properties:
+        slug: {type: string, pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", maxLength: 63}
+        name: {type: string, minLength: 1, maxLength: 120}
+        description: {type: string, maxLength: 500}
+        priority: {type: integer, minimum: 0, maximum: 4, description: "Padrão 2"}
+    ProjectPatch:
+      type: object
+      required: [expected_version]
+      additionalProperties: false
+      properties:
+        expected_version: {type: integer, minimum: 1}
+        name: {type: string}
+        description: {type: string}
+        priority: {type: integer, minimum: 0, maximum: 4}
+        wizard_step: {$ref: "#/components/schemas/WizardStep"}
+        repository: {$ref: "#/components/schemas/Repository"}
+        source: {$ref: "#/components/schemas/Source"}
+    ExpectedVersion:
+      type: object
+      required: [expected_version]
+      additionalProperties: false
+      properties: {expected_version: {type: integer, minimum: 1}}
+    ValidationCheck:
+      type: object
+      required: [id, area, label, status]
+      properties:
+        id: {type: string, example: "repository.connection"}
+        area: {type: string, enum: [basics, repository, source]}
+        label: {type: string}
+        status: {type: string, enum: [ok, pending]}
+        action: {type: string, description: "Ação concreta para resolver a pendência"}
+    ValidationReport:
+      type: object
+      required: [ok, checks, not_verified]
+      properties:
+        ok: {type: boolean, description: "Verdadeiro só quando todos os itens obrigatórios estão atendidos"}
+        checks: {type: array, items: {$ref: "#/components/schemas/ValidationCheck"}}
+        not_verified: {type: array, items: {type: string}, description: "O que este relatório ainda não avalia (T05-02, T05-03)"}
+    ProjectChange:
+      type: object
+      required: [id, action, detail, created_at]
+      properties:
+        id: {type: integer}
+        action: {type: string, enum: [created, updated, source_changed, activated, suspended, resumed]}
+        detail: {type: object, additionalProperties: true, description: "Só nomes de campos e referências; nunca segredos"}
+        created_at: {type: string, format: date-time}
     ProjectPage:
       type: object
       required: [items]
