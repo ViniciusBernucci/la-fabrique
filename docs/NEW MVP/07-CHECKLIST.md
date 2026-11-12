@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E09 (T09-02)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E11 (T11-02)._
 
 ## Resumo
 
-**17 feitos · 15 parciais · 35 pendentes** de 67 tickets.
+**17 feitos · 16 parciais · 34 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -87,7 +87,7 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E09 (T09-02)._
 - [~] **[T08-02](03-BACKLOG.md#t08-02)** — Gerenciar skills e importações · dep.: T03-02, T04-03, T13-01.
   - PASS (PostgreSQL real, Docker real, vitest): 4 modalidades (IA, script, determinística, híbrida), importação de tar.gz/zip/SKILL.md com travessia, links e limites recusados, scripts contra a política, hash/origem/arquivos, idempotência e versão, trilha auditável sem conteúdo, nada executa na importação, execução sob política e nó de skill isolado. **Parcial:** importação por **Git UNSUPPORTED** (T15-01); IA real NOT_RUN (executor de mentira). Revisão independente NOT_RUN. Entrega: [E08 skills](../entregas/2026-11-12-E08-catalogo-de-skills.md).
 - [x] **[T08-03](03-BACKLOG.md#t08-03)** — Criar catálogo de ferramentas · dep.: T03-02, T13-01.
-  - PASS (Docker real + PostgreSQL real + vitest): 8 nativas e personalizadas (script e integração) com esquemas, permissões e limites; ordem existe → concedida → escopo → argumentos → política → execução; ferramenta nova não herda acesso; saída tipada; parâmetros por ambiente sem injeção; limites de saída e tempo. **Limites:** `git_*` com repositório real NOT_RUN (sem git nas imagens); symlinks/socket são do T11-02; cadastro de personalizadas só por API. Revisão independente NOT_RUN. Entrega: [E08 ferramentas](../entregas/2026-11-12-E08-catalogo-de-ferramentas.md).
+  - PASS (Docker real + PostgreSQL real + vitest): 8 nativas e personalizadas (script e integração) com esquemas, permissões e limites; ordem existe → concedida → escopo → argumentos → política → execução; ferramenta nova não herda acesso; saída tipada; parâmetros por ambiente sem injeção; limites de saída e tempo. **Limites:** `git_*` com repositório real NOT_RUN (sem git nas imagens); symlinks/socket: resolvidos no T11-02; cadastro de personalizadas só por API. Revisão independente NOT_RUN. Entrega: [E08 ferramentas](../entregas/2026-11-12-E08-catalogo-de-ferramentas.md).
 - [~] **[T08-04](03-BACKLOG.md#t08-04)** — Cadastrar MCP, descobrir e autorizar ferramentas · dep.: T08-03, T04-03.
   - PASS (PostgreSQL real + servidor MCP falso, JSON e SSE): descoberta paginada, concessão por hash pinado, ferramenta nova sem acesso, mudança de esquema bloqueia até nova aprovação, argumentos validados antes da chamada, política após conceder, trilha redigida, credencial só do cofre. **Parcial:** servidor MCP real NOT_RUN, stdio UNSUPPORTED, sem tela no painel. Revisão independente NOT_RUN. Entrega: [E08 MCP](../entregas/2026-11-12-E08-mcp.md).
 
@@ -111,7 +111,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E09 (T09-02)._
 
 - [~] **[T11-01](03-BACKLOG.md#t11-01)** — Provisionar sandbox e perfis de execução · dep.: T02-02, T03-01.
   - PASS (Docker real, `-race`): container+volume+rede por feature, usuário sem privilégios, rootfs RO, sem capabilities/socket/montagens do host, quotas de CPU/memória/processos/disco, A não vê B (arquivos, processos, rede), seed+build sem rede, destruição idempotente e sem sobras. **Parcial:** clone remoto com credencial e rede com saída controlada não implementados; isolamento do host só provado em Docker Desktop (Linux NOT_RUN); worker ainda sem acesso ao runtime. Entrega: [E11](../entregas/2026-11-12-E11-sandbox.md).
-- [ ] **[T11-02](03-BACKLOG.md#t11-02)** — Executar ferramentas e skills com limites · dep.: T11-01, T08-02, T08-03.
+- [~] **[T11-02](03-BACKLOG.md#t11-02)** — Executar ferramentas e skills com limites · dep.: T11-01, T08-02, T08-03.
+  - PASS (Docker real, `-race`, CLI e gateway de mentira): ferramentas de arquivo confinadas por resolução de links (16 fugas recusadas, links internos funcionam), traversal e socket do runtime recusados (SafePath, política e ausência no container), modo API pelo `Registry` e modo CLI no container, chamadas brokeradas exigem identidade e registram o ator. **Parcial:** CLIs e gateways reais NOT_RUN; `git_*` em repositório real NOT_RUN; scripts não são confinados por caminho; corrida entre resolução e uso só afeta o próprio sandbox. Revisão independente NOT_RUN. Entrega: [E11 ferramentas](../entregas/2026-11-12-E11-execucao-de-ferramentas.md).
 - [x] **[T11-03](03-BACKLOG.md#t11-03)** — Supervisionar processos, timeout e inatividade · dep.: T11-01, T13-01.
   - PASS (Docker real, `-race`): prazo absoluto e de inatividade independentes; atividade = saída, CPU ou I/O da árvore (processo silencioso que trabalha continua); timeout encerra a árvore (TERM→KILL) com parada confirmada por amostra; estado incerto → quarentena do sandbox (Exec/Start recusados) até `VerifyQuiescent`; relatório auditável. **Limites:** processo que só espera (sem CPU/I/O/saída) é tratado como travado; sem ligação com o worker/checkpoint (E12). Revisão independente NOT_RUN. Entrega: [E11 adendo](../entregas/2026-11-12-E11-sandbox.md).
 

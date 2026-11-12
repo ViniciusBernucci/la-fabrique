@@ -38,10 +38,14 @@ type RegistryExecutor struct {
 	Registry *tools.Registry
 	Env      tools.Env
 	Grant    tools.Grant
+	Identity tools.Identity // quem faz a chamada (obrigatória nas integrações)
 }
 
 // Call implementa Executor.
 func (e RegistryExecutor) Call(ctx context.Context, name string, args map[string]any) (map[string]any, error) {
+	if e.Identity != (tools.Identity{}) {
+		ctx = tools.WithIdentity(ctx, e.Identity)
+	}
 	res, err := e.Registry.Call(ctx, e.Env, name, args, e.Grant)
 	return res.Output, err
 }

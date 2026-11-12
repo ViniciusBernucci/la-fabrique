@@ -357,3 +357,55 @@ func TestRegistryExecutorStillEnforcesGrantAndScope(t *testing.T) {
 		t.Fatal("o arquivo não deveria existir")
 	}
 }
+
+// T11-02 — modo API: as ferramentas autorizadas funcionam e as fugas (traversal,
+// symlink, socket do runtime) falham, e o modelo só recebe o erro.
+func TestAPIModeAuthorizedToolsWorkAndEscapesFail(t *testing.T) {
+	sb := sandbox(t)
+	// Um repositório hostil deixou links no workspace (preparo direto, fora das ferramentas).
+	res, err := sb.Exec(t.Context(), execution.ExecSpec{Cmd: []string{"sh", "-c", "cd /workspace && ln -s /etc/passwd link_passwd && ln -s /var/run/docker.sock link_sock && ln -s / link_raiz"}})
+	if err != nil || res.ExitCode != 0 {
+		t.Fatalf("%+v %v", res, err)
+	}
+	reg := tools.NewRegistry(nil)
+	env := tools.Env{Sandbox: sb, Guard: &policy.Guard{Policy: policy.DefaultPolicy(policy.Options{}), Rec: &countRec{}}}
+	granted := []string{"read_file", "write_file", "list_dir"}
+	ex := RegistryExecutor{Registry: reg, Env: env, Identity: tools.Identity{Agent: "ag", Run: "r1"},
+		Grant: tools.Grant{Tools: granted, Permissions: []string{tools.PermRead, tools.PermWrite}}}
+	var specs []ToolSpec
+	for _, n := range granted {
+		tl, _ := reg.Get(t.Context(), n)
+		specs = append(specs, SpecOf(tl))
+	}
+	f := newFake(t,
+		toolCalls(
+			[2]string{"write_file", `{"path":"feature/a.txt","content":"ok\n"}`},
+			[2]string{"read_file", `{"path":"feature/a.txt"}`},
+			[2]string{"read_file", `{"path":"../etc/passwd"}`},
+			[2]string{"read_file", `{"path":"/var/run/docker.sock"}`},
+			[2]string{"read_file", `{"path":"link_passwd"}`},
+			[2]string{"read_file", `{"path":"link_sock"}`},
+			[2]string{"list_dir", `{"path":"link_raiz"}`},
+			[2]string{"write_file", `{"path":"link_raiz/tmp/escapou.txt","content":"x"}`},
+		),
+		say("terminei"))
+	out, err := Run(t.Context(), client(t, models.GatewayOpenRouter, f), RunConfig{Model: eligibleModel(models.GatewayOpenRouter), Prompt: "x", Tools: specs, Exec: ex})
+	if err != nil || out.Text != "terminei" {
+		t.Fatalf("%+v %v", out, err)
+	}
+	got := []string{}
+	for _, c := range out.Calls {
+		got = append(got, c.Outcome)
+	}
+	if strings.Join(got, ",") != "ok,ok,error,error,error,error,error,error" {
+		t.Fatalf("%v", got)
+	}
+	// O que voltou ao modelo não contém conteúdo de fora do workspace.
+	b, _ := json.Marshal(f.reqs[1])
+	if strings.Contains(string(b), "root:x:0") || !strings.Contains(string(b), "sai do workspace") {
+		t.Fatalf("o modelo só recebe o erro: %s", b)
+	}
+	if r, _ := sb.Exec(t.Context(), execution.ExecSpec{Cmd: []string{"sh", "-c", "test ! -e /tmp/escapou.txt"}}); r.ExitCode != 0 {
+		t.Fatal("nada foi gravado fora do workspace")
+	}
+}

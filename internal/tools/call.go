@@ -19,6 +19,8 @@ var (
 	ErrNotGranted  = errors.New("ferramenta não concedida a este agente")
 	ErrScope       = errors.New("escopo insuficiente para a ferramenta")
 	ErrNotReady    = errors.New("o ambiente não está configurado para esta chamada")
+	ErrEscape      = errors.New("o caminho resolvido (link simbólico) sai do workspace")
+	ErrIdentity    = errors.New("chamada sem identidade (agente e execução)")
 )
 
 // Grant é o que foi concedido ao agente: quais ferramentas e quais permissões.
@@ -35,6 +37,27 @@ func in(list []string, v string) bool {
 		}
 	}
 	return false
+}
+
+// Identity diz QUEM faz a chamada: o agente e a execução. Chamadas brokeradas
+// (integrações) exigem identidade; as demais a registram na trilha da política.
+type Identity struct{ Agent, Run string }
+
+func (i Identity) valid() bool { return i.Agent != "" && i.Run != "" }
+
+func (i Identity) String() string { return "agent:" + i.Agent + " run:" + i.Run }
+
+type identityKey struct{}
+
+// WithIdentity anexa a identidade ao contexto da chamada (o conector a lê com IdentityFrom).
+func WithIdentity(ctx context.Context, id Identity) context.Context {
+	return context.WithValue(ctx, identityKey{}, id)
+}
+
+// IdentityFrom lê a identidade do contexto.
+func IdentityFrom(ctx context.Context) (Identity, bool) {
+	id, ok := ctx.Value(identityKey{}).(Identity)
+	return id, ok && id.valid()
 }
 
 // ConnectorRunner executa a operação de uma ferramenta de integração.
@@ -157,10 +180,18 @@ func (r *Registry) Call(ctx context.Context, env Env, name string, args map[stri
 	if t.Kind != KindIntegration && env.Sandbox == nil {
 		return Result{}, fmt.Errorf("%w: sandbox ausente", ErrNotReady)
 	}
+	id, hasID := IdentityFrom(ctx)
+	if t.Kind == KindIntegration && !hasID {
+		return Result{}, ErrIdentity
+	}
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(t.Limits.TimeoutSeconds)*time.Second)
 	defer cancel()
 	var res Result
-	_, err = env.Guard.Do(ctx, action(env.Project, t, clean), func() error {
+	act := action(env.Project, t, clean)
+	if hasID {
+		act.Params["actor"] = id.String()
+	}
+	_, err = env.Guard.Do(ctx, act, func() error {
 		var rerr error
 		res, rerr = r.run(ctx, env, t, clean)
 		return rerr
@@ -198,6 +229,34 @@ func exec(ctx context.Context, env Env, argv []string, stdin []byte, extraEnv ma
 	return res, err
 }
 
+// confineSh resolve o caminho ($0) seguindo links simbólicos (inclusive o trecho
+// que ainda não existe, a partir do ancestral existente mais próximo) e SÓ segue
+// se o resultado estiver dentro do workspace; os comandos seguintes usam o caminho
+// já resolvido ($rp). A resolução e o uso acontecem no mesmo processo, o que
+// estreita a janela de corrida. Código 77 = o caminho sai do workspace.
+const confineSh = `resolve() { p="$1"; while [ ! -e "$p" ] && [ ! -L "$p" ]; do p=$(dirname -- "$p"); done; b=$(readlink -f -- "$p") || return 1; printf '%s%s' "$b" "${1#"$p"}"; }
+rp=$(resolve "$0") || exit 77
+case "$rp" in /workspace|/workspace/*) ;; *) exit 77;; esac
+`
+
+const exitEscape = 77
+
+// fsExec roda o corpo confinado: $0 = caminho, $1... = extras.
+func fsExec(ctx context.Context, env Env, body, path string, stdin []byte, extra ...string) (execution.ExecResult, error) {
+	return exec(ctx, env, append([]string{"sh", "-c", confineSh + body, path}, extra...), stdin, nil)
+}
+
+// fsFail traduz a saída de fsExec: escape de workspace vira ErrEscape; o resto, a mensagem do chamador.
+func fsFail(out execution.ExecResult, err error, msg string) error {
+	if err == nil && out.ExitCode == exitEscape {
+		return ErrEscape
+	}
+	if err != nil || out.ExitCode != 0 {
+		return errors.New(msg)
+	}
+	return nil
+}
+
 func (r *Registry) run(ctx context.Context, env Env, t Tool, a map[string]any) (Result, error) {
 	max := t.Limits.MaxOutputBytes
 	switch t.Name {
@@ -206,23 +265,23 @@ func (r *Registry) run(ctx context.Context, env Env, t Tool, a map[string]any) (
 		if v, ok := a["max_bytes"].(int); ok {
 			limit = v
 		}
-		out, err := exec(ctx, env, []string{"head", "-c", fmt.Sprint(limit + 1), "--", str(a, "path")}, nil, nil)
-		if err != nil || out.ExitCode != 0 {
-			return Result{}, errors.New("não foi possível ler o arquivo")
+		out, err := fsExec(ctx, env, `head -c "$1" -- "$rp"`, str(a, "path"), nil, fmt.Sprint(limit+1))
+		if ferr := fsFail(out, err, "não foi possível ler o arquivo"); ferr != nil {
+			return Result{}, ferr
 		}
 		content, trunc := capText(out.Stdout, limit)
 		return typed(t, map[string]any{"content": content, "truncated": trunc, "bytes": len(content)}, trunc)
 	case "write_file":
 		content := str(a, "content")
-		out, err := exec(ctx, env, []string{"sh", "-c", `mkdir -p "$(dirname "$0")" && cat > "$0"`, str(a, "path")}, []byte(content), nil)
-		if err != nil || out.ExitCode != 0 {
-			return Result{}, errors.New("não foi possível gravar o arquivo")
+		out, err := fsExec(ctx, env, `mkdir -p -- "$(dirname -- "$rp")" && cat > "$rp"`, str(a, "path"), []byte(content))
+		if ferr := fsFail(out, err, "não foi possível gravar o arquivo"); ferr != nil {
+			return Result{}, ferr
 		}
 		return typed(t, map[string]any{"path": a["path"], "bytes": len(content)}, false)
 	case "edit_file":
-		cur, err := exec(ctx, env, []string{"head", "-c", fmt.Sprint(1<<20 + 1), "--", str(a, "path")}, nil, nil)
-		if err != nil || cur.ExitCode != 0 {
-			return Result{}, errors.New("não foi possível ler o arquivo")
+		cur, err := fsExec(ctx, env, `head -c "$1" -- "$rp"`, str(a, "path"), nil, fmt.Sprint(1<<20+1))
+		if ferr := fsFail(cur, err, "não foi possível ler o arquivo"); ferr != nil {
+			return Result{}, ferr
 		}
 		if len(cur.Stdout) > 1<<20 {
 			return Result{}, errors.New("o arquivo é grande demais para edição")
@@ -238,15 +297,15 @@ func (r *Registry) run(ctx context.Context, env Env, t Tool, a map[string]any) (
 			return Result{}, fmt.Errorf("o trecho aparece %d vezes; informe um trecho único", n)
 		}
 		updated := strings.Replace(cur.Stdout, old, str(a, "new"), 1)
-		out, err := exec(ctx, env, []string{"sh", "-c", `cat > "$0"`, str(a, "path")}, []byte(updated), nil)
-		if err != nil || out.ExitCode != 0 {
-			return Result{}, errors.New("não foi possível gravar o arquivo")
+		out, err := fsExec(ctx, env, `cat > "$rp"`, str(a, "path"), []byte(updated))
+		if ferr := fsFail(out, err, "não foi possível gravar o arquivo"); ferr != nil {
+			return Result{}, ferr
 		}
 		return typed(t, map[string]any{"path": a["path"], "replacements": 1}, false)
 	case "list_dir":
-		out, err := exec(ctx, env, []string{"ls", "-1Ap", "--", str(a, "path")}, nil, nil)
-		if err != nil || out.ExitCode != 0 {
-			return Result{}, errors.New("não foi possível listar o diretório")
+		out, err := fsExec(ctx, env, `ls -1Ap -- "$rp"`, str(a, "path"), nil)
+		if ferr := fsFail(out, err, "não foi possível listar o diretório"); ferr != nil {
+			return Result{}, ferr
 		}
 		return typed(t, map[string]any{"entries": lines(out.Stdout)}, false)
 	case "search":
@@ -254,7 +313,10 @@ func (r *Registry) run(ctx context.Context, env Env, t Tool, a map[string]any) (
 		if p == "" {
 			p = workspace
 		}
-		out, err := exec(ctx, env, []string{"grep", "-rnI", "-m", "50", "-e", str(a, "pattern"), "--", p}, nil, nil)
+		out, err := fsExec(ctx, env, `grep -rnI -m 50 -e "$1" -- "$rp"`, p, nil, str(a, "pattern"))
+		if err == nil && out.ExitCode == exitEscape {
+			return Result{}, ErrEscape
+		}
 		if err != nil || out.ExitCode > 1 { // 1 = nenhuma ocorrência
 			return Result{}, errors.New("a busca falhou")
 		}
@@ -279,11 +341,16 @@ func (r *Registry) run(ctx context.Context, env Env, t Tool, a map[string]any) (
 		out, err := exec(ctx, env, []string{"git", "status", "--porcelain"}, nil, nil)
 		return gitResult(t, "output", out, err, max)
 	case "git_diff":
-		argv := []string{"git", "diff"}
+		var out execution.ExecResult
+		var err error
 		if p := str(a, "path"); p != "" {
-			argv = append(argv, "--", p)
+			out, err = fsExec(ctx, env, `git diff -- "$rp"`, p, nil)
+			if err == nil && out.ExitCode == exitEscape {
+				return Result{}, ErrEscape
+			}
+		} else {
+			out, err = exec(ctx, env, []string{"git", "diff"}, nil, nil)
 		}
-		out, err := exec(ctx, env, argv, nil, nil)
 		return gitResult(t, "diff", out, err, max)
 	}
 	switch t.Kind {

@@ -385,6 +385,7 @@ func containsStr(l []string, s string) bool {
 }
 
 func TestIntegrationToolsUseTheConnectorRunner(t *testing.T) {
+	ctx := WithIdentity(t.Context(), Identity{Agent: "agente-1", Run: "exec-1"})
 	var gotOp string
 	var gotArgs map[string]any
 	env := Env{Guard: &policy.Guard{Policy: pol(), Rec: &countRec{}}, Connector: func(_ context.Context, op string, args map[string]any) (map[string]any, error) {
@@ -395,19 +396,19 @@ func TestIntegrationToolsUseTheConnectorRunner(t *testing.T) {
 		Input:  []Field{{Name: "titulo", Type: TypeString, Required: true, Max: 200}},
 		Output: []Field{{Name: "key", Type: TypeString, Required: true}}}
 	r := NewRegistry(func(_ context.Context, name string) (Tool, error) { return tool, nil })
-	res, err := r.Call(t.Context(), env, "criar_sub", map[string]any{"titulo": "Nova"}, grantAll("criar_sub"))
+	res, err := r.Call(ctx, env, "criar_sub", map[string]any{"titulo": "Nova"}, grantAll("criar_sub"))
 	if err != nil || res.Output["key"] != "ABC-1" || gotOp != "create_subtask" || gotArgs["titulo"] != "Nova" {
 		t.Fatalf("%+v %v %q %v", res, err, gotOp, gotArgs)
 	}
 	// Uma operação fora da política (renomear) é recusada antes de chamar o conector.
 	tool.Operation = "rename_project"
 	gotOp = ""
-	if _, err := r.Call(t.Context(), env, "criar_sub", map[string]any{"titulo": "Nova"}, grantAll("criar_sub")); !errors.Is(err, policy.ErrForbidden) || gotOp != "" {
+	if _, err := r.Call(ctx, env, "criar_sub", map[string]any{"titulo": "Nova"}, grantAll("criar_sub")); !errors.Is(err, policy.ErrForbidden) || gotOp != "" {
 		t.Fatalf("%v %q", err, gotOp)
 	}
 	env.Connector = nil
 	tool.Operation = "create_subtask"
-	if _, err := r.Call(t.Context(), env, "criar_sub", map[string]any{"titulo": "Nova"}, grantAll("criar_sub")); !errors.Is(err, ErrNotReady) {
+	if _, err := r.Call(ctx, env, "criar_sub", map[string]any{"titulo": "Nova"}, grantAll("criar_sub")); !errors.Is(err, ErrNotReady) {
 		t.Fatalf("sem conector: %v", err)
 	}
 }

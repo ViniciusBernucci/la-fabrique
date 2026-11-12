@@ -1,0 +1,15 @@
+# ADR-0022 — Execução de ferramentas confinada ao workspace e com identidade
+
+- **Estado:** ACEITA · **Ticket:** [T11-02](../NEW%20MVP/03-BACKLOG.md#t11-02) · **Épico:** E11 · **Relacionadas:** [ADR-0008](0008-sandbox-por-feature-em-containers.md), [ADR-0012](0012-politica-de-risco-no-executor.md), [ADR-0015](0015-catalogo-de-ferramentas.md), [ADR-0021](0021-modelos-e-gateways-de-api.md)
+
+## Decisão
+1. **Camadas, na ordem:** (a) `SafePath` recusa caminho absoluto fora do workspace, `..`, bytes de controle e `/proc`, `/var/run/docker.sock`; (b) a política de risco recusa comandos que mencionam o runtime de containers; (c) o container não oferece o socket nem o cliente do runtime, roda sem privilégio e com rootfs somente leitura; (d) **confinamento por resolução** (novo) para links simbólicos.
+2. **Confinamento por resolução:** `read_file`, `write_file`, `edit_file`, `list_dir`, `search` (caminho informado) e `git_diff` (com caminho) resolvem o caminho **dentro do sandbox** (`readlink -f`, a partir do ancestral existente mais próximo para caminhos novos) e só seguem se o resultado estiver em `/workspace`; o efeito usa o caminho **já resolvido**, no mesmo processo (estreita a janela de corrida). Falha → `ErrEscape` (403 pelo mapeamento de erros de ferramenta; ao modelo volta só a mensagem). Links que apontam para dentro do workspace continuam funcionando. Links pendentes (alvo inexistente fora do workspace) são recusados. `grep -r` não segue links encontrados na árvore (provado por teste).
+3. **Identidade:** `tools.Identity{Agent, Run}` viaja no contexto (`WithIdentity`/`IdentityFrom`). **Chamada brokerada (integração) sem identidade completa é recusada** (`ErrIdentity`) antes da política e do conector; o conector lê a identidade para atuar com a conta certa. Com identidade, toda chamada registra `actor` (`agent:<id> run:<id>`) nos parâmetros da decisão de política. A política continua **por operação** (a mesma ferramenta com outra operação é recusada).
+4. **Dois modos de IA:** no **modo API** as ferramentas passam pelo `Registry` (concessão, escopo, política, confinamento). No **modo CLI** o agente roda dentro do container e usa as próprias ferramentas do cliente; a proteção é o container (rootfs RO, sem socket, sem privilégio, workspace isolado) e a lista de ferramentas/modo de permissão passados ao CLI (ADR-0011) — o `Registry` não media as chamadas do CLI.
+
+## Limites
+- **Corrida:** um processo concorrente no mesmo sandbox (um CLI de IA ou script) pode trocar um componente do caminho entre a resolução e o uso; o efeito fica limitado ao próprio sandbox (workspace efêmero, sem segredos do host). Não há `openat2`/`RESOLVE_BENEATH` na imagem base.
+- Ferramentas de **script** não são confinadas por caminho: o script tem o poder do sandbox (política + container).
+- No modo CLI, o isolamento de **escrita no workspace** em modo somente leitura é do próprio CLI (o workspace é gravável pelo container).
+- CLIs e gateways reais, e `git_*` em repositório real: **NOT_RUN** (a prova usa um CLI de mentira e um gateway de mentira).

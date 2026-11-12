@@ -1,3 +1,6 @@
+## 2026-11-12 — E11: execução de ferramentas confinada e com identidade (T11-02)
+Ferramentas de arquivo resolvem links simbólicos no sandbox e só seguem dentro do workspace; chamadas brokeradas exigem identidade e registram o ator. Provado nos modos API e CLI com CLI/gateway de mentira; reais NOT_RUN. [Entrega](entregas/2026-11-12-E11-execucao-de-ferramentas.md) · [ADR-0022](adr/0022-execucao-de-ferramentas-confinada-e-com-identidade.md).
+
 ## 2026-11-12 — E09: modelos e gateways de API (T09-02)
 Catálogo de modelos com compatibilidade explicada, sobreposição agente/nó verificável e adaptadores OpenRouter e Vercel AI Gateway com ferramentas controladas. Gateways reais NOT_RUN. [Entrega](entregas/2026-11-12-E09-modelos-e-gateways.md) · [ADR-0021](adr/0021-modelos-e-gateways-de-api.md).
 

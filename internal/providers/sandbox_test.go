@@ -170,3 +170,38 @@ func TestCancellingARunKillsTheClientAndItsChildren(t *testing.T) {
 		t.Fatalf("os filhos do cliente deveriam ter terminado: %q", got)
 	}
 }
+
+// "CLI" de mentira que faz o que um agente faz dentro do container: operações
+// autorizadas no workspace e tentativas de fugir dele.
+const fakeAgent = `#!/bin/sh
+cat > /dev/null
+out=""
+say() { out="$out$1;"; }
+mkdir -p /workspace/feature && echo "linha" > /workspace/feature/a.txt && grep -q linha /workspace/feature/a.txt && say "workspace=ok" || say "workspace=falhou"
+( cd /workspace/feature && echo 'teste ok' > t.log && cat t.log >/dev/null ) && say "teste=ok" || say "teste=falhou"
+echo x > /etc/escapou 2>/dev/null && say "rootfs=ESCAPOU" || say "rootfs=bloqueado"
+echo x > /workspace/../etc/escapou2 2>/dev/null && say "traversal=ESCAPOU" || say "traversal=bloqueado"
+[ -e /var/run/docker.sock ] && say "socket=EXISTE" || say "socket=ausente"
+command -v docker >/dev/null && say "docker=EXISTE" || say "docker=ausente"
+[ "$(id -u)" = "0" ] && say "usuario=ROOT" || say "usuario=sem-privilegio"
+echo '{"type":"system","subtype":"init"}'
+echo "{\"type\":\"result\",\"is_error\":false,\"result\":\"$out\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}"
+`
+
+// T11-02 — modo CLI: o agente trabalha no workspace e não consegue sair do container.
+func TestCLIModeWorksInTheWorkspaceAndCannotEscapeTheContainer(t *testing.T) {
+	d := dockerOrSkip(t)
+	a := Account{ID: acctA, Name: "conta A", CLI: Claude}
+	s := sandboxFor(t, d, a, "")
+	if err := s.Seed(t.Context(), script(map[string]string{"fake-agent.sh": fakeAgent})); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(t.Context(), SandboxRunner{S: s}, Request{Account: a, Prompt: "implemente", Mode: ModeWorkspaceWrite, Binary: "/workspace/fake-agent.sh"}, func(Event) {})
+	if err != nil || res.Failed {
+		t.Fatalf("%+v %v", res, err)
+	}
+	want := "workspace=ok;teste=ok;rootfs=bloqueado;traversal=bloqueado;socket=ausente;docker=ausente;usuario=sem-privilegio;"
+	if res.Final != want {
+		t.Fatalf("\n got: %s\nwant: %s", res.Final, want)
+	}
+}
