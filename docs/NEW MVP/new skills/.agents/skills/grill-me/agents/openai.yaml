@@ -1,0 +1,6 @@
+interface:
+  display_name: "Grill Me"
+  short_description: "Entrevista requisitos e decisões de produto antes da especificação técnica"
+  default_prompt: "Use $grill-me para entrevistar os requisitos desta demanda até esclarecer as decisões de produto e os critérios de aceite."
+policy:
+  allow_implicit_invocation: true

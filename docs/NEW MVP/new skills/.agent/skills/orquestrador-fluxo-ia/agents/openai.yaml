@@ -1,0 +1,6 @@
+interface:
+  display_name: "Orquestrador do Fluxo de IA"
+  short_description: "Executa o lote planejado sem checkpoints humanos até commits, integração e pacote de revisão"
+  default_prompt: "Use $orquestrador-fluxo-ia para executar o manifesto do lote até commits, review auditado, QA, integração em revisao/ e limpeza segura."
+policy:
+  allow_implicit_invocation: true
