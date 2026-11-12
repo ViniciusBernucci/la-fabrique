@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E13 (T13-05)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E12 (T12-02)._
 
 ## Resumo
 
-**19 feitos · 21 parciais · 27 pendentes** de 67 tickets.
+**19 feitos · 22 parciais · 26 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -123,7 +123,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E13 (T13-05)._
 
 - [~] **[T12-01](03-BACKLOG.md#t12-01)** — Persistir e restaurar checkpoints íntegros · dep.: T03-02, T11-03.
   - PASS (PostgreSQL e Docker reais, `-race`): captura de arquivos/links/modos com hash, gravação atômica (queda em 3 pontos mantém o anterior, sem órfãos), restauração em container novo com `sha256sum` idêntico e divergência detectada, parada só com sandbox quieto e liberação depois do checkpoint durável, corrupção detectada na leitura, escopo por projeto e poda. **Parcial:** `git` real NOT_RUN (imagens sem git; HEAD/ramo/patch provados com git de mentira); sem API/tela nem ligação ao motor/worker; objetos em `bytea` (≤128 MiB por checkpoint). Revisão independente NOT_RUN. Entrega: [E12 checkpoints](../entregas/2026-11-12-E12-checkpoints.md).
-- [ ] **[T12-02](03-BACKLOG.md#t12-02)** — Compor contexto seletivo e renovar sessão · dep.: T07-02, T12-01.
+- [~] **[T12-02](03-BACKLOG.md#t12-02)** — Compor contexto seletivo e renovar sessão · dep.: T07-02, T12-01.
+  - PASS (PostgreSQL real, `-race`): contexto determinístico por contrato com manifesto (hash, tokens, omissões, redação), obrigatória nunca descartada em silêncio, segredos removidos antes do hash, decisão por métrica oficial ou estimativa com margem (método gravado), sessão só sobre checkpoint íntegro da mesma execução, troca de modelo só autorizada, retomada que recusa pacote ou checkpoint adulterado, sequência sem corrida. **Parcial:** sem ligação ao worker (nada decide renovar nem cria o checkpoint do marco), memória real (T15-05) não alimenta o pacote, sem rotas/tela. Revisão independente NOT_RUN. Entrega: [E12 contexto](../entregas/2026-11-12-E12-contexto-e-sessao.md).
 - [ ] **[T12-03](03-BACKLOG.md#t12-03)** — Recuperar execução após falha ou reboot · dep.: T10-03, T12-01, T13-04.
 - [ ] **[T12-04](03-BACKLOG.md#t12-04)** — Implementar retomada seletiva e reconciliação de insumos · dep.: T07-03, T06-04, T12-01, T13-04.
 

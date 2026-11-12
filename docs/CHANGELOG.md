@@ -1,3 +1,6 @@
+## 2026-11-12 — E12: contexto seletivo e renovação de sessão (T12-02)
+Contexto seletivo com manifesto de fontes, limites e omissões, sem segredos; renovação por métrica oficial ou estimativa com margem; retomada com pacote e checkpoint reconferidos; troca de modelo só autorizada. Worker, memória e tela NOT_RUN. [Entrega](entregas/2026-11-12-E12-contexto-e-sessao.md) · [ADR-0030](adr/0030-contexto-seletivo-e-renovacao-de-sessao.md).
+
 ## 2026-11-12 — E13: compensação de efeitos parciais por risco (T13-05)
 Compensação idempotente de baixo risco pelo ledger, sensível só com autorização, irreversível preservado; falha conserva o trabalho e bloqueia operações agravantes. Adaptadores reais NOT_RUN. [Entrega](entregas/2026-11-12-E13-compensacao.md) · [ADR-0029](adr/0029-compensacao-de-efeitos-por-risco.md).
 
