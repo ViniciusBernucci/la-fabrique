@@ -1,0 +1,4 @@
+interface:
+  display_name: "Auditoria de segurança"
+  short_description: "Audite bases de código em busca de falhas de segurança exploráveis"
+  default_prompt: "Use $security-audit para modelar ameaças e auditar este projeto em busca de vulnerabilidades de segurança exploráveis."

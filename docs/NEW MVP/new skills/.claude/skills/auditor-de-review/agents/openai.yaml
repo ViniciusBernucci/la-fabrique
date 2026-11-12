@@ -1,0 +1,6 @@
+interface:
+  display_name: "Auditor de Review"
+  short_description: "Audita achados de code review contra escopo e regras de negócio (APLICAR, ADIAR, REJEITAR)"
+  default_prompt: "Use $auditor-de-review para auditar o relatório de code review contra o código, o escopo e as regras de negócio."
+policy:
+  allow_implicit_invocation: true
