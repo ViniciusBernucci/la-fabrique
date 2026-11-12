@@ -1,3 +1,6 @@
+## 2026-11-12 — E06: sincronização manual e preflight (T06-04)
+Leitura da origem só sob demanda (manual ou preflight), com diferenças registradas uma vez, importação deduplicada, elegibilidade/prioridade reavaliadas e conflito com edição humana. Plataformas reais, GitHub e tela NOT_RUN. [Entrega](entregas/2026-11-12-E06-sincronizacao-manual-e-preflight.md) · [ADR-0033](adr/0033-sincronizacao-manual-e-preflight.md).
+
 ## 2026-11-12 — E02: verificação e ensaio de restauração (T02-04)
 Verificador de banco restaurado (migrations, TOTP e conexões decifráveis com a chave, hashes de checkpoints, skills e contexto) e `make restore-drill` (backup, restore isolado, verificação, descarte). Snapshot da VPS e produção NOT_RUN. [Entrega](entregas/2026-11-12-E02-ensaio-de-restauracao.md) · [ADR-0032](adr/0032-verificacao-de-restauracao.md).
 

@@ -495,6 +495,64 @@ paths:
           content: {application/json: {schema: {type: object, required: [ok, problems], properties: {ok: {type: boolean}, problems: {type: array, items: {$ref: "#/components/schemas/PublishProblem"}}}}}}
         "401": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/sync:
+    post:
+      tags: [sincronizacao]
+      summary: Sincronização MANUAL da origem (Jira/ClickUp) com a conexão do cofre
+      description: >
+        Lê a origem agora, normaliza os itens e registra o que mudou desde a última leitura (uma vez).
+        Nada lê a origem sozinho. Falha remota volta como `outcome: failed` (HTTP 200) sem alterar nenhum item.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Resultado, content: {application/json: {schema: {$ref: "#/components/schemas/SyncResult"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+    get:
+      tags: [sincronizacao]
+      summary: Última sincronização, suas diferenças e os itens gravados
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Visão da sincronização, content: {application/json: {schema: {$ref: "#/components/schemas/SyncView"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/sync/items/{remoteId}/priority:
+    put:
+      tags: [sincronizacao]
+      summary: Edição humana da prioridade (0..4; null remove). Prevalece sobre a origem; mudança remota abre conflito
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: remoteId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [priority], properties: {priority: {type: [integer, "null"], minimum: 0, maximum: 4}}}}}
+      responses:
+        "200": {description: Item, content: {application/json: {schema: {$ref: "#/components/schemas/SyncItem"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/sync/items/{remoteId}/resolve:
+    post:
+      tags: [sincronizacao]
+      summary: Resolve o conflito de prioridade (keep_local ou use_remote)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: remoteId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [choice], properties: {choice: {type: string, enum: [keep_local, use_remote]}}}}}
+      responses:
+        "200": {description: Item, content: {application/json: {schema: {$ref: "#/components/schemas/SyncItem"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
   /projects/{id}/selection:
     get:
       tags: [selecao]
@@ -1270,6 +1328,63 @@ components:
         mapped_priority: {type: [integer, "null"], minimum: 0, maximum: 4}
         subtask: {type: boolean}
         url: {type: string}
+    SyncChange:
+      type: object
+      required: [remote_id, key, kind, fields, before_version, after_version]
+      properties:
+        remote_id: {type: string}
+        key: {type: string}
+        kind: {type: string, enum: [new, changed, gone, reappeared, conflict]}
+        fields: {type: object, additionalProperties: {type: object, properties: {from: {}, to: {}}}}
+        before_version: {type: string}
+        after_version: {type: string}
+        detail: {type: string}
+    SyncResult:
+      type: object
+      required: [sync_id, trigger, outcome, read, new, changed, gone, conflicts, changes, started_at, finished_at]
+      properties:
+        sync_id: {type: string, format: uuid}
+        trigger: {type: string, enum: [manual, preflight]}
+        outcome: {type: string, enum: [ok, failed]}
+        error: {type: string}
+        retryable: {type: boolean}
+        read: {type: integer}
+        new: {type: integer}
+        changed: {type: integer}
+        gone: {type: integer}
+        conflicts: {type: integer}
+        changes: {type: array, items: {$ref: "#/components/schemas/SyncChange"}}
+        snapshot_hash: {type: string}
+        started_at: {type: string, format: date-time}
+        finished_at: {type: string, format: date-time}
+    SyncItem:
+      type: object
+      required: [remote_id, key, title, status, category, priority, eligible, version, state, content_hash]
+      properties:
+        remote_id: {type: string}
+        key: {type: string}
+        title: {type: string}
+        description: {type: string}
+        status: {type: string}
+        category: {type: string}
+        priority: {type: string}
+        mapped_priority: {type: [integer, "null"]}
+        labels: {type: array, items: {type: string}}
+        dependencies: {type: array, items: {type: string}}
+        subtask: {type: boolean}
+        eligible: {type: boolean}
+        version: {type: string}
+        url: {type: string}
+        state: {type: string, enum: [active, gone]}
+        local_priority: {type: [integer, "null"]}
+        conflict: {type: [object, "null"], properties: {field: {type: string}, local: {type: integer}, remote: {type: [integer, "null"]}}}
+        content_hash: {type: string}
+    SyncView:
+      type: object
+      required: [last, items]
+      properties:
+        last: {oneOf: [{$ref: "#/components/schemas/SyncResult"}, {type: "null"}]}
+        items: {type: array, items: {$ref: "#/components/schemas/SyncItem"}}
     SourceCheck:
       type: object
       required: [ok, steps, items, has_more, checked_at]

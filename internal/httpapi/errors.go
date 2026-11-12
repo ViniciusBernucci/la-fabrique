@@ -18,6 +18,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
 	"github.com/ViniciusBernucci/le-fabrique/internal/selection"
 	"github.com/ViniciusBernucci/le-fabrique/internal/skills"
+	"github.com/ViniciusBernucci/le-fabrique/internal/syncsource"
 	"github.com/ViniciusBernucci/le-fabrique/internal/tools"
 	"github.com/ViniciusBernucci/le-fabrique/internal/workflows"
 )
@@ -134,6 +135,10 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 		writeError(w, r, http.StatusBadRequest, "invalid_request", wfField.Message, "Corrija o campo \""+wfField.Field+"\" e tente novamente.")
 	case errors.As(err, &invalid):
 		writeError(w, r, http.StatusUnprocessableEntity, "validation_failed", "O projeto tem pendências e não pode ser ativado.", "Resolva os itens pendentes em GET /api/projects/{id}/validation.")
+	case errors.Is(err, syncsource.ErrNoConflict):
+		writeError(w, r, http.StatusConflict, "no_conflict", err.Error(), "Sincronize de novo e confira os itens com conflito.")
+	case errors.Is(err, syncsource.ErrNoItem):
+		writeError(w, r, http.StatusNotFound, "not_found", err.Error(), "Sincronize a origem antes de editar o item.")
 	case errors.Is(err, projects.ErrSourceIncomplete):
 		writeError(w, r, http.StatusUnprocessableEntity, "source_incomplete", "Faltam plataforma, conexão compatível ou lista na origem.", "Complete a etapa Origem e salve antes de verificar.")
 	case errors.Is(err, projects.ErrActiveLocked):
