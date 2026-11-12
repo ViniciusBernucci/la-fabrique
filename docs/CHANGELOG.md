@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-12 — E09: contas e clientes CLI de IA (T09-01 parcial)
+Adaptadores de Claude Code e Codex CLI com modo autorizado, contas isoladas por volume, eventos normalizados e cancelamento da árvore de processos no sandbox. CLIs reais NOT_RUN. [Entrega](entregas/2026-11-12-E09-clientes-cli.md) · [ADR-0011](adr/0011-clientes-cli-de-ia-no-sandbox.md).
+
 ## 2026-11-12 — E07: motor de workflows (T07-02)
 Motor determinístico com estado serializável, condições, loops limitados, espera durável, decisão humana, ramificação/convergência, rotas de erro e subfluxos expandidos em linha (sem recursão). Executores reais seguem em outros épicos. [Entrega](entregas/2026-11-12-E07-motor-de-workflows.md) · [ADR-0010](adr/0010-motor-de-workflows.md).
 

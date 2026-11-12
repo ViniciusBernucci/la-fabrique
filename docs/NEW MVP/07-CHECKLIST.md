@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E07 (T07-02)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E09 (T09-01)._
 
 ## Resumo
 
-**10 feitos · 11 parciais · 46 pendentes** de 67 tickets.
+**10 feitos · 12 parciais · 45 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -88,7 +88,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E07 (T07-02)._
 
 ## E09 — Provedores de IA e orçamento
 
-- [ ] **[T09-01](03-BACKLOG.md#t09-01)** — Cadastrar contas e adaptar clientes CLI · dep.: T04-03, T11-01.
+- [~] **[T09-01](03-BACKLOG.md#t09-01)** — Cadastrar contas e adaptar clientes CLI · dep.: T04-03, T11-01.
+  - PASS (Docker real, `-race`, com CLI de mentira): comando por modo autorizado (sem `bypassPermissions`/`danger-full-access`), prompt por stdin, entradas validadas, eventos normalizados, duas contas do mesmo provedor com volumes distintos e isoladas, cancelamento encerra a árvore. **Parcial:** Claude Code e Codex CLI reais NOT_RUN (exigem conta do responsável); sem fluxo de login nem imagem de sandbox com os CLIs; formatos de evento não confirmados por execução. Entrega: [E09](../entregas/2026-11-12-E09-clientes-cli.md).
 - [ ] **[T09-02](03-BACKLOG.md#t09-02)** — Cadastrar modelos e adaptar gateways de API · dep.: T04-03, T08-03, T11-01.
 - [ ] **[T09-03](03-BACKLOG.md#t09-03)** — Impor orçamento e registrar uso · dep.: T09-01, T09-02, T03-02.
 - [ ] **[T09-04](03-BACKLOG.md#t09-04)** — Implementar fallback e disponibilidade · dep.: T09-03, T12-02.

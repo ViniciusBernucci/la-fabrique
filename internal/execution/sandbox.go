@@ -55,11 +55,37 @@ const (
 
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
+// Mount monta um volume nomeado (nunca um caminho do host) no sandbox. Serve ao
+// diretório de configuração de uma conta de CLI de IA.
+type Mount struct {
+	Volume   string
+	Target   string
+	ReadOnly bool
+}
+
+var (
+	volumeName  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+	mountTarget = regexp.MustCompile(`^/[A-Za-z0-9_./-]{1,200}$`)
+)
+
+func validMount(m Mount) bool {
+	if !volumeName.MatchString(m.Volume) || !mountTarget.MatchString(m.Target) || strings.Contains(m.Target, "..") {
+		return false
+	}
+	for _, reserved := range []string{workspace, "/tmp", "/proc", "/sys", "/dev", "/etc", "/var/run"} {
+		if m.Target == reserved || strings.HasPrefix(m.Target, reserved+"/") {
+			return false
+		}
+	}
+	return true
+}
+
 // Spec identifica o sandbox: um por projeto e feature.
 type Spec struct {
 	ProjectID string
 	FeatureID string
 	Profile   Profile
+	Mounts    []Mount
 }
 
 // Docker é o supervisor de sandboxes sobre o CLI do Docker.
@@ -118,6 +144,11 @@ func (d *Docker) Provision(ctx context.Context, spec Spec) (*Sandbox, error) {
 	if p.Network != NetNone && p.Network != NetIsolated {
 		return nil, ErrInvalidSpec
 	}
+	for _, m := range spec.Mounts {
+		if !validMount(m) {
+			return nil, ErrInvalidSpec
+		}
+	}
 	id := randomID()
 	s := &Sandbox{ID: id, Container: "lf-sbx-" + id, Volume: "lf-ws-" + id, Profile: p, d: d}
 	fail := func(err error) (*Sandbox, error) {
@@ -155,6 +186,13 @@ func (d *Docker) Provision(ctx context.Context, spec Spec) (*Sandbox, error) {
 		"--mount", fmt.Sprintf("type=volume,src=%s,dst=%s", s.Volume, workspace),
 		"--workdir", workspace, "--env", "HOME=/tmp",
 		"--hostname", "sandbox",
+	}
+	for _, m := range spec.Mounts {
+		opt := fmt.Sprintf("type=volume,src=%s,dst=%s", m.Volume, m.Target)
+		if m.ReadOnly {
+			opt += ",readonly"
+		}
+		args = append(args, "--mount", opt)
 	}
 	args = append(args, labels...)
 	args = append(args, p.Image, "sleep", "2147483647")
@@ -291,4 +329,33 @@ func (s *Sandbox) Inspect(ctx context.Context, format string) (string, error) {
 		return "", fmt.Errorf("inspect: %s", strings.TrimSpace(e))
 	}
 	return strings.TrimSpace(out), nil
+}
+
+// EnsureVolume cria (se faltar) um volume nomeado e entrega a posse ao usuário
+// sem privilégios do sandbox. Idempotente.
+func (d *Docker) EnsureVolume(ctx context.Context, name string) error {
+	if !volumeName.MatchString(name) {
+		return ErrInvalidSpec
+	}
+	if _, e, err := d.run(ctx, nil, "volume", "create", "--label", "lf.managed=true", name); err != nil {
+		return fmt.Errorf("criar volume: %s", strings.TrimSpace(e))
+	}
+	_, e, err := d.run(ctx, nil, "run", "--rm", "--network", "none", "--cap-drop", "ALL", "--cap-add", "CHOWN",
+		"--security-opt", "no-new-privileges:true", "--mount", "type=volume,src="+name+",dst=/v",
+		"alpine:3.22", "chown", sandboxUID+":"+sandboxUID, "/v")
+	if err != nil {
+		return fmt.Errorf("preparar volume: %s", strings.TrimSpace(e))
+	}
+	return nil
+}
+
+// RemoveVolume apaga um volume nomeado (idempotente).
+func (d *Docker) RemoveVolume(ctx context.Context, name string) error {
+	if !volumeName.MatchString(name) {
+		return ErrInvalidSpec
+	}
+	if _, e, err := d.run(ctx, nil, "volume", "rm", "-f", name); err != nil && !strings.Contains(e, "No such") {
+		return fmt.Errorf("remover volume: %s", strings.TrimSpace(e))
+	}
+	return nil
 }

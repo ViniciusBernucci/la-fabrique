@@ -308,3 +308,145 @@ func TestInvalidSpecsAndFailedProvisionLeaveNothingBehind(t *testing.T) {
 		t.Fatalf("sobraram recursos: antes=%q depois=%q", before, after)
 	}
 }
+
+func TestCancelKillsTheWholeProcessGroup(t *testing.T) {
+	d := runtimeOrSkip(t)
+	s := provision(t, d, "base", nil)
+	r, err := s.Start(t.Context(), ExecSpec{Cmd: []string{"sh", "-c", "sleep 300 & sleep 301 & wait"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Second)
+	if res := sh(t, s, "ps -o args= | grep -c '^sleep 30'"); strings.TrimSpace(res.Stdout) != "2" {
+		t.Fatalf("controle positivo: os dois filhos deveriam existir: %q", res.Stdout)
+	}
+	if err := r.Cancel(3 * time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := r.Wait(); code == 0 {
+		t.Fatal("o comando cancelado não pode sair com sucesso")
+	}
+	time.Sleep(500 * time.Millisecond)
+	if res := sh(t, s, "ps -o args= | grep -c '^sleep 30'"); strings.TrimSpace(res.Stdout) != "0" {
+		t.Fatalf("a árvore inteira deveria ter terminado: %q", res.Stdout)
+	}
+}
+
+func TestCancelEscalatesToKillWhenTermIsIgnored(t *testing.T) {
+	d := runtimeOrSkip(t)
+	s := provision(t, d, "base", nil)
+	r, err := s.Start(t.Context(), ExecSpec{Cmd: []string{"sh", "-c", `trap "" TERM; while true; do sleep 1; done`}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Second)
+	start := time.Now()
+	if err := r.Cancel(time.Second); err != nil {
+		t.Fatalf("o SIGKILL deveria encerrar: %v", err)
+	}
+	if time.Since(start) > 8*time.Second {
+		t.Fatal("o encerramento demorou demais")
+	}
+	time.Sleep(300 * time.Millisecond)
+	if res := sh(t, s, "ps -o args= | grep -c '^sh -c trap'"); strings.TrimSpace(res.Stdout) != "0" {
+		all := sh(t, s, "ps -o pid,pgid,stat,args")
+		t.Fatalf("o processo que ignora SIGTERM deveria ter morrido: %q\n%s", res.Stdout, all.Stdout)
+	}
+}
+
+func TestStreamDeliversOutputIncrementallyAndContextCancels(t *testing.T) {
+	d := runtimeOrSkip(t)
+	s := provision(t, d, "base", nil)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	r, err := s.Start(ctx, ExecSpec{Cmd: []string{"sh", "-c", "echo um; sleep 60; echo dois"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan string, 1)
+	go func() {
+		buf := make([]byte, 16)
+		n, _ := r.Stdout.Read(buf)
+		got <- string(buf[:n])
+	}()
+	select {
+	case line := <-got:
+		if !strings.Contains(line, "um") {
+			t.Fatalf("primeira linha: %q", line)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("a saída deveria chegar antes do fim do comando")
+	}
+	cancel() // cancelar o contexto encerra o grupo
+	done := make(chan struct{})
+	go func() { _, _ = r.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(15 * time.Second):
+		t.Fatal("o cancelamento do contexto não encerrou o comando")
+	}
+}
+
+func TestAccountVolumesPersistAndStayIsolated(t *testing.T) {
+	d := runtimeOrSkip(t)
+	vol := "lf-acct-test-" + randomID()
+	if err := d.EnsureVolume(t.Context(), vol); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.RemoveVolume(context.Background(), vol) }()
+	spec := func(mounts ...Mount) Spec {
+		return Spec{ProjectID: "p", FeatureID: "f", Profile: Profiles["base"], Mounts: mounts}
+	}
+
+	a, err := d.Provision(t.Context(), spec(Mount{Volume: vol, Target: "/accounts/a"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := sh(t, a, "echo credencial-da-conta > /accounts/a/token && cat /accounts/a/token"); !strings.Contains(r.Stdout, "credencial-da-conta") {
+		t.Fatalf("o diretório da conta deve aceitar escrita do usuário sem privilégios: %+v", r)
+	}
+	_ = a.Destroy(t.Context())
+
+	// A configuração sobrevive ao sandbox; quem não monta o volume não a vê.
+	b, err := d.Provision(t.Context(), spec(Mount{Volume: vol, Target: "/accounts/a", ReadOnly: true}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Destroy(context.Background())
+	if r := sh(t, b, "cat /accounts/a/token"); !strings.Contains(r.Stdout, "credencial-da-conta") {
+		t.Fatalf("a conta deveria persistir: %+v", r)
+	}
+	if r := sh(t, b, "echo x > /accounts/a/outro"); r.ExitCode == 0 {
+		t.Fatal("montagem somente leitura não pode aceitar escrita")
+	}
+	c := provision(t, d, "base", nil)
+	if r := sh(t, c, "ls /accounts 2>&1"); r.ExitCode == 0 {
+		t.Fatalf("sandbox sem o volume não pode ver a conta: %+v", r)
+	}
+}
+
+func TestInvalidMountsAreRejected(t *testing.T) {
+	d := runtimeOrSkip(t)
+	before := countManaged(t, d)
+	for _, m := range []Mount{
+		{Volume: "/Users/alguem", Target: "/accounts/a"}, // caminho do host
+		{Volume: "../x", Target: "/accounts/a"},
+		{Volume: "ok", Target: "/workspace"},
+		{Volume: "ok", Target: "/workspace/sub"},
+		{Volume: "ok", Target: "/etc/conta"},
+		{Volume: "ok", Target: "/var/run/docker.sock"},
+		{Volume: "ok", Target: "/accounts/../etc"},
+		{Volume: "ok", Target: "relativo"},
+		{Volume: "", Target: "/accounts/a"},
+	} {
+		if _, err := d.Provision(t.Context(), Spec{ProjectID: "p", FeatureID: "f", Profile: Profiles["base"], Mounts: []Mount{m}}); err == nil {
+			t.Errorf("montagem %+v deveria ser recusada", m)
+		}
+	}
+	if err := d.EnsureVolume(t.Context(), "../x"); err == nil {
+		t.Error("nome de volume inválido")
+	}
+	if after := countManaged(t, d); after != before {
+		t.Fatalf("recusas não podem criar recursos: %q → %q", before, after)
+	}
+}
