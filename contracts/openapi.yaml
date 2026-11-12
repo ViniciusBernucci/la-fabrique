@@ -433,6 +433,37 @@ paths:
                 required: [items]
                 properties: {items: {type: array, items: {$ref: "#/components/schemas/NodeType"}}}
         "401": {$ref: "#/components/responses/Error"}
+  /budgets:
+    get:
+      tags: [orcamento]
+      summary: Orçamentos de gasto em API com o uso do período corrente (gasto, reservas ativas e saldo)
+      responses:
+        "200":
+          description: Orçamentos
+          content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/BudgetStatus"}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [orcamento]
+      summary: Cria ou altera (upsert) o orçamento global ou de um agente (reautenticação exigida)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [scope, period, limit_micros], additionalProperties: false, properties: {scope: {type: string, enum: [global, agent]}, agent_id: {type: string, format: uuid}, period: {type: string, enum: [day, month]}, limit_micros: {type: integer, minimum: 0}, state: {type: string, enum: [active, disabled]}}}}}
+      responses:
+        "200": {description: Orçamento, content: {application/json: {schema: {$ref: "#/components/schemas/Budget"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /usage:
+    get:
+      tags: [orcamento]
+      summary: Uso do período (padrão mês corrente UTC) com gasto em API e consumo de assinatura em seções separadas
+      parameters:
+        - {name: from, in: query, required: false, schema: {type: string, format: date-time}}
+        - {name: to, in: query, required: false, schema: {type: string, format: date-time}}
+      responses:
+        "200": {description: Relatório, content: {application/json: {schema: {$ref: "#/components/schemas/UsageReport"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
   /models:
     get:
       tags: [models]
@@ -1514,6 +1545,53 @@ components:
         resolved_at: {type: [string, "null"], format: date-time}
         version: {type: integer}
         created_at: {type: string, format: date-time}
+    Budget:
+      type: object
+      required: [id, scope, agent_id, period, limit_micros, state, version]
+      properties:
+        id: {type: string, format: uuid}
+        scope: {type: string, enum: [global, agent]}
+        agent_id: {type: [string, "null"], format: uuid}
+        period: {type: string, enum: [day, month]}
+        limit_micros: {type: integer, description: "micro-USD (1e-6)"}
+        state: {type: string, enum: [active, disabled]}
+        version: {type: integer}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    BudgetStatus:
+      allOf:
+        - {$ref: "#/components/schemas/Budget"}
+        - type: object
+          required: [spent_micros, reserved_micros, remaining_micros]
+          properties:
+            spent_micros: {type: integer}
+            reserved_micros: {type: integer}
+            remaining_micros: {type: integer}
+    UsageReport:
+      type: object
+      required: [api, subscription]
+      properties:
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+        api:
+          type: object
+          required: [spent_micros, reserved_micros, by_source, by_agent, overrun_micros]
+          properties:
+            spent_micros: {type: integer}
+            reserved_micros: {type: integer}
+            overrun_micros: {type: integer}
+            by_source: {type: object, additionalProperties: {type: integer}}
+            by_agent: {type: object, additionalProperties: {type: integer}}
+        subscription:
+          type: array
+          items:
+            type: object
+            required: [connection_id, unit, units, calls]
+            properties:
+              connection_id: {type: string}
+              unit: {type: string}
+              units: {type: integer}
+              calls: {type: integer}
     ModelParams:
       type: object
       properties:
@@ -1534,6 +1612,9 @@ components:
         context_window: {type: integer, minimum: 0}
         max_output_tokens: {type: integer, minimum: 0}
         params: {$ref: "#/components/schemas/ModelParams"}
+        input_micros_per_mtok: {type: [integer, "null"], minimum: 0, description: "Preço de entrada em micro-USD por milhão de tokens (com output e a fonte)"}
+        output_micros_per_mtok: {type: [integer, "null"], minimum: 0}
+        price_source: {type: string}
     Model:
       type: object
       required: [id, provider, gateway, name, supports_tools, supports_streaming, context_window, max_output_tokens, params, state, version]
@@ -1548,6 +1629,9 @@ components:
         context_window: {type: integer}
         max_output_tokens: {type: integer}
         params: {$ref: "#/components/schemas/ModelParams"}
+        input_micros_per_mtok: {type: [integer, "null"]}
+        output_micros_per_mtok: {type: [integer, "null"]}
+        price_source: {type: string}
         state: {type: string, enum: [active, disabled]}
         version: {type: integer}
         created_at: {type: string, format: date-time}

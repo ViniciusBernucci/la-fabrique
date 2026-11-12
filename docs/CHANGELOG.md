@@ -1,3 +1,6 @@
+## 2026-11-12 — E09: orçamento e uso (T09-03)
+Reserva atômica de custo (teto global e por agente), liquidação, reconciliação e cota de assinatura registrada separadamente do gasto em API; orçamento imposto antes de cada chamada do gateway. Gateways reais NOT_RUN. [Entrega](entregas/2026-11-12-E09-orcamento-e-uso.md) · [ADR-0025](adr/0025-orcamento-reserva-atomica-e-uso.md).
+
 ## 2026-11-12 — E15: GitHub, branches, commits e push (T15-01)
 Conexão validada por clone, commit por tarefa validada (fast-import, trailers), push restrito à branch da feature com prova por ref pelo ledger. GitHub real NOT_RUN. [Entrega](entregas/2026-11-12-E15-github-branch-commit-push.md) · [ADR-0024](adr/0024-github-branch-commit-e-push.md).
 

@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E15 (T15-01)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E09 (T09-03)._
 
 ## Resumo
 
-**17 feitos · 18 parciais · 32 pendentes** de 67 tickets.
+**17 feitos · 19 parciais · 31 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -97,7 +97,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E15 (T15-01)._
   - PASS (Docker real, `-race`, com CLI de mentira): comando por modo autorizado (sem `bypassPermissions`/`danger-full-access`), prompt por stdin, entradas validadas, eventos normalizados, duas contas do mesmo provedor com volumes distintos e isoladas, cancelamento encerra a árvore. **Parcial:** Claude Code e Codex CLI reais NOT_RUN (exigem conta do responsável); sem fluxo de login nem imagem de sandbox com os CLIs; formatos de evento não confirmados por execução. Entrega: [E09](../entregas/2026-11-12-E09-clientes-cli.md).
 - [~] **[T09-02](03-BACKLOG.md#t09-02)** — Cadastrar modelos e adaptar gateways de API · dep.: T04-03, T08-03, T11-01.
   - PASS (PostgreSQL real, Docker real, `-race`, gateway de mentira): catálogo com parâmetros validados, compatibilidade com motivos (provedor, conta, gateway, ferramentas, estado), sobreposição agente/nó verificável (`model_check`), OpenRouter e Vercel rodando edição + teste pelo catálogo de ferramentas sob política, credencial só do cofre. **Parcial:** gateways reais NOT_RUN; sem tela; laço ainda não ligado ao worker; sem streaming. Revisão independente NOT_RUN. Entrega: [E09 modelos](../entregas/2026-11-12-E09-modelos-e-gateways.md).
-- [ ] **[T09-03](03-BACKLOG.md#t09-03)** — Impor orçamento e registrar uso · dep.: T09-01, T09-02, T03-02.
+- [~] **[T09-03](03-BACKLOG.md#t09-03)** — Impor orçamento e registrar uso · dep.: T09-01, T09-02, T03-02.
+  - PASS (PostgreSQL real, `-race`, gateway de mentira): reserva atômica (40 concorrentes ⇒ exatamente os que cabem; teto por agente e global respeitados), liquidação idempotente com overrun, liberação e expiração, falha fechada sem orçamento global ou sem preço, janelas dia/mês, cota de assinatura separada do gasto em API (o banco impede misturar), cotas só observadas com fonte e horário, reconciliação (ajusta o que faltou, mantém o maior), orçamento imposto antes de cada chamada no laço do gateway, API de orçamento e uso. **Parcial:** gateways e créditos reais NOT_RUN; sem tela; limites globais de concorrência são do T10-03. Revisão independente NOT_RUN. Entrega: [E09 orçamento](../entregas/2026-11-12-E09-orcamento-e-uso.md).
 - [ ] **[T09-04](03-BACKLOG.md#t09-04)** — Implementar fallback e disponibilidade · dep.: T09-03, T12-02.
 
 ## E10 — Planejamento, fila e controles

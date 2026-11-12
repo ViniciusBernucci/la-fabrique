@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/ViniciusBernucci/le-fabrique/internal/agents"
+	"github.com/ViniciusBernucci/le-fabrique/internal/budget"
 	"github.com/ViniciusBernucci/le-fabrique/internal/decisions"
 	"github.com/ViniciusBernucci/le-fabrique/internal/mcp"
 	"github.com/ViniciusBernucci/le-fabrique/internal/models"
@@ -59,9 +60,19 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 	var mcpField *mcp.FieldError
 	var mcpErr *mcp.Error
 	var modField *models.FieldError
+	var budField *budget.FieldError
+	var budExceeded *budget.ExceededError
 	switch {
 	case errors.As(err, &field):
 		writeError(w, r, http.StatusBadRequest, "invalid_request", field.Message, "Corrija o campo \""+field.Field+"\" e tente novamente.")
+	case errors.As(err, &budField):
+		writeError(w, r, http.StatusBadRequest, "invalid_request", budField.Message, "Corrija o campo \""+budField.Field+"\" e tente novamente.")
+	case errors.As(err, &budExceeded):
+		writeError(w, r, http.StatusConflict, "budget_exceeded", budExceeded.Error(), "Aguarde o próximo período ou aumente o orçamento.")
+	case errors.Is(err, budget.ErrNoBudget):
+		writeError(w, r, http.StatusConflict, "no_budget", err.Error(), "Defina um orçamento global antes de usar contas de API.")
+	case errors.Is(err, budget.ErrNoPrice):
+		writeError(w, r, http.StatusConflict, "model_without_price", err.Error(), "Cadastre o preço do modelo (com a fonte).")
 	case errors.As(err, &modField):
 		writeError(w, r, http.StatusBadRequest, "invalid_request", modField.Message, "Corrija o campo \""+modField.Field+"\" e tente novamente.")
 	case errors.Is(err, models.ErrIncompatible):

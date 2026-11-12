@@ -91,6 +91,29 @@ type CallRecord struct {
 	Outcome string `json:"outcome"` // ok | error | refused
 }
 
+// Handle é a reserva opaca devolvida pelo Meter.
+type Handle any
+
+// Meter impõe orçamento: reserva ANTES de cada chamada paga, liquida com o consumo
+// real depois e libera se a chamada falhar. Reserva negada impede a chamada (nada
+// é enviado ao gateway).
+type Meter interface {
+	Reserve(ctx context.Context, m models.Model, messages []Message, maxOutput int64) (Handle, error)
+	Settle(ctx context.Context, h Handle, u Usage) error
+	Release(ctx context.Context, h Handle)
+}
+
+// outputCap é o teto de saída que a chamada pode gerar (base da reserva).
+func outputCap(m models.Model) int64 {
+	switch {
+	case m.Params.MaxTokens != nil && *m.Params.MaxTokens > 0:
+		return int64(*m.Params.MaxTokens)
+	case m.MaxOutputTokens > 0:
+		return int64(m.MaxOutputTokens)
+	}
+	return 4096
+}
+
 // RunConfig configura uma execução de agente por gateway.
 type RunConfig struct {
 	Model        models.Model
@@ -101,6 +124,7 @@ type RunConfig struct {
 	MaxTurns     int
 	MaxToolCalls int
 	Redact       func(string) string // aplicado ao texto de erro devolvido ao modelo
+	Meter        Meter               // opcional: orçamento por chamada
 }
 
 // Result é o resultado da execução.
@@ -164,9 +188,25 @@ func Run(ctx context.Context, gw Chatter, cfg RunConfig) (Result, error) {
 
 	var res Result
 	for turn := 1; turn <= maxTurns; turn++ {
+		var handle Handle
+		if cfg.Meter != nil {
+			h, err := cfg.Meter.Reserve(ctx, cfg.Model, msgs, outputCap(cfg.Model))
+			if err != nil {
+				return res, err // sem reserva não há chamada
+			}
+			handle = h
+		}
 		resp, err := gw.Chat(ctx, ChatRequest{Model: cfg.Model.Name, Messages: msgs, Tools: cfg.Tools, Params: cfg.Model.Params})
 		if err != nil {
+			if cfg.Meter != nil {
+				cfg.Meter.Release(context.WithoutCancel(ctx), handle)
+			}
 			return res, err
+		}
+		if cfg.Meter != nil {
+			if err := cfg.Meter.Settle(context.WithoutCancel(ctx), handle, resp.Usage); err != nil {
+				return res, fmt.Errorf("registrar o uso: %w", err)
+			}
 		}
 		res.Turns = turn
 		res.Usage.PromptTokens += resp.Usage.PromptTokens

@@ -36,20 +36,24 @@ type Params struct {
 
 // Model é um modelo do catálogo.
 type Model struct {
-	ID                string    `json:"id"`
-	Provider          string    `json:"provider"`
-	Gateway           string    `json:"gateway"`
-	Name              string    `json:"name"`
-	Label             string    `json:"label"`
-	SupportsTools     bool      `json:"supports_tools"`
-	SupportsStreaming bool      `json:"supports_streaming"`
-	ContextWindow     int       `json:"context_window"`
-	MaxOutputTokens   int       `json:"max_output_tokens"`
-	Params            Params    `json:"params"`
-	State             string    `json:"state"`
-	Version           int       `json:"version"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	ID                string `json:"id"`
+	Provider          string `json:"provider"`
+	Gateway           string `json:"gateway"`
+	Name              string `json:"name"`
+	Label             string `json:"label"`
+	SupportsTools     bool   `json:"supports_tools"`
+	SupportsStreaming bool   `json:"supports_streaming"`
+	ContextWindow     int    `json:"context_window"`
+	MaxOutputTokens   int    `json:"max_output_tokens"`
+	Params            Params `json:"params"`
+	// Preço em micro-USD por milhão de tokens; nil = sem preço (não pode ser orçado).
+	InputMicrosPerMTok  *int64    `json:"input_micros_per_mtok"`
+	OutputMicrosPerMTok *int64    `json:"output_micros_per_mtok"`
+	PriceSource         string    `json:"price_source"`
+	State               string    `json:"state"`
+	Version             int       `json:"version"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 // Input é o cadastro de um modelo.
@@ -63,6 +67,10 @@ type Input struct {
 	ContextWindow     int    `json:"context_window"`
 	MaxOutputTokens   int    `json:"max_output_tokens"`
 	Params            Params `json:"params"`
+	// Preço (opcional): os dois valores juntos, com a fonte (ex.: a página de preços e a data).
+	InputMicrosPerMTok  *int64 `json:"input_micros_per_mtok"`
+	OutputMicrosPerMTok *int64 `json:"output_micros_per_mtok"`
+	PriceSource         string `json:"price_source"`
 }
 
 var namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$`)
@@ -103,6 +111,22 @@ func (in *Input) Validate() error {
 	if p := in.Params; p.TopP != nil && (*p.TopP < 0 || *p.TopP > 1) {
 		return &FieldError{"params.top_p", "top_p deve estar entre 0 e 1."}
 	}
+	if (in.InputMicrosPerMTok == nil) != (in.OutputMicrosPerMTok == nil) {
+		return &FieldError{"price", "Informe o preço de entrada e o de saída juntos."}
+	}
+	if in.InputMicrosPerMTok != nil {
+		for _, v := range []int64{*in.InputMicrosPerMTok, *in.OutputMicrosPerMTok} {
+			if v < 0 || v > 1_000_000_000 {
+				return &FieldError{"price", "Preço fora da faixa (micro-USD por milhão de tokens, até 1.000.000.000)."}
+			}
+		}
+		in.PriceSource = strings.TrimSpace(in.PriceSource)
+		if in.PriceSource == "" || len(in.PriceSource) > 200 {
+			return &FieldError{"price_source", "Informe a fonte do preço (até 200 caracteres)."}
+		}
+	} else if strings.TrimSpace(in.PriceSource) != "" {
+		return &FieldError{"price_source", "A fonte só vale junto com o preço."}
+	}
 	if p := in.Params; p.MaxTokens != nil {
 		if *p.MaxTokens < 1 || (in.MaxOutputTokens > 0 && *p.MaxTokens > in.MaxOutputTokens) {
 			return &FieldError{"params.max_tokens", "max_tokens deve ser positivo e caber na saída máxima do modelo."}
@@ -111,13 +135,13 @@ func (in *Input) Validate() error {
 	return nil
 }
 
-const columns = `id, provider, gateway, name, label, supports_tools, supports_streaming, context_window, max_output_tokens, params, state, version, created_at, updated_at`
+const columns = `id, provider, gateway, name, label, supports_tools, supports_streaming, context_window, max_output_tokens, params, input_micros_per_mtok, output_micros_per_mtok, price_source, state, version, created_at, updated_at`
 
 func scan(row interface{ Scan(...any) error }) (Model, error) {
 	var m Model
 	var params []byte
 	if err := row.Scan(&m.ID, &m.Provider, &m.Gateway, &m.Name, &m.Label, &m.SupportsTools, &m.SupportsStreaming,
-		&m.ContextWindow, &m.MaxOutputTokens, &params, &m.State, &m.Version, &m.CreatedAt, &m.UpdatedAt); err != nil {
+		&m.ContextWindow, &m.MaxOutputTokens, &params, &m.InputMicrosPerMTok, &m.OutputMicrosPerMTok, &m.PriceSource, &m.State, &m.Version, &m.CreatedAt, &m.UpdatedAt); err != nil {
 		return m, persistence.MapError(err)
 	}
 	_ = json.Unmarshal(params, &m.Params)
@@ -131,9 +155,11 @@ func Register(ctx context.Context, db persistence.DBTX, in Input) (Model, error)
 	}
 	params, _ := json.Marshal(in.Params)
 	return scan(db.QueryRow(ctx, `
-		INSERT INTO models (provider, gateway, name, label, supports_tools, supports_streaming, context_window, max_output_tokens, params)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb) RETURNING `+columns,
-		in.Provider, in.Gateway, in.Name, in.Label, in.SupportsTools, in.SupportsStreaming, in.ContextWindow, in.MaxOutputTokens, string(params)))
+		INSERT INTO models (provider, gateway, name, label, supports_tools, supports_streaming, context_window, max_output_tokens, params,
+			input_micros_per_mtok, output_micros_per_mtok, price_source)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12) RETURNING `+columns,
+		in.Provider, in.Gateway, in.Name, in.Label, in.SupportsTools, in.SupportsStreaming, in.ContextWindow, in.MaxOutputTokens, string(params),
+		in.InputMicrosPerMTok, in.OutputMicrosPerMTok, in.PriceSource))
 }
 
 // List devolve o catálogo.
