@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E12 (T12-02)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E09 (T09-04)._
 
 ## Resumo
 
-**19 feitos · 22 parciais · 26 pendentes** de 67 tickets.
+**19 feitos · 23 parciais · 25 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -101,7 +101,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E12 (T12-02)._
   - PASS (PostgreSQL real, Docker real, `-race`, gateway de mentira): catálogo com parâmetros validados, compatibilidade com motivos (provedor, conta, gateway, ferramentas, estado), sobreposição agente/nó verificável (`model_check`), OpenRouter e Vercel rodando edição + teste pelo catálogo de ferramentas sob política, credencial só do cofre. **Parcial:** gateways reais NOT_RUN; sem tela; laço ainda não ligado ao worker; sem streaming. Revisão independente NOT_RUN. Entrega: [E09 modelos](../entregas/2026-11-12-E09-modelos-e-gateways.md).
 - [~] **[T09-03](03-BACKLOG.md#t09-03)** — Impor orçamento e registrar uso · dep.: T09-01, T09-02, T03-02.
   - PASS (PostgreSQL real, `-race`, gateway de mentira): reserva atômica (40 concorrentes ⇒ exatamente os que cabem; teto por agente e global respeitados), liquidação idempotente com overrun, liberação e expiração, falha fechada sem orçamento global ou sem preço, janelas dia/mês, cota de assinatura separada do gasto em API (o banco impede misturar), cotas só observadas com fonte e horário, reconciliação (ajusta o que faltou, mantém o maior), orçamento imposto antes de cada chamada no laço do gateway, API de orçamento e uso. **Parcial:** gateways e créditos reais NOT_RUN; sem tela; limites globais de concorrência são do T10-03. Revisão independente NOT_RUN. Entrega: [E09 orçamento](../entregas/2026-11-12-E09-orcamento-e-uso.md).
-- [ ] **[T09-04](03-BACKLOG.md#t09-04)** — Implementar fallback e disponibilidade · dep.: T09-03, T12-02.
+- [~] **[T09-04](03-BACKLOG.md#t09-04)** — Implementar fallback e disponibilidade · dep.: T09-03, T12-02.
+  - PASS (PostgreSQL real, `-race`): quatro causas com regras de retorno próprias, sinal oficial (cota observada) + histórico com backoff, cadeia explícita sem rodízio (conta fora da cadeia nunca usada), compatibilidade e orçamento checados, troca só com checkpoint íntegro e quiescência, esgotamento com espera (vaga liberada só com checkpoint seguro) enquanto outra execução avança, trilha auditável. **Parcial:** sem ligação ao worker/executor e sem classificação dos erros reais de Codex/Claude/OpenRouter/Vercel (NOT_RUN), sem rotas/tela; quiescência declarada pelo chamador. Revisão independente NOT_RUN. Entrega: [E09 fallback](../entregas/2026-11-12-E09-fallback-e-disponibilidade.md).
 
 ## E10 — Planejamento, fila e controles
 

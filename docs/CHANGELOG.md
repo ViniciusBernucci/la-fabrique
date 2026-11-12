@@ -1,3 +1,6 @@
+## 2026-11-12 — E09: fallback e disponibilidade (T09-04)
+Saúde de contas por causa (autenticação, cota, indisponibilidade, financeiro) combinando sinal oficial e histórico com backoff; fallback só pela cadeia explícita, compatível e dentro do orçamento, após checkpoint e quiescência; espera sem ocupar a vaga; sem rodízio. Provedores reais, worker e tela NOT_RUN. [Entrega](entregas/2026-11-12-E09-fallback-e-disponibilidade.md) · [ADR-0031](adr/0031-fallback-e-disponibilidade-de-contas.md).
+
 ## 2026-11-12 — E12: contexto seletivo e renovação de sessão (T12-02)
 Contexto seletivo com manifesto de fontes, limites e omissões, sem segredos; renovação por métrica oficial ou estimativa com margem; retomada com pacote e checkpoint reconferidos; troca de modelo só autorizada. Worker, memória e tela NOT_RUN. [Entrega](entregas/2026-11-12-E12-contexto-e-sessao.md) · [ADR-0030](adr/0030-contexto-seletivo-e-renovacao-de-sessao.md).
 

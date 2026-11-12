@@ -52,14 +52,15 @@ type ckEnv struct {
 	store *checkpoints.Store
 	proj  string
 	exec  string
+	cl    *client
 }
 
 func newCkEnv(t *testing.T, name string) ckEnv {
 	t.Helper()
-	e, _, _ := newProjectEnv(t)
+	e, cl, _ := newProjectEnv(t)
 	p := mustProject(t, e.db.Pool, name)
 	ex := waitingExecution(t, e, p.ID, "CK-1")
-	return ckEnv{e: e, store: &checkpoints.Store{DB: e.db.Pool}, proj: p.ID, exec: ex.ID}
+	return ckEnv{cl: cl, e: e, store: &checkpoints.Store{DB: e.db.Pool}, proj: p.ID, exec: ex.ID}
 }
 
 func (c ckEnv) input(label string) checkpoints.Input {
