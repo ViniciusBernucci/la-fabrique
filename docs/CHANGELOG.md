@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-12 — E08: catálogo de agentes e sobrescritas por nó (T08-01)
+Catálogo global de agentes com conta por referência de conexão, sobrescritas por nó que não alteram a base (ferramentas só reduzem) e configuração efetiva sanitizada. [Entrega](entregas/2026-11-12-E08-catalogo-de-agentes.md) · [ADR-0013](adr/0013-catalogo-de-agentes-e-sobrescritas.md).
+
 ## 2026-11-12 — E13: política de risco no executor (T13-01)
 Classificação de ações por risco (permitir, aprovar, proibir) para scripts, API, MCP, conectores, Git e CLIs, com proibições embutidas, parâmetros canônicos e trilha redigida. Central de aprovações e autorizações seguem em T13-02 e T13-03. [Entrega](entregas/2026-11-12-E13-politica-de-risco.md) · [ADR-0012](adr/0012-politica-de-risco-no-executor.md).
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 )
 
+var toolItem = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$`)
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
@@ -179,6 +180,19 @@ func validateProps(n Node, nt NodeType, add func(node, field, code, msg string))
 			if src, _ := n.Props[f].(string); strings.TrimSpace(src) != "" {
 				if _, err := ParseExpr(src); err != nil {
 					add(n.ID, f, "invalid_expression", err.Error())
+				}
+			}
+		}
+	}
+	if n.Type == TAgent {
+		if c, _ := n.Props["connection"].(string); strings.TrimSpace(c) != "" && !uuidPattern.MatchString(strings.TrimSpace(c)) {
+			add(n.ID, "connection", "invalid_value", "A conta deve ser identificada por um ID de conexão válido.")
+		}
+		if t, _ := n.Props["tools"].(string); strings.TrimSpace(t) != "" {
+			for _, item := range strings.Split(t, ",") {
+				if !toolItem.MatchString(strings.TrimSpace(item)) {
+					add(n.ID, "tools", "invalid_value", "Ferramenta inválida na lista (use nomes separados por vírgula).")
+					break
 				}
 			}
 		}

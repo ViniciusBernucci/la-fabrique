@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/ViniciusBernucci/le-fabrique/internal/agents"
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
@@ -45,9 +46,18 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 	var field *projects.FieldError
 	var invalid *projects.ValidationError
 	var wfField *workflows.FieldError
+	var agField *agents.FieldError
 	switch {
 	case errors.As(err, &field):
 		writeError(w, r, http.StatusBadRequest, "invalid_request", field.Message, "Corrija o campo \""+field.Field+"\" e tente novamente.")
+	case errors.As(err, &agField):
+		writeError(w, r, http.StatusBadRequest, "invalid_request", agField.Message, "Corrija o campo \""+agField.Field+"\" e tente novamente.")
+	case errors.Is(err, agents.ErrConnection):
+		writeError(w, r, http.StatusConflict, "connection_incompatible", err.Error(), "Escolha uma conexão ativa e compatível com o provedor do agente.")
+	case errors.Is(err, agents.ErrAgentNotFound):
+		writeError(w, r, http.StatusUnprocessableEntity, "agent_not_found", "O agente do nó não existe no catálogo.", "Cadastre o agente ou corrija o nome no nó.")
+	case errors.Is(err, agents.ErrOverride):
+		writeError(w, r, http.StatusUnprocessableEntity, "invalid_override", err.Error(), "Corrija a sobrescrita do nó.")
 	case errors.As(err, &wfField):
 		writeError(w, r, http.StatusBadRequest, "invalid_request", wfField.Message, "Corrija o campo \""+wfField.Field+"\" e tente novamente.")
 	case errors.As(err, &invalid):

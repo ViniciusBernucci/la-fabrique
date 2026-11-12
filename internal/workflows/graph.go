@@ -77,6 +77,10 @@ func Catalog() []NodeType {
 			{Name: "agent", Label: "Agente", Kind: KindText, Required: true, Hint: "Nome do agente no catálogo"},
 			{Name: "prompt", Label: "Instrução", Kind: KindTextarea, Required: true},
 			{Name: "timeout_minutes", Label: "Tempo máximo (min)", Kind: KindInt, Min: 1, Max: 720},
+			{Name: "model", Label: "Modelo (sobrescreve o agente)", Kind: KindText},
+			{Name: "connection", Label: "Conta (conexão, sobrescreve)", Kind: KindText, Hint: "ID da conexão; vazio usa a do agente"},
+			{Name: "tools", Label: "Ferramentas (só reduz as do agente)", Kind: KindText, Hint: "separadas por vírgula"},
+			{Name: "instructions_extra", Label: "Instruções adicionais", Kind: KindTextarea},
 		}},
 		{Type: TSkill, Label: "Skill", Category: "execução", Inputs: []string{PortIn}, Outputs: exec, Fields: []FieldSpec{
 			{Name: "skill", Label: "Skill", Kind: KindText, Required: true, Hint: "Nome da skill no catálogo"},

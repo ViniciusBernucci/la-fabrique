@@ -2,6 +2,7 @@ import { Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { ErrorState, LoadingState } from "./components/States";
 import { useSession } from "./lib/session";
+import { AgentsPage } from "./pages/AgentsPage";
 import { ConnectionsPage } from "./pages/ConnectionsPage";
 import { DecisionsPage } from "./pages/DecisionsPage";
 import { HomePage } from "./pages/HomePage";
@@ -55,6 +56,7 @@ export function App() {
         <Route path="projects/:id" element={<ProjectDetailPage />} />
         <Route path="projects/:id/setup" element={<ProjectSetupPage />} />
         <Route path="library" element={<LibraryPage />} />
+        <Route path="agents" element={<AgentsPage />} />
         <Route path="workflows" element={<WorkflowsPage />} />
         <Route path="workflows/:id" element={<WorkflowEditorPage />} />
         <Route path="decisions" element={<DecisionsPage />} />

@@ -285,6 +285,49 @@ export interface WorkflowSummary {
   updated_at: string;
 }
 
+export interface FallbackStep {
+  connection_id: string;
+  model: string;
+}
+
+export type AgentProvider = "claude" | "codex" | "api";
+
+export interface Agent {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  provider: AgentProvider;
+  connection_id: string | null;
+  model: string;
+  skills: string[];
+  tools: string[];
+  fallback: FallbackStep[];
+  timeout_minutes: number;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AgentInput = Omit<Agent, "id" | "version" | "created_at" | "updated_at">;
+
+export interface EffectiveAgent {
+  agent_id: string;
+  agent_name: string;
+  agent_version: number;
+  provider: AgentProvider;
+  connection_id: string | null;
+  model: string;
+  instructions: string;
+  prompt: string;
+  skills: string[];
+  tools: string[];
+  fallback: FallbackStep[];
+  timeout_minutes: number;
+  /** Origem de cada valor: base do catálogo ou sobrescrito pelo nó. */
+  sources: Record<string, "agent" | "node">;
+}
+
 const BASE = "/api";
 
 /** Token CSRF da sessão atual (memória; o servidor o devolve em /session e no login). */
@@ -401,6 +444,16 @@ export const api = {
   ) => put<Workflow>(`/workflows/${encodeURIComponent(id)}`, input),
   validateWorkflowGraph: (graph: WorkflowGraph, signal?: AbortSignal) =>
     post<{ issues: WorkflowIssue[] }>("/workflows/validate", { graph }, signal),
+
+  // Catálogo de agentes.
+  listAgents: (signal?: AbortSignal) => request<{ items: Agent[] }>("/agents", { signal }),
+  createAgent: (input: AgentInput) => post<Agent>("/agents", input),
+  updateAgent: (id: string, expected_version: number, input: AgentInput) =>
+    put<Agent>(`/agents/${encodeURIComponent(id)}`, { ...input, expected_version }),
+  nodeEffective: (workflowId: string, nodeId: string) =>
+    request<EffectiveAgent>(
+      `/workflows/${encodeURIComponent(workflowId)}/nodes/${encodeURIComponent(nodeId)}/effective`,
+    ),
 
   // Login em duas etapas.
   login: (username: string, password: string) =>

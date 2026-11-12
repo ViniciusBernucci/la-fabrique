@@ -6,6 +6,7 @@ import { ErrorState, LoadingState } from "../components/States";
 import {
   type ApiError,
   api,
+  type EffectiveAgent,
   type FieldSpec,
   type NodeProps,
   type NodeType,
@@ -82,6 +83,19 @@ function Editor({ initial, nodeTypes }: { initial: Workflow; nodeTypes: NodeType
   const [selected, setSelected] = useState<{ kind: "node" | "edge"; id: string } | null>(null);
   const [pending, setPending] = useState<{ node: string; port: string } | null>(null);
   const drag = useRef<{ id: string; dx: number; dy: number } | null>(null);
+  const [effective, setEffective] = useState<{
+    node: string;
+    value?: EffectiveAgent;
+    error?: ApiError;
+  } | null>(null);
+
+  async function showEffective(nodeId: string) {
+    try {
+      setEffective({ node: nodeId, value: await api.nodeEffective(initial.id, nodeId) });
+    } catch (e) {
+      setEffective({ node: nodeId, error: toApiError(e) });
+    }
+  }
 
   const change = (fn: (g: WorkflowGraph) => WorkflowGraph) => {
     setGraph(fn);
@@ -474,6 +488,27 @@ function Editor({ initial, nodeTypes }: { initial: Workflow; nodeTypes: NodeType
                   onChange={(raw) => setProp(selectedNode.id, f, raw)}
                 />
               ))}
+              {selectedNode.type === "agent" && (
+                <div className="form">
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    disabled={dirty}
+                    title={dirty ? "Salve o rascunho para ver a configuração efetiva" : undefined}
+                    onClick={() => showEffective(selectedNode.id)}
+                  >
+                    Ver configuração efetiva
+                  </button>
+                  {effective?.node === selectedNode.id && effective.error && (
+                    <p className="form-error" role="alert">
+                      {effective.error.message} {effective.error.action}
+                    </p>
+                  )}
+                  {effective?.node === selectedNode.id && effective.value && (
+                    <EffectiveView value={effective.value} />
+                  )}
+                </div>
+              )}
               {issues
                 .filter(
                   (i) =>
@@ -576,5 +611,34 @@ function FieldEditor({
         </small>
       ))}
     </div>
+  );
+}
+
+const sourceLabel = { agent: "do agente", node: "do nó" } as const;
+
+function EffectiveView({ value }: { value: EffectiveAgent }) {
+  const row = (label: string, key: string, text: string) => (
+    <div>
+      <dt>{label}</dt>
+      <dd>
+        {text || "—"}{" "}
+        <small className="muted">({sourceLabel[value.sources[key] ?? "agent"]})</small>
+      </dd>
+    </div>
+  );
+  return (
+    <dl className="facts" aria-label="Configuração efetiva">
+      <div>
+        <dt>Agente</dt>
+        <dd>
+          {value.agent_name} (versão {value.agent_version})
+        </dd>
+      </div>
+      {row("Provedor", "provider", value.provider)}
+      {row("Conta", "connection", value.connection_id ?? "")}
+      {row("Modelo", "model", value.model)}
+      {row("Ferramentas", "tools", value.tools.join(", "))}
+      {row("Tempo máximo", "timeout_minutes", `${value.timeout_minutes} min`)}
+    </dl>
   );
 }
