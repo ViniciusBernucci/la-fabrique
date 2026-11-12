@@ -13,6 +13,8 @@ import { ProjectDetailPage } from "./pages/ProjectDetailPage";
 import { ProjectSetupPage } from "./pages/ProjectSetupPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { SecurityPage } from "./pages/SecurityPage";
+import { WorkflowEditorPage } from "./pages/WorkflowEditorPage";
+import { WorkflowsPage } from "./pages/WorkflowsPage";
 
 function Gate({ children }: { children: React.ReactNode }) {
   return (
@@ -53,6 +55,8 @@ export function App() {
         <Route path="projects/:id" element={<ProjectDetailPage />} />
         <Route path="projects/:id/setup" element={<ProjectSetupPage />} />
         <Route path="library" element={<LibraryPage />} />
+        <Route path="workflows" element={<WorkflowsPage />} />
+        <Route path="workflows/:id" element={<WorkflowEditorPage />} />
         <Route path="decisions" element={<DecisionsPage />} />
         <Route path="connections" element={<ConnectionsPage />} />
         <Route path="security" element={<SecurityPage />} />

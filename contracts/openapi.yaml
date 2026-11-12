@@ -419,6 +419,96 @@ paths:
         "404": {$ref: "#/components/responses/Error"}
         "409": {$ref: "#/components/responses/Error"}
         "422": {$ref: "#/components/responses/Error"}
+  /workflows/node-types:
+    get:
+      tags: [workflows]
+      summary: Catálogo de tipos de nó (portas e campos); fonte única do editor e do validador
+      responses:
+        "200":
+          description: Tipos de nó
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/NodeType"}}}
+        "401": {$ref: "#/components/responses/Error"}
+  /workflows/validate:
+    post:
+      tags: [workflows]
+      summary: Valida um grafo sem salvar (problemas com nó e campo)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [graph]
+              additionalProperties: false
+              properties: {graph: {$ref: "#/components/schemas/WorkflowGraph"}}
+      responses:
+        "200":
+          description: Problemas encontrados (lista vazia = válido)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [issues]
+                properties: {issues: {type: array, items: {$ref: "#/components/schemas/WorkflowIssue"}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /workflows:
+    get:
+      tags: [workflows]
+      summary: Lista rascunhos de workflow com contagem de nós e problemas
+      responses:
+        "200":
+          description: Workflows
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/WorkflowSummary"}}}
+        "401": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [workflows]
+      summary: Cria um rascunho com o grafo inicial (início ligado a fim)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/NewWorkflow"}}}
+      responses:
+        "201": {description: Rascunho criado, content: {application/json: {schema: {$ref: "#/components/schemas/Workflow"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /workflows/{id}:
+    get:
+      tags: [workflows]
+      summary: Lê o rascunho com os problemas de validação (nó e campo)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Workflow, content: {application/json: {schema: {$ref: "#/components/schemas/Workflow"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+    put:
+      tags: [workflows]
+      summary: Salva o rascunho (controle otimista); grafo inválido é aceito e devolve `issues`
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/SaveWorkflow"}}}
+      responses:
+        "200": {description: Rascunho salvo, content: {application/json: {schema: {$ref: "#/components/schemas/Workflow"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
 security:
   - sessionCookie: []
 components:
@@ -713,3 +803,100 @@ components:
       properties:
         items: {type: array, items: {$ref: "#/components/schemas/Project"}}
         next_cursor: {type: string}
+    FieldSpec:
+      type: object
+      required: [name, label, kind, required]
+      properties:
+        name: {type: string}
+        label: {type: string}
+        kind: {type: string, enum: [text, textarea, int, enum]}
+        required: {type: boolean}
+        options: {type: array, items: {type: string}}
+        min: {type: integer}
+        max: {type: integer}
+        hint: {type: string}
+    NodeType:
+      type: object
+      required: [type, label, category, inputs, outputs, multi_in, fields]
+      properties:
+        type: {type: string}
+        label: {type: string}
+        category: {type: string, enum: [fluxo, execução, controle]}
+        inputs: {type: [array, "null"], items: {type: string}}
+        outputs: {type: array, items: {type: string}}
+        multi_in: {type: boolean}
+        fields: {type: [array, "null"], items: {$ref: "#/components/schemas/FieldSpec"}}
+    WorkflowNode:
+      type: object
+      required: [id, type, x, y, props]
+      properties:
+        id: {type: string, pattern: "^[A-Za-z0-9_-]{1,64}$"}
+        type: {type: string}
+        x: {type: number}
+        y: {type: number}
+        props: {type: object, additionalProperties: true}
+    WorkflowEdge:
+      type: object
+      required: [id, from, from_port, to, to_port]
+      properties:
+        id: {type: string}
+        from: {type: string}
+        from_port: {type: string}
+        to: {type: string}
+        to_port: {type: string}
+    WorkflowGraph:
+      type: object
+      required: [nodes, edges]
+      properties:
+        nodes: {type: array, maxItems: 200, items: {$ref: "#/components/schemas/WorkflowNode"}}
+        edges: {type: array, maxItems: 400, items: {$ref: "#/components/schemas/WorkflowEdge"}}
+    WorkflowIssue:
+      type: object
+      required: [node, field, code, message]
+      properties:
+        node: {type: string, description: "Vazio = problema do grafo inteiro"}
+        field: {type: string, description: "Propriedade ou porta"}
+        code: {type: string}
+        message: {type: string}
+    Workflow:
+      type: object
+      required: [id, name, kind, description, graph, version, issues, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        kind: {type: string, enum: [feature, subflow]}
+        description: {type: string}
+        graph: {$ref: "#/components/schemas/WorkflowGraph"}
+        version: {type: integer, minimum: 1}
+        issues: {type: array, items: {$ref: "#/components/schemas/WorkflowIssue"}}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    WorkflowSummary:
+      type: object
+      required: [id, name, kind, description, version, nodes, issues, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        kind: {type: string, enum: [feature, subflow]}
+        description: {type: string}
+        version: {type: integer}
+        nodes: {type: integer}
+        issues: {type: integer}
+        updated_at: {type: string, format: date-time}
+    NewWorkflow:
+      type: object
+      required: [name, kind]
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 120}
+        kind: {type: string, enum: [feature, subflow]}
+        description: {type: string, maxLength: 500}
+    SaveWorkflow:
+      type: object
+      required: [expected_version, name, graph]
+      additionalProperties: false
+      properties:
+        expected_version: {type: integer, minimum: 1}
+        name: {type: string, minLength: 1, maxLength: 120}
+        description: {type: string, maxLength: 500}
+        graph: {$ref: "#/components/schemas/WorkflowGraph"}

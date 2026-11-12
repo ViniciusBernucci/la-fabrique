@@ -209,6 +209,82 @@ export interface NewConnection {
   secret: string;
 }
 
+export interface FieldSpec {
+  name: string;
+  label: string;
+  kind: "text" | "textarea" | "int" | "enum";
+  required: boolean;
+  options?: string[];
+  min?: number;
+  max?: number;
+  hint?: string;
+}
+
+export interface NodeType {
+  type: string;
+  label: string;
+  category: "fluxo" | "execução" | "controle";
+  inputs: string[] | null;
+  outputs: string[];
+  multi_in: boolean;
+  fields: FieldSpec[] | null;
+}
+
+export type NodeProps = Record<string, string | number>;
+
+export interface WorkflowNode {
+  id: string;
+  type: string;
+  x: number;
+  y: number;
+  props: NodeProps;
+}
+
+export interface WorkflowEdge {
+  id: string;
+  from: string;
+  from_port: string;
+  to: string;
+  to_port: string;
+}
+
+export interface WorkflowGraph {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+}
+
+export interface WorkflowIssue {
+  /** Vazio = problema do grafo inteiro. */
+  node: string;
+  /** Propriedade ou porta. */
+  field: string;
+  code: string;
+  message: string;
+}
+
+export interface Workflow {
+  id: string;
+  name: string;
+  kind: "feature" | "subflow";
+  description: string;
+  graph: WorkflowGraph;
+  version: number;
+  issues: WorkflowIssue[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowSummary {
+  id: string;
+  name: string;
+  kind: "feature" | "subflow";
+  description: string;
+  version: number;
+  nodes: number;
+  issues: number;
+  updated_at: string;
+}
+
 const BASE = "/api";
 
 /** Token CSRF da sessão atual (memória; o servidor o devolve em /session e no login). */
@@ -278,6 +354,14 @@ function patch<T>(path: string, body: unknown): Promise<T> {
   });
 }
 
+function put<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export const api = {
   session: (signal?: AbortSignal) => request<Session>("/session", { signal }),
   ready: (signal?: AbortSignal) => request<{ status: string }>("/readyz", { signal }),
@@ -301,6 +385,22 @@ export const api = {
     post<Project>(`/projects/${encodeURIComponent(id)}/suspend`, { expected_version }),
   resumeProject: (id: string, expected_version: number) =>
     post<Project>(`/projects/${encodeURIComponent(id)}/resume`, { expected_version }),
+
+  // Workflows (rascunhos).
+  workflowNodeTypes: (signal?: AbortSignal) =>
+    request<{ items: NodeType[] }>("/workflows/node-types", { signal }),
+  listWorkflows: (signal?: AbortSignal) =>
+    request<{ items: WorkflowSummary[] }>("/workflows", { signal }),
+  createWorkflow: (input: { name: string; kind: "feature" | "subflow"; description?: string }) =>
+    post<Workflow>("/workflows", input),
+  getWorkflow: (id: string, signal?: AbortSignal) =>
+    request<Workflow>(`/workflows/${encodeURIComponent(id)}`, { signal }),
+  saveWorkflow: (
+    id: string,
+    input: { expected_version: number; name: string; description: string; graph: WorkflowGraph },
+  ) => put<Workflow>(`/workflows/${encodeURIComponent(id)}`, input),
+  validateWorkflowGraph: (graph: WorkflowGraph, signal?: AbortSignal) =>
+    post<{ issues: WorkflowIssue[] }>("/workflows/validate", { graph }, signal),
 
   // Login em duas etapas.
   login: (username: string, password: string) =>

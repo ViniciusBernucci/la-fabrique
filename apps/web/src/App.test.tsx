@@ -115,6 +115,7 @@ describe("com sessão", () => {
       ["Painel", "/"],
       ["Projetos", "/projects"],
       ["Biblioteca", "/library"],
+      ["Workflows", "/workflows"],
       ["Decisões", "/decisions"],
       ["Conexões", "/connections"],
       ["Segurança", "/security"],

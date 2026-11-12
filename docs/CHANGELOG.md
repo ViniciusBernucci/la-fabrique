@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-12 — E07: editor visual de workflows (T07-01)
+Documento de workflow, catálogo de nós, validador com nó/campo, API de rascunhos e editor de canvas. Publicação, motor e seleção por regras seguem em T07-02 a T07-04. [Entrega](entregas/2026-11-12-E07-editor-de-workflows.md) · [ADR-0009](adr/0009-documento-de-workflow-e-validacao.md).
+
 ## 2026-11-12 — E11: sandbox por feature (T11-01 parcial)
 Container, workspace e rede por feature com endurecimento, quotas e testes adversariais em Docker real. Sem saída de rede controlada nem clone remoto ainda. [Entrega](entregas/2026-11-12-E11-sandbox.md) · [ADR-0008](adr/0008-sandbox-por-feature-em-containers.md).
 

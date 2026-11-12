@@ -406,3 +406,94 @@
   color: var(--hud-text-muted);
   font-weight: 500;
 }
+
+/* Editor de workflows (E07) */
+.wf-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+.wf-layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr) 300px;
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .wf-layout {
+    grid-template-columns: 1fr;
+  }
+}
+.wf-palette-group {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.wf-canvas {
+  overflow: auto;
+  max-height: 70vh;
+}
+.wf-bg {
+  fill: var(--hud-surface-2);
+}
+.wf-node {
+  fill: var(--hud-surface-1, var(--hud-surface-2));
+  stroke: var(--hud-line-strong);
+  stroke-width: 1.5;
+}
+.wf-node--fluxo {
+  stroke: var(--hud-teal);
+}
+.wf-node--controle {
+  stroke: var(--hud-amber);
+}
+.wf-node--selected {
+  stroke-width: 3;
+}
+.wf-node--invalid {
+  stroke: var(--hud-danger-text);
+  stroke-dasharray: 5 3;
+}
+.wf-node-title {
+  fill: var(--hud-surface-2);
+}
+.wf-node-head {
+  cursor: grab;
+}
+.wf-text-strong {
+  fill: var(--hud-text-strong);
+  font: 600 12px var(--hud-font-mono);
+}
+.wf-text-muted {
+  fill: var(--hud-text-muted);
+  font: 500 11px var(--hud-font-mono);
+}
+.wf-port {
+  fill: var(--hud-surface-2);
+  stroke: var(--hud-text-muted);
+  stroke-width: 2;
+  cursor: pointer;
+}
+.wf-port--active,
+.wf-port--target:hover {
+  fill: var(--hud-teal);
+}
+.wf-edge {
+  fill: none;
+  stroke: var(--hud-text-muted);
+  stroke-width: 2;
+}
+.wf-edge--selected {
+  stroke: var(--hud-teal);
+  stroke-width: 3;
+}
+.wf-edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  cursor: pointer;
+}
+.wf-field {
+  display: grid;
+  gap: 4px;
+}

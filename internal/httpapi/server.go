@@ -132,6 +132,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/connections/{id}/rotate", s.sensitive(s.rotateConnection))
 	mux.HandleFunc("POST /api/connections/{id}/revoke", s.sensitive(s.revokeConnection))
 
+	mux.HandleFunc("GET /api/workflows/node-types", s.protected(s.workflowNodeTypes))
+	mux.HandleFunc("POST /api/workflows/validate", s.protected(s.validateWorkflowGraph))
+	mux.HandleFunc("GET /api/workflows", s.protected(s.listWorkflows))
+	mux.HandleFunc("POST /api/workflows", s.protected(s.createWorkflow))
+	mux.HandleFunc("GET /api/workflows/{id}", s.protected(s.getWorkflow))
+	mux.HandleFunc("PUT /api/workflows/{id}", s.protected(s.saveWorkflow))
+
 	mux.HandleFunc("GET /api/projects", s.protected(s.listProjects))
 	mux.HandleFunc("GET /api/projects/{id}", s.protected(s.getProject))
 	mux.HandleFunc("POST /api/projects", s.protected(s.createProject))

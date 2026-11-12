@@ -10,6 +10,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
+	"github.com/ViniciusBernucci/le-fabrique/internal/workflows"
 )
 
 // ErrorBody é o formato de erro de todos os endpoints (ver contracts/openapi.yaml):
@@ -43,9 +44,12 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 	var locked *security.LockedError
 	var field *projects.FieldError
 	var invalid *projects.ValidationError
+	var wfField *workflows.FieldError
 	switch {
 	case errors.As(err, &field):
 		writeError(w, r, http.StatusBadRequest, "invalid_request", field.Message, "Corrija o campo \""+field.Field+"\" e tente novamente.")
+	case errors.As(err, &wfField):
+		writeError(w, r, http.StatusBadRequest, "invalid_request", wfField.Message, "Corrija o campo \""+wfField.Field+"\" e tente novamente.")
 	case errors.As(err, &invalid):
 		writeError(w, r, http.StatusUnprocessableEntity, "validation_failed", "O projeto tem pendências e não pode ser ativado.", "Resolva os itens pendentes em GET /api/projects/{id}/validation.")
 	case errors.Is(err, projects.ErrSourceIncomplete):

@@ -61,8 +61,8 @@ func TestMigrationPathPreservesData(t *testing.T) {
 		t.Fatalf("tabelas da migration 2 deveriam existir: %v", err)
 	}
 
-	// Rollback e reaplicação (dev): as migrations 6, 5, 4, 3 e 2 saem e voltam.
-	for i := 0; i < 5; i++ {
+	// Rollback e reaplicação (dev): as migrations 7, 6, 5, 4, 3 e 2 saem e voltam.
+	for i := 0; i < 6; i++ {
 		if _, err := m.Down(ctx); err != nil {
 			t.Fatalf("down %d: %v", i+1, err)
 		}
