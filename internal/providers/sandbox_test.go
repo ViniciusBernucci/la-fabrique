@@ -142,7 +142,17 @@ func TestCancellingARunKillsTheClientAndItsChildren(t *testing.T) {
 		res, _ := Run(ctx, SandboxRunner{S: s}, Request{Account: a, Prompt: "x", Mode: ModeReadOnly, Binary: "/workspace/fake-slow.sh"}, nil)
 		done <- res
 	}()
-	time.Sleep(1500 * time.Millisecond)
+	count := func() string {
+		r, _ := s.Exec(t.Context(), execution.ExecSpec{Cmd: []string{"sh", "-c", "ps -o args= | grep -c '^sleep 30' || true"}})
+		return strings.TrimSpace(r.Stdout)
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for count() != "2" && time.Now().Before(deadline) {
+		time.Sleep(200 * time.Millisecond)
+	}
+	if count() != "2" {
+		t.Fatal("os filhos do cliente deveriam estar rodando antes do cancelamento")
+	}
 	cancel()
 	select {
 	case res := <-done:
@@ -152,9 +162,11 @@ func TestCancellingARunKillsTheClientAndItsChildren(t *testing.T) {
 	case <-time.After(30 * time.Second):
 		t.Fatal("o cancelamento não encerrou a execução")
 	}
-	time.Sleep(500 * time.Millisecond)
-	r, _ := s.Exec(t.Context(), execution.ExecSpec{Cmd: []string{"sh", "-c", "ps -o args= | grep -c '^sleep 30'"}})
-	if strings.TrimSpace(r.Stdout) != "0" {
-		t.Fatalf("os filhos do cliente deveriam ter terminado: %q", r.Stdout)
+	deadline = time.Now().Add(20 * time.Second)
+	for count() != "0" && time.Now().Before(deadline) {
+		time.Sleep(200 * time.Millisecond)
+	}
+	if got := count(); got != "0" {
+		t.Fatalf("os filhos do cliente deveriam ter terminado: %q", got)
 	}
 }

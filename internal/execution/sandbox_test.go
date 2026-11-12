@@ -40,6 +40,25 @@ func provision(t *testing.T, d *Docker, profile string, mut func(*Profile)) *San
 	return s
 }
 
+// eventually repete a condição até valer ou estourar o prazo (evita esperas fixas,
+// que viram corrida quando vários pacotes usam o Docker ao mesmo tempo).
+func eventually(t *testing.T, timeout time.Duration, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatalf("não ocorreu a tempo: %s", what)
+}
+
+func countProcs(t *testing.T, s *Sandbox, prefix string) string {
+	t.Helper()
+	return strings.TrimSpace(sh(t, s, "ps -o args= | grep -c '^"+prefix+"' || true").Stdout)
+}
+
 func sh(t *testing.T, s *Sandbox, script string) ExecResult {
 	t.Helper()
 	res, err := s.Exec(t.Context(), ExecSpec{Cmd: []string{"sh", "-c", script}, Timeout: 60 * time.Second})
@@ -111,10 +130,9 @@ func TestPidsLimitContainsForkBomb(t *testing.T) {
 		t.Fatalf("limite configurado: %q %v", n, err)
 	}
 	sh(t, s, "pkill sleep; true")
-	time.Sleep(500 * time.Millisecond)
-	if r := sh(t, s, "echo vivo"); strings.TrimSpace(r.Stdout) != "vivo" {
-		t.Fatalf("o sandbox deveria seguir utilizável: %+v", r)
-	}
+	eventually(t, 20*time.Second, "o sandbox voltar a responder", func() bool {
+		return strings.TrimSpace(sh(t, s, "echo vivo").Stdout) == "vivo"
+	})
 }
 
 func TestSandboxesDoNotSeeEachOther(t *testing.T) {
@@ -158,10 +176,9 @@ func TestIsolatedNetworkReachesNeitherOtherSandboxesNorHost(t *testing.T) {
 
 	// Controle positivo: o servidor de B responde dentro do próprio B.
 	sh(t, b, `(while true; do printf "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\noi-de-B" | nc -l -p 8080 >/dev/null 2>&1; done) >/dev/null 2>&1 &`)
-	time.Sleep(time.Second)
-	if r := sh(t, b, "wget -T 3 -q -O- http://127.0.0.1:8080/"); !strings.Contains(r.Stdout, "oi-de-B") {
-		t.Fatalf("o servidor de teste deveria responder em B: %+v", r)
-	}
+	eventually(t, 20*time.Second, "o servidor de teste responder em B", func() bool {
+		return strings.Contains(sh(t, b, "wget -T 3 -q -O- http://127.0.0.1:8080/ 2>&1").Stdout, "oi-de-B")
+	})
 	ipB, err := b.Inspect(t.Context(), "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}")
 	if err != nil || ipB == "" {
 		t.Fatalf("IP de B: %q %v", ipB, err)
@@ -316,20 +333,14 @@ func TestCancelKillsTheWholeProcessGroup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(time.Second)
-	if res := sh(t, s, "ps -o args= | grep -c '^sleep 30'"); strings.TrimSpace(res.Stdout) != "2" {
-		t.Fatalf("controle positivo: os dois filhos deveriam existir: %q", res.Stdout)
-	}
+	eventually(t, 20*time.Second, "os dois filhos existirem (controle positivo)", func() bool { return countProcs(t, s, "sleep 30") == "2" })
 	if err := r.Cancel(3 * time.Second); err != nil {
 		t.Fatal(err)
 	}
 	if code, _ := r.Wait(); code == 0 {
 		t.Fatal("o comando cancelado não pode sair com sucesso")
 	}
-	time.Sleep(500 * time.Millisecond)
-	if res := sh(t, s, "ps -o args= | grep -c '^sleep 30'"); strings.TrimSpace(res.Stdout) != "0" {
-		t.Fatalf("a árvore inteira deveria ter terminado: %q", res.Stdout)
-	}
+	eventually(t, 20*time.Second, "a árvore inteira terminar", func() bool { return countProcs(t, s, "sleep 30") == "0" })
 }
 
 func TestCancelEscalatesToKillWhenTermIsIgnored(t *testing.T) {
@@ -339,7 +350,7 @@ func TestCancelEscalatesToKillWhenTermIsIgnored(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(time.Second)
+	eventually(t, 20*time.Second, "o laço começar", func() bool { return countProcs(t, s, "sh -c trap") == "1" })
 	start := time.Now()
 	if err := r.Cancel(time.Second); err != nil {
 		t.Fatalf("o SIGKILL deveria encerrar: %v", err)
@@ -347,11 +358,7 @@ func TestCancelEscalatesToKillWhenTermIsIgnored(t *testing.T) {
 	if time.Since(start) > 8*time.Second {
 		t.Fatal("o encerramento demorou demais")
 	}
-	time.Sleep(300 * time.Millisecond)
-	if res := sh(t, s, "ps -o args= | grep -c '^sh -c trap'"); strings.TrimSpace(res.Stdout) != "0" {
-		all := sh(t, s, "ps -o pid,pgid,stat,args")
-		t.Fatalf("o processo que ignora SIGTERM deveria ter morrido: %q\n%s", res.Stdout, all.Stdout)
-	}
+	eventually(t, 20*time.Second, "o processo que ignora SIGTERM morrer", func() bool { return countProcs(t, s, "sh -c trap") == "0" })
 }
 
 func TestStreamDeliversOutputIncrementallyAndContextCancels(t *testing.T) {
