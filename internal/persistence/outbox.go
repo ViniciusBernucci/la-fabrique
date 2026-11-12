@@ -108,3 +108,8 @@ func TransitionOutbox(ctx context.Context, db DBTX, projectID, id string, expect
 	}
 	return entry, err
 }
+
+// GetOutbox lê uma entrada do outbox.
+func GetOutbox(ctx context.Context, db DBTX, projectID, id string) (OutboxEntry, error) {
+	return scanOutbox(db.QueryRow(ctx, `SELECT `+outboxCols+` FROM outbox WHERE project_id = $1 AND id = $2`, projectID, id))
+}

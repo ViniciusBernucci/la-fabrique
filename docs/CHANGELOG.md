@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-12 — E13: ledger de efeitos externos (T13-04)
+Intenção antes do envio, prova verificável para reconciliar respostas perdidas (confirmado não duplica, ausente permite repetir, inconclusivo bloqueia e abre decisão com evidência) e reconciliação de envios abandonados. [Entrega](entregas/2026-11-12-E13-ledger-de-efeitos.md) · [ADR-0018](adr/0018-ledger-de-efeitos-externos.md).
+
 ## 2026-11-12 — E13: pedidos e decisões humanas (T13-02)
 Central de Decisões com pedidos por execução, resolução transacional restrita à execução afetada, decisão repetida e obsoleta com resultado definido, e reautenticação para operações sensíveis. [Entrega](entregas/2026-11-12-E13-decisoes-humanas.md) · [ADR-0017](adr/0017-pedidos-e-decisoes-humanas.md).
 

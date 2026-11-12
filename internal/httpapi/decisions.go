@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/ViniciusBernucci/le-fabrique/internal/decisions"
+	"github.com/ViniciusBernucci/le-fabrique/internal/effects"
 )
 
 func (s *Server) listDecisions(w http.ResponseWriter, r *http.Request) {
@@ -56,6 +57,13 @@ func (s *Server) resolveDecision(w http.ResponseWriter, r *http.Request) {
 	out, err := decisions.Resolve(r.Context(), s.db, sess.AdminID, id, req.Option, req.Note)
 	if err != nil {
 		s.writeDomainError(w, r, err)
+		return
+	}
+	// Decisão sobre um efeito inconclusivo do ledger: aplica ao efeito (idempotente).
+	ledger := &effects.Ledger{DB: s.db, Redactor: s.redactor}
+	if _, err := ledger.ResolveFromDecision(r.Context(), out.Request); err != nil {
+		s.log.ErrorContext(r.Context(), "falha ao aplicar a decisão ao efeito", "error", err.Error(), "request_id", id)
+		writeError(w, r, http.StatusInternalServerError, "internal_error", "A decisão foi registrada, mas não foi possível aplicá-la ao efeito.", "Repita a ação: ela é idempotente.")
 		return
 	}
 	if !out.Replayed {
