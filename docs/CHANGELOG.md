@@ -1,3 +1,6 @@
+## 2026-11-12 — E02: verificação e ensaio de restauração (T02-04)
+Verificador de banco restaurado (migrations, TOTP e conexões decifráveis com a chave, hashes de checkpoints, skills e contexto) e `make restore-drill` (backup, restore isolado, verificação, descarte). Snapshot da VPS e produção NOT_RUN. [Entrega](entregas/2026-11-12-E02-ensaio-de-restauracao.md) · [ADR-0032](adr/0032-verificacao-de-restauracao.md).
+
 ## 2026-11-12 — E09: fallback e disponibilidade (T09-04)
 Saúde de contas por causa (autenticação, cota, indisponibilidade, financeiro) combinando sinal oficial e histórico com backoff; fallback só pela cadeia explícita, compatível e dentro do orçamento, após checkpoint e quiescência; espera sem ocupar a vaga; sem rodízio. Provedores reais, worker e tela NOT_RUN. [Entrega](entregas/2026-11-12-E09-fallback-e-disponibilidade.md) · [ADR-0031](adr/0031-fallback-e-disponibilidade-de-contas.md).
 

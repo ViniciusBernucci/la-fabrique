@@ -4,7 +4,7 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E09 (T09-04)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E02 (T02-04)._
 
 ## Resumo
 
@@ -32,6 +32,7 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E09 (T09-04)._
   - Pronto: `.github/workflows/ci.yml` (Go com integração em PostgreSQL, web, segredos/dependências, build de imagens com tag = commit, smoke e evidência por commit; sem `secrets.*`) e [ci-e-promocao.md](../operacao/ci-e-promocao.md) com promoção e rollback. **NOT_RUN:** o workflow nunca executou no GitHub (sem push/autorização); checks obrigatórios na `main` pendentes; ações fixadas por tag, não por SHA.
 - [~] **[T02-04](03-BACKLOG.md#t02-04)** — Documentar e ensaiar backup e restauração · dep.: T02-02, T03-02, T04-03, T12-01.
   - Só o necessário p/ dev: backup/restore do banco PASS em dev. Chave do cofre (`VAULT_KEY`) documentada; decifrar com chave certa/errada PASS em integração. Restore ponta a ponta (dump + chave) em destino isolado, volumes e snapshot da VPS pendentes.
+  - **Atualização (T02-04):** `make restore-drill` (backup → restore isolado → verificação → descarte) e `cmd/verify-restore` conferem migrations, TOTP e conexões decifráveis com a chave, hashes de checkpoints/skills/contexto; PASS em integração (íntegro passa; chave errada e adulterações são apontadas sem vazar valor) e mecânica PASS em dev (a verificação reprovou de verdade um dev sem migrations e sem administrador). **Pendente:** restore do snapshot da VPS e em produção, rotação da chave. Entrega: [E02 restauração](../entregas/2026-11-12-E02-ensaio-de-restauracao.md).
 
 ## E03 — Fundação web, API e dados
 

@@ -11,6 +11,16 @@ O restore confere o SHA-256 antes, e depois lista migrations aplicadas, projetos
 **Verificado (dev, 2026-11-12):** backup de 23 kB, SHA conferido, restore em banco isolado com 2 migrations, 3 projetos e 2 sessões iguais ao original — PASS.
 **NOT_RUN:** restore a partir de snapshot do provedor, em destino isolado da VPS; teste de desencriptar conexões e hashes de artefatos (não existem ainda).
 
+## Ensaio de restauração e verificação (T02-04)
+
+```sh
+make restore-drill                 # backup novo → restore em restore_drill_<UTC> → verificação → descarte
+make restore-drill F=backups/db-XXXX.dump   # ensaia um backup existente
+```
+A verificação (`cmd/verify-restore`, somente leitura) usa a `VAULT_KEY` do ambiente e confere: migrations completas, TOTP do administrador e **todas as conexões** decifráveis, hashes de checkpoints (e de cada objeto), de arquivos de skills e de pacotes de contexto. Falha com exit ≠ 0 e diz o motivo, sem imprimir valores. Checkpoints, skills e pacotes ficam no PostgreSQL: o dump os cobre. Um backup só deve ser dado como bom depois de passar nesta verificação. Decisão: [ADR-0032](../adr/0032-verificacao-de-restauracao.md).
+
+**Verificado (dev, 2026-11-12):** mecânica ponta a ponta PASS; a conferência reprovou corretamente um dev sem migrations e sem administrador. **NOT_RUN:** snapshot da VPS e produção.
+
 ## Chave do cofre (`VAULT_KEY`)
 
 O banco guarda conexões e o segredo TOTP **cifrados**; a chave (`VAULT_KEY`, 32 bytes em base64) mora só no `.env`, **fora do dump**. Consequências:

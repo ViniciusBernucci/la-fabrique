@@ -353,6 +353,10 @@ func consumeChallenge(ctx context.Context, tx pgx.Tx, id string) error {
 	return nil
 }
 
+// AdminTOTPAAD é o contexto autenticado do segredo TOTP do administrador (usado
+// também pela verificação de restauração).
+func AdminTOTPAAD(adminID string) []byte { return totpAAD(adminID) }
+
 func totpAAD(adminID string) []byte        { return []byte("admin-totp:" + adminID) }
 func totpPendingAAD(adminID string) []byte { return []byte("admin-totp-pending:" + adminID) }
 
