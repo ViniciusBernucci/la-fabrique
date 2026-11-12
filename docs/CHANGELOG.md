@@ -1,3 +1,6 @@
+## 2026-11-12 — E12: checkpoints íntegros (T12-01)
+Captura do workspace com hashes, gravação atômica, restauração em container novo com comparação de árvore e parada segura. Git real NOT_RUN. [Entrega](entregas/2026-11-12-E12-checkpoints.md) · [ADR-0023](adr/0023-checkpoints-integros.md).
+
 ## 2026-11-12 — E11: execução de ferramentas confinada e com identidade (T11-02)
 Ferramentas de arquivo resolvem links simbólicos no sandbox e só seguem dentro do workspace; chamadas brokeradas exigem identidade e registram o ator. Provado nos modos API e CLI com CLI/gateway de mentira; reais NOT_RUN. [Entrega](entregas/2026-11-12-E11-execucao-de-ferramentas.md) · [ADR-0022](adr/0022-execucao-de-ferramentas-confinada-e-com-identidade.md).
 
