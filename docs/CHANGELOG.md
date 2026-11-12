@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-12 — E11: sandbox por feature (T11-01 parcial)
+Container, workspace e rede por feature com endurecimento, quotas e testes adversariais em Docker real. Sem saída de rede controlada nem clone remoto ainda. [Entrega](entregas/2026-11-12-E11-sandbox.md) · [ADR-0008](adr/0008-sandbox-por-feature-em-containers.md).
+
 ## 2026-11-12 — E02: scripts de inventário da VPS e CI (T02-01, T02-03 parciais)
 Scripts somente leitura para inventariar e medir a VPS e workflow de CI com imagens por commit e evidência. Nada executado contra a VPS nem no GitHub (NOT_RUN). [Entrega](entregas/2026-11-12-E02-vps-e-ci.md).
 
