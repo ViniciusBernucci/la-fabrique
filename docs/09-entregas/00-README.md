@@ -122,3 +122,7 @@ Relatos locais preservam datas/IDs/revisões/resultados/limites; links editoriai
 - [FAC-039–041 — Complemento funcional do painel da conta](2026/2026-10-09-FAC-041-complemento-painel-conta.md).
 
 - [FAC-036 — arquivos Markdown para agentes e skills](2026/2026-10-09-FAC-036-instrucoes-markdown.md).
+
+- [FAC-042 — Escritório virtual isométrico](2026/2026-10-24-FAC-042-escritorio-virtual.md).
+
+- [FAC-043 — Visual sóbrio com seletor Novo/Antigo](2026/2026-10-25-FAC-043-visual-sobrio.md).

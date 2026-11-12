@@ -85,6 +85,14 @@ Contratos validam senha/timezone/version/papéis. API cobre salt/hashing, cookie
 
 [Entrega/checks](../09-entregas/2026/2026-10-09-FAC-041-complemento-painel-conta.md). Revisão independente/aceite, preços/catálogo e ativação externa continuam pendentes; testes não comprovam isolamento hostil/comercial.
 
+## Cobertura FAC-043
+
+Seletor Novo/Antigo (preferência, padrão e armazenamento bloqueado), home sóbria e HUD antigo, renomeação Núcleos e contratos de navegação/aria nas duas opções cobertos por specs. Home nova conferida em Chromium com CSS final; telas internas no app completo e revisão independente NOT_RUN. [Entrega](../09-entregas/2026/2026-10-25-FAC-043-visual-sobrio.md).
+
+## Cobertura FAC-042
+
+Escritório virtual: modelo (layout, BFS, trabalho/entrega/ócio), fonte simulada sem timers sem assinante, painel acessível e destino de navegação cobertos por specs. Render verificado em Chromium isolado; browser no app completo e revisão independente NOT_RUN. Sem backend, providers ou schemas. [Entrega](../09-entregas/2026/2026-10-24-FAC-042-escritorio-virtual.md).
+
 ## Cobertura FAC-036
 
 Upload .md para agentes/skills e download do conteúdo; testes de leitura cobrem extensão/nome, UTF-8, BOM/espaços, vazio/NUL e limites; contratos cobrem metadados nos três tipos e leitura legada; serviço verifica persistência JSON versionada. Browser, revisão independente e aceite exato pendentes. [Entrega](../09-entregas/2026/2026-10-09-FAC-036-instrucoes-markdown.md).

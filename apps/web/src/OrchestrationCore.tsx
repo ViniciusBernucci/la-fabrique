@@ -42,17 +42,17 @@ export function OrchestrationCore({ agents }: { agents: readonly CoreAgent[] }) 
   const glow = `${id}-glow`;
   const sphere = `${id}-sphere`;
   const light = `${id}-light`;
-  const nodes = agents.filter((agent) => agent.name !== "JARVIS");
+  const nodes = agents.filter((agent) => agent.name !== "Núcleos");
   return (
     <svg
       className="orchestration-core"
       viewBox="0 0 600 600"
       role="img"
-      aria-label="Núcleo de orquestração JARVIS"
+      aria-label="Núcleos, centro de orquestração da La fabrique"
     >
-      <title>Núcleo de orquestração JARVIS</title>
+      <title>Núcleos, centro de orquestração da La fabrique</title>
       <desc>
-        Representação demonstrativa de JARVIS conectado aos agentes{" "}
+        Representação demonstrativa dos Núcleos conectados aos agentes{" "}
         {nodes.map((agent) => agent.name).join(", ")}. Não representa execução real.
       </desc>
       <defs>
@@ -224,7 +224,7 @@ export function OrchestrationCore({ agents }: { agents: readonly CoreAgent[] }) 
       ))}
       <circle className="core-pulse" cx="300" cy="300" r="46" fill={`url(#${light})`} />
       <text className="core-name" x="300" y="304" textAnchor="middle">
-        JARVIS
+        NÚCLEOS
       </text>
       {nodes.map((agent, index) => {
         const position = point(236, -90 + index * (360 / nodes.length));

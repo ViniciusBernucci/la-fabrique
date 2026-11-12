@@ -574,6 +574,16 @@
 - [Leitura obrigatória e evidências da sessão FAC-036](09-entregas/2026/evidencias/FAC-036/leitura-checks.md).
 - [Revisão e verificação em browser após integração](09-entregas/2026/evidencias/FAC-036/revisao-integracao.md).
 
+## Escritório virtual — FAC-042 (consulta)
+
+- [Ticket](08-desenvolvimento/tickets/controle/FAC-042-escritorio-virtual.md).
+- [Entrega e checks](09-entregas/2026/2026-10-24-FAC-042-escritorio-virtual.md).
+
+## Visual sóbrio — FAC-043 (consulta)
+
+- [Ticket](08-desenvolvimento/tickets/controle/FAC-043-visual-sobrio.md).
+- [Entrega e checks](09-entregas/2026/2026-10-25-FAC-043-visual-sobrio.md).
+
 ## Memória e decisões — guias, planos e contratos
 
 1. [Aprender a arquitetura de memória e decisões](02-arquitetura/memoria-e-decisoes/00-README.md).

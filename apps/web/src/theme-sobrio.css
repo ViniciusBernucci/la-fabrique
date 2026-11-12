@@ -1,0 +1,343 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: o tema sobrepõe regras de componentes e o seletor vale nos dois visuais. */
+/* Proposta sóbria (seletor "Novo"): mesmo conteúdo e estrutura, menos ruído visual.
+   Redefine os tokens HUD e neutraliza brilhos/grade quando <html data-layout="novo">. */
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap");
+
+/* Seletor Novo/Antigo — vale para os dois visuais. */
+.layout-switch {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  margin: 0;
+  padding: 3px;
+  border: 1px solid var(--hud-line);
+  border-radius: var(--hud-radius);
+  min-inline-size: 0;
+}
+.layout-switch button {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: calc(var(--hud-radius) - 2px);
+  color: var(--hud-text-muted);
+  background: transparent;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+.layout-switch button:hover {
+  color: var(--hud-text-strong);
+  background: var(--hud-hover);
+}
+.layout-switch button[aria-pressed="true"] {
+  color: var(--hud-text-strong);
+  background: var(--hud-selected);
+}
+
+:root[data-layout="novo"] {
+  --hud-bg: #0b0d12;
+  --hud-surface: #12151c;
+  --hud-surface-2: #151922;
+  --hud-surface-solid: #12151c;
+  --hud-chrome: #0d1015;
+  --hud-line: #232834;
+  --hud-line-soft: #1d212b;
+  --hud-line-strong: #2e3442;
+  --hud-text: #e7e9ee;
+  --hud-text-strong: #f4f6f9;
+  --hud-text-muted: #a3aab8;
+  --hud-text-dim: #848c9a;
+  --hud-cyan: #6e9bff;
+  --hud-teal: #4cc38a;
+  --hud-blue: #7da6ff;
+  --hud-violet: #ae9ef7;
+  --hud-amber: #e3a946;
+  --hud-rose: #f07a7a;
+  --hud-idle: #959ca9;
+  --hud-font-ui: "Geist", system-ui, sans-serif;
+  --hud-font-display: "Geist", system-ui, sans-serif;
+  --hud-font-mono: "Geist Mono", ui-monospace, monospace;
+  --hud-radius-lg: 10px;
+  --hud-radius-xl: 10px;
+  --hud-glow: 0 0 0;
+  --hud-focus: 0 0 0 2px var(--hud-bg), 0 0 0 4px #6e9bff;
+  --hud-ink: #0b0d12;
+  --hud-danger-text: #f59a9a;
+  --hud-focus-color: #6e9bff;
+  --hud-log-bg: #0b0e13;
+  --hud-node-bg: #12151c;
+  --hud-backdrop: rgba(5, 6, 9, 0.72);
+  --hud-shadow: rgba(0, 0, 0, 0.25);
+  --hud-hover: #151922;
+  --hud-selected: #1a1f2a;
+  --hud-button-surface: #171b24;
+  --hud-input-line: #2a303c;
+  --hud-input-focus: rgba(110, 155, 255, 0.18);
+  --hud-grid: transparent;
+  --hud-glow-soft: transparent;
+  --hud-glow-strong: transparent;
+}
+:root[data-layout="novo"] body {
+  background: var(--hud-bg);
+  font-size: 14px;
+}
+:root[data-layout="novo"] h1 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+:root[data-layout="novo"] button {
+  box-shadow: none;
+  font-weight: 600;
+  font-size: 14px;
+}
+:root[data-layout="novo"] .panel {
+  box-shadow: none;
+  border-radius: 10px;
+}
+/* Títulos de painel em frase, sem caixa alta espaçada. */
+:root[data-layout="novo"] .panel > h2,
+:root[data-layout="novo"] .section-heading h2,
+:root[data-layout="novo"] legend:not(.home-sr-only),
+:root[data-layout="novo"] .home-dashboard .home-card h2,
+:root[data-layout="novo"] .home-dashboard .home-office > h2 {
+  color: var(--hud-text-strong);
+  font: 600 14px / 1.5 var(--hud-font-ui);
+  letter-spacing: 0;
+  text-transform: none;
+}
+:root[data-layout="novo"] .run-table th {
+  letter-spacing: 0.06em;
+}
+:root[data-layout="novo"] .eyebrow {
+  color: var(--hud-text-dim);
+  font: 500 11px var(--hud-font-mono);
+  letter-spacing: 0.08em;
+}
+
+/* Moldura: topo e menu mais limpos, sem o trilho de configurações à direita. */
+:root[data-layout="novo"] .home-dashboard {
+  grid-template-columns: var(--home-sidebar-width) minmax(0, 1fr);
+  font-size: 14px;
+}
+:root[data-layout="novo"] .home-dashboard .home-settings-rail {
+  display: none;
+}
+:root[data-layout="novo"] .home-dashboard .home-brand strong {
+  font: 600 15px var(--hud-font-ui);
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+:root[data-layout="novo"] .home-dashboard .home-brand small {
+  color: var(--hud-text-dim);
+  font: 500 10.5px var(--hud-font-mono);
+  letter-spacing: 0.08em;
+}
+:root[data-layout="novo"] .home-dashboard .home-clock time {
+  color: var(--hud-text);
+  font: 500 13px var(--hud-font-mono);
+  letter-spacing: 0;
+  text-shadow: none;
+}
+:root[data-layout="novo"] .home-dashboard .home-clock span {
+  font: 500 11px var(--hud-font-mono);
+}
+:root[data-layout="novo"] .home-dashboard .home-dot {
+  box-shadow: none;
+}
+
+/* Painel inicial sóbrio. */
+.sobrio-home {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+  padding: 28px 32px 40px;
+}
+.sobrio-label {
+  margin: 0;
+  color: var(--hud-text-dim);
+  font: 500 11px var(--hud-font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.sobrio-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+.sobrio-title {
+  margin: 6px 0 4px;
+  color: var(--hud-text-strong);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.sobrio-lead {
+  margin: 0;
+  color: var(--hud-text-muted);
+}
+.sobrio-attention {
+  color: var(--hud-amber);
+}
+.sobrio-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.sobrio-actions .secondary-action {
+  margin: 0;
+}
+.sobrio-decision {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--hud-amber) 35%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--hud-amber) 6%, transparent);
+}
+.sobrio-decision .sobrio-label {
+  color: var(--hud-amber);
+}
+.sobrio-decision > div {
+  flex: 1 1 300px;
+  min-width: 0;
+  color: var(--hud-text-muted);
+}
+.sobrio-decision h2 {
+  display: inline;
+  margin: 0;
+  color: var(--hud-text-strong);
+  font-size: 15px;
+  font-weight: 600;
+}
+.sobrio-decision small {
+  color: var(--hud-text-dim);
+  font-family: var(--hud-font-mono);
+}
+.sobrio-decision .secondary-action {
+  margin: 0;
+}
+.sobrio-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  border: 1px solid var(--hud-line);
+  border-radius: 10px;
+  background: var(--hud-surface);
+}
+.sobrio-metrics > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 18px 20px;
+  border-right: 1px solid var(--hud-line-soft);
+}
+.sobrio-metrics .sobrio-label {
+  flex-basis: 100%;
+}
+.sobrio-metrics strong {
+  color: var(--hud-text-strong);
+  font: 500 26px var(--hud-font-mono);
+  letter-spacing: -0.02em;
+}
+.sobrio-metrics small {
+  color: var(--hud-text-dim);
+  font-family: var(--hud-font-mono);
+}
+.sobrio-metrics small.is-up {
+  color: var(--hud-teal);
+}
+.sobrio-orchestration {
+  border: 1px solid var(--hud-line);
+  border-radius: 10px;
+  background: var(--hud-surface);
+}
+.sobrio-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--hud-line-soft);
+}
+.sobrio-panel-head h2 {
+  margin: 0;
+  color: var(--hud-text-strong);
+  font-size: 14px;
+  font-weight: 600;
+}
+.sobrio-online {
+  padding: 2px 9px;
+  border: 1px solid color-mix(in srgb, var(--hud-teal) 35%, transparent);
+  border-radius: 99px;
+  color: var(--hud-teal);
+  font: 500 11px var(--hud-font-mono);
+}
+.sobrio-orchestration-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  padding: 20px 28px 24px;
+}
+.sobrio-core {
+  flex: 2 1 340px;
+  max-width: 560px;
+}
+.sobrio-core .orchestration-core {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  overflow: visible;
+}
+.sobrio-agents {
+  flex: 1 1 260px;
+  max-width: 420px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sobrio-agents li {
+  display: grid;
+  gap: 6px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--hud-line-soft);
+}
+.sobrio-agents li > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.sobrio-agents strong {
+  flex: 1;
+  color: var(--hud-text);
+  font-weight: 500;
+}
+.sobrio-agents small {
+  color: var(--hud-text-muted);
+  font-family: var(--hud-font-mono);
+}
+.sobrio-agents span {
+  padding-left: 15px;
+  color: var(--hud-text-dim);
+  font-size: 13px;
+}
+.sobrio-agents meter {
+  width: calc(100% - 15px);
+  height: 4px;
+  margin-left: 15px;
+  accent-color: var(--tone);
+}
+.sobrio-home .home-demo-note {
+  color: var(--hud-text-dim);
+}
+@media (max-width: 760px) {
+  .sobrio-home {
+    padding: 20px 16px 32px;
+  }
+}
