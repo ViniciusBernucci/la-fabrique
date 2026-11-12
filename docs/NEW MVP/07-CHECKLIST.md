@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E09 (T09-03)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E13 (T13-03)._
 
 ## Resumo
 
-**17 feitos · 19 parciais · 31 pendentes** de 67 tickets.
+**18 feitos · 19 parciais · 30 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -131,7 +131,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E09 (T09-03)._
   - PASS (`-race` + PostgreSQL real): baixo risco permitido, sensível encaminhado (`ErrApprovalRequired`) e proibido recusado em scripts, API e MCP (+ git, conectores, CLI), o mais restritivo vence em qualquer ordem, padrão nega, destino interno sempre proibido, anotação MCP não libera, trilha redigida sem segredo e ação não roda sem trilha. **Limites:** política padrão não calibrada; não ligada ao runtime (sem consumidor ainda); aprovação/Central é T13-02; DNS/redirecionamento NOT_RUN. Revisão independente NOT_RUN. Entrega: [E13](../entregas/2026-11-12-E13-politica-de-risco.md).
 - [x] **[T13-02](03-BACKLOG.md#t13-02)** — Implementar pedidos e decisões humanas · dep.: T13-01, T03-03.
   - PASS (PostgreSQL real + vitest): pedido com problema/alternativas/impacto/evidência redigida; resolução transacional que só altera a execução do pedido (eventos + retomada); repetição idempotente, opção diferente → conflito, concorrência com um único sinal; execução obsoleta → `stale` e nada sinalizado; operação sensível exige reautenticação; Central no painel. **Limites:** nenhum fluxo real cria pedidos ainda e o escalonador não consome `queued` (E10/E12). Revisão independente NOT_RUN. Entrega: [E13 decisões](../entregas/2026-11-12-E13-decisoes-humanas.md).
-- [ ] **[T13-03](03-BACKLOG.md#t13-03)** — Controlar escopo, expiração e revogação · dep.: T13-02, T11-03, T12-01.
+- [x] **[T13-03](03-BACKLOG.md#t13-03)** — Controlar escopo, expiração e revogação · dep.: T13-02, T11-03, T12-01.
+  - PASS (PostgreSQL e Docker reais, `-race`): autorização presa à ação canônica (ferramenta, operação, recurso, destino e hash dos parâmetros), prazo e usos; consumo atômico (corrida pelo último uso autoriza exatamente um, repetida 6×); divergência, prazo vencido, esgotamento e revogação recusam sem gastar uso e ficam na trilha; revogação imediata e, com uso em andamento, parada segura com checkpoint (sandbox real); falha da parada é explícita. **Limites:** não ligada ainda à API/worker (sem rotas, tela nem `Halter` do runtime); uso contado ao iniciar. Revisão independente NOT_RUN. Entrega: [E13 autorizações](../entregas/2026-11-12-E13-autorizacoes.md).
 - [x] **[T13-04](03-BACKLOG.md#t13-04)** — Registrar e reconciliar efeitos externos · dep.: T03-02, T13-01.
   - PASS (PostgreSQL real, `-race`): intenção gravada antes do envio e pedido redigido; timeout após efeito confirmado não duplica (prova confirma); ausência comprovada permite repetir (limite de tentativas); recusa definitiva não verifica; inconclusivo (ou falha ao verificar) bloqueia a repetição e abre pedido na Central com evidência, e a decisão humana fecha ou libera o efeito; concorrência com um único envio; reconciliação de envio abandonado. **Limites:** adaptadores reais de prova (Jira/ClickUp/GitHub) são do T06-03/E15; compensação não implementada. Revisão independente NOT_RUN. Entrega: [E13 ledger](../entregas/2026-11-12-E13-ledger-de-efeitos.md).
 - [ ] **[T13-05](03-BACKLOG.md#t13-05)** — Compensar efeitos parciais por risco · dep.: T13-03, T13-04.

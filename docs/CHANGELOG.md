@@ -1,3 +1,6 @@
+## 2026-11-12 — E13: escopo, expiração e revogação de autorizações (T13-03)
+Autorização presa à ação canônica com prazo e usos, consumo atômico (a corrida pelo último uso autoriza um), recusa de divergências e revogação com parada segura e checkpoint. [Entrega](entregas/2026-11-12-E13-autorizacoes.md) · [ADR-0026](adr/0026-autorizacoes-com-escopo-uso-e-revogacao.md).
+
 ## 2026-11-12 — E09: orçamento e uso (T09-03)
 Reserva atômica de custo (teto global e por agente), liquidação, reconciliação e cota de assinatura registrada separadamente do gasto em API; orçamento imposto antes de cada chamada do gateway. Gateways reais NOT_RUN. [Entrega](entregas/2026-11-12-E09-orcamento-e-uso.md) · [ADR-0025](adr/0025-orcamento-reserva-atomica-e-uso.md).
 
