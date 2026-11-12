@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E09 (T09-01)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E13 (T13-01)._
 
 ## Resumo
 
-**10 feitos · 12 parciais · 45 pendentes** de 67 tickets.
+**11 feitos · 12 parciais · 44 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -117,7 +117,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E09 (T09-01)._
 
 ## E13 — Autorizações e efeitos
 
-- [ ] **[T13-01](03-BACKLOG.md#t13-01)** — Aplicar política de risco no executor · dep.: T03-02, T04-03.
+- [x] **[T13-01](03-BACKLOG.md#t13-01)** — Aplicar política de risco no executor · dep.: T03-02, T04-03.
+  - PASS (`-race` + PostgreSQL real): baixo risco permitido, sensível encaminhado (`ErrApprovalRequired`) e proibido recusado em scripts, API e MCP (+ git, conectores, CLI), o mais restritivo vence em qualquer ordem, padrão nega, destino interno sempre proibido, anotação MCP não libera, trilha redigida sem segredo e ação não roda sem trilha. **Limites:** política padrão não calibrada; não ligada ao runtime (sem consumidor ainda); aprovação/Central é T13-02; DNS/redirecionamento NOT_RUN. Revisão independente NOT_RUN. Entrega: [E13](../entregas/2026-11-12-E13-politica-de-risco.md).
 - [ ] **[T13-02](03-BACKLOG.md#t13-02)** — Implementar pedidos e decisões humanas · dep.: T13-01, T03-03.
 - [ ] **[T13-03](03-BACKLOG.md#t13-03)** — Controlar escopo, expiração e revogação · dep.: T13-02, T11-03, T12-01.
 - [ ] **[T13-04](03-BACKLOG.md#t13-04)** — Registrar e reconciliar efeitos externos · dep.: T03-02, T13-01.

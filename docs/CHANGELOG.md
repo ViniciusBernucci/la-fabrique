@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-12 — E13: política de risco no executor (T13-01)
+Classificação de ações por risco (permitir, aprovar, proibir) para scripts, API, MCP, conectores, Git e CLIs, com proibições embutidas, parâmetros canônicos e trilha redigida. Central de aprovações e autorizações seguem em T13-02 e T13-03. [Entrega](entregas/2026-11-12-E13-politica-de-risco.md) · [ADR-0012](adr/0012-politica-de-risco-no-executor.md).
+
 ## 2026-11-12 — E09: contas e clientes CLI de IA (T09-01 parcial)
 Adaptadores de Claude Code e Codex CLI com modo autorizado, contas isoladas por volume, eventos normalizados e cancelamento da árvore de processos no sandbox. CLIs reais NOT_RUN. [Entrega](entregas/2026-11-12-E09-clientes-cli.md) · [ADR-0011](adr/0011-clientes-cli-de-ia-no-sandbox.md).
 
