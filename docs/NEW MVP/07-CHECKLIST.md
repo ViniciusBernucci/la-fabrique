@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E06 (T06-03)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E08 (T08-04)._
 
 ## Resumo
 
-**17 feitos · 13 parciais · 37 pendentes** de 67 tickets.
+**17 feitos · 14 parciais · 36 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -88,7 +88,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E06 (T06-03)._
   - PASS (PostgreSQL real, Docker real, vitest): 4 modalidades (IA, script, determinística, híbrida), importação de tar.gz/zip/SKILL.md com travessia, links e limites recusados, scripts contra a política, hash/origem/arquivos, idempotência e versão, trilha auditável sem conteúdo, nada executa na importação, execução sob política e nó de skill isolado. **Parcial:** importação por **Git UNSUPPORTED** (T15-01); IA real NOT_RUN (executor de mentira). Revisão independente NOT_RUN. Entrega: [E08 skills](../entregas/2026-11-12-E08-catalogo-de-skills.md).
 - [x] **[T08-03](03-BACKLOG.md#t08-03)** — Criar catálogo de ferramentas · dep.: T03-02, T13-01.
   - PASS (Docker real + PostgreSQL real + vitest): 8 nativas e personalizadas (script e integração) com esquemas, permissões e limites; ordem existe → concedida → escopo → argumentos → política → execução; ferramenta nova não herda acesso; saída tipada; parâmetros por ambiente sem injeção; limites de saída e tempo. **Limites:** `git_*` com repositório real NOT_RUN (sem git nas imagens); symlinks/socket são do T11-02; cadastro de personalizadas só por API. Revisão independente NOT_RUN. Entrega: [E08 ferramentas](../entregas/2026-11-12-E08-catalogo-de-ferramentas.md).
-- [ ] **[T08-04](03-BACKLOG.md#t08-04)** — Cadastrar MCP, descobrir e autorizar ferramentas · dep.: T08-03, T04-03.
+- [~] **[T08-04](03-BACKLOG.md#t08-04)** — Cadastrar MCP, descobrir e autorizar ferramentas · dep.: T08-03, T04-03.
+  - PASS (PostgreSQL real + servidor MCP falso, JSON e SSE): descoberta paginada, concessão por hash pinado, ferramenta nova sem acesso, mudança de esquema bloqueia até nova aprovação, argumentos validados antes da chamada, política após conceder, trilha redigida, credencial só do cofre. **Parcial:** servidor MCP real NOT_RUN, stdio UNSUPPORTED, sem tela no painel. Revisão independente NOT_RUN. Entrega: [E08 MCP](../entregas/2026-11-12-E08-mcp.md).
 
 ## E09 — Provedores de IA e orçamento
 

@@ -39,6 +39,8 @@ type Server struct {
 	tester   *integrations.Tester
 	trackers func(integrations.Config) (integrations.Tracker, error)
 	policy   *policy.Policy
+
+	mcpAllowPrivate bool
 }
 
 // Option personaliza o servidor (usado em testes).
@@ -51,6 +53,9 @@ func WithTester(t *integrations.Tester) Option { return func(s *Server) { s.test
 func WithTrackerFactory(f func(integrations.Config) (integrations.Tracker, error)) Option {
 	return func(s *Server) { s.trackers = f }
 }
+
+// WithMCPAllowPrivate aceita servidores MCP em http/loopback (somente testes).
+func WithMCPAllowPrivate() Option { return func(s *Server) { s.mcpAllowPrivate = true } }
 
 // WithClock troca o relógio dos códigos TOTP (testes).
 func WithClock(now func() time.Time) Option { return func(s *Server) { s.auth.SetClock(now) } }
@@ -134,6 +139,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/connections/{id}/rotate", s.sensitive(s.rotateConnection))
 	mux.HandleFunc("POST /api/connections/{id}/revoke", s.sensitive(s.revokeConnection))
 
+	mux.HandleFunc("GET /api/mcp/servers", s.protected(s.listMCPServers))
+	mux.HandleFunc("POST /api/mcp/servers", s.protected(s.createMCPServer))
+	mux.HandleFunc("POST /api/mcp/servers/{id}/discover", s.protected(s.discoverMCPServer))
+	mux.HandleFunc("GET /api/mcp/servers/{id}/tools", s.protected(s.listMCPTools))
+	mux.HandleFunc("GET /api/mcp/calls", s.protected(s.listMCPCalls))
+	mux.HandleFunc("GET /api/agents/{id}/mcp", s.protected(s.agentMCP))
+	mux.HandleFunc("POST /api/agents/{id}/mcp-grants", s.protected(s.grantMCPTool))
+	mux.HandleFunc("POST /api/agents/{id}/mcp-grants/revoke", s.protected(s.revokeMCPTool))
 	mux.HandleFunc("GET /api/decisions", s.protected(s.listDecisions))
 	mux.HandleFunc("GET /api/decisions/{id}", s.protected(s.getDecision))
 	mux.HandleFunc("POST /api/decisions/{id}/resolve", s.protected(s.resolveDecision))

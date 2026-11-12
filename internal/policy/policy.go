@@ -246,6 +246,10 @@ func privateHost(host string) bool {
 	return false
 }
 
+// IsInternalHost informa se o host é interno (loopback, rede privada, link-local,
+// metadados de nuvem ou nomes internos). Usado por quem valida destinos remotos.
+func IsInternalHost(host string) bool { return privateHost(strings.ToLower(host)) }
+
 // Canonical devolve os parâmetros em JSON canônico (chaves ordenadas) e o hash.
 func Canonical(params map[string]any) ([]byte, string) {
 	raw := canon(params)

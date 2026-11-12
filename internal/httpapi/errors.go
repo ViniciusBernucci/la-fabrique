@@ -9,6 +9,7 @@ import (
 
 	"github.com/ViniciusBernucci/le-fabrique/internal/agents"
 	"github.com/ViniciusBernucci/le-fabrique/internal/decisions"
+	"github.com/ViniciusBernucci/le-fabrique/internal/mcp"
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
@@ -54,9 +55,23 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 	var valErr *skills.ValidationError
 	var argErr *tools.ArgError
 	var decField *decisions.FieldError
+	var mcpField *mcp.FieldError
+	var mcpErr *mcp.Error
 	switch {
 	case errors.As(err, &field):
 		writeError(w, r, http.StatusBadRequest, "invalid_request", field.Message, "Corrija o campo \""+field.Field+"\" e tente novamente.")
+	case errors.As(err, &mcpField):
+		writeError(w, r, http.StatusBadRequest, "invalid_request", mcpField.Message, "Corrija o campo \""+mcpField.Field+"\" e tente novamente.")
+	case errors.Is(err, mcp.ErrNotGranted):
+		writeError(w, r, http.StatusForbidden, "tool_not_granted", err.Error(), "Conceda a ferramenta ao agente (descobrir não concede acesso).")
+	case errors.Is(err, mcp.ErrSchemaChanged):
+		writeError(w, r, http.StatusConflict, "schema_changed", err.Error(), "Revise o novo contrato e aprove de novo.")
+	case errors.Is(err, mcp.ErrStaleApproval):
+		writeError(w, r, http.StatusConflict, "stale_approval", err.Error(), "Descubra de novo e aprove o esquema vigente.")
+	case errors.Is(err, mcp.ErrToolMissing):
+		writeError(w, r, http.StatusNotFound, "tool_not_found", err.Error(), "Descubra as ferramentas do servidor de novo.")
+	case errors.As(err, &mcpErr):
+		writeError(w, r, http.StatusBadGateway, "mcp_error", mcpErr.Error(), "Verifique o servidor MCP e a conexão.")
 	case errors.As(err, &decField):
 		writeError(w, r, http.StatusBadRequest, "invalid_request", decField.Message, "Corrija o campo \""+decField.Field+"\" e tente novamente.")
 	case errors.Is(err, decisions.ErrInvalidOption):

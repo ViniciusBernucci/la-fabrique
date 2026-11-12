@@ -1,3 +1,6 @@
+## 2026-11-12 — E08: MCP (T08-04)
+Cadastro de servidores MCP (Streamable HTTP), descoberta, allowlist por agente com hash do contrato pinado e revalidação a cada chamada. Servidor real NOT_RUN, stdio UNSUPPORTED. [Entrega](entregas/2026-11-12-E08-mcp.md) · [ADR-0020](adr/0020-mcp-cadastro-descoberta-e-allowlist.md).
+
 # Changelog
 
 ## 2026-11-12 — E06: escrita na origem sem duplicação (T06-03)

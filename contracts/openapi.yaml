@@ -433,6 +433,104 @@ paths:
                 required: [items]
                 properties: {items: {type: array, items: {$ref: "#/components/schemas/NodeType"}}}
         "401": {$ref: "#/components/responses/Error"}
+  /mcp/servers:
+    get:
+      tags: [mcp]
+      summary: Servidores MCP cadastrados
+      responses:
+        "200":
+          description: Servidores
+          content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/McpServer"}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [mcp]
+      summary: Cadastra um servidor MCP remoto (https, externo); a credencial é a referência de uma conexão `mcp`
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [name, url], additionalProperties: false, properties: {name: {type: string}, url: {type: string}, connection_id: {type: [string, "null"], format: uuid}}}}}
+      responses:
+        "201": {description: Servidor cadastrado, content: {application/json: {schema: {$ref: "#/components/schemas/McpServer"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /mcp/servers/{id}/discover:
+    post:
+      tags: [mcp]
+      summary: Negocia o protocolo e descobre as ferramentas; nenhuma ganha acesso por ser descoberta
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Ferramentas do servidor
+          content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/McpTool"}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "502": {$ref: "#/components/responses/Error"}
+  /mcp/servers/{id}/tools:
+    get:
+      tags: [mcp]
+      summary: Ferramentas já descobertas do servidor
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Ferramentas
+          content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/McpTool"}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /mcp/calls:
+    get:
+      tags: [mcp]
+      summary: Trilha das chamadas MCP (argumentos redigidos)
+      responses:
+        "200":
+          description: Chamadas, da mais recente para a mais antiga
+          content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {type: object, additionalProperties: true}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+  /agents/{id}/mcp:
+    get:
+      tags: [mcp]
+      summary: Concessões MCP do agente e as ferramentas que ele pode usar agora (concedidas e com o esquema aprovado ainda vigente)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Concessões e ferramentas utilizáveis
+          content: {application/json: {schema: {type: object, required: [grants, tools], properties: {grants: {type: array, items: {$ref: "#/components/schemas/McpGrant"}}, tools: {type: array, items: {$ref: "#/components/schemas/McpTool"}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /agents/{id}/mcp-grants:
+    post:
+      tags: [mcp]
+      summary: Concede uma ferramenta MCP ao agente, fixando o hash do esquema aprovado
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/McpGrantInput"}}}
+      responses:
+        "204": {description: Concedida}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /agents/{id}/mcp-grants/revoke:
+    post:
+      tags: [mcp]
+      summary: Retira a concessão (idempotente)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/McpGrantInput"}}}
+      responses:
+        "204": {description: Revogada}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
   /decisions:
     get:
       tags: [decisões]
@@ -1366,3 +1464,43 @@ components:
         resolved_at: {type: [string, "null"], format: date-time}
         version: {type: integer}
         created_at: {type: string, format: date-time}
+    McpServer:
+      type: object
+      required: [id, name, url, connection_id, protocol, server_name, server_version, discovered_at, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        url: {type: string}
+        connection_id: {type: [string, "null"], format: uuid}
+        protocol: {type: string}
+        server_name: {type: string}
+        server_version: {type: string}
+        discovered_at: {type: [string, "null"], format: date-time}
+        created_at: {type: string, format: date-time}
+    McpTool:
+      type: object
+      required: [server_id, name, description, input_schema, schema_hash, status]
+      properties:
+        server_id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string, description: "Dado do servidor (não confiável)"}
+        input_schema: {type: object, additionalProperties: true}
+        schema_hash: {type: string}
+        status: {type: string, enum: [active, removed]}
+    McpGrant:
+      type: object
+      required: [agent_id, server_id, tool, schema_hash, current]
+      properties:
+        agent_id: {type: string, format: uuid}
+        server_id: {type: string, format: uuid}
+        tool: {type: string}
+        schema_hash: {type: string}
+        current: {type: boolean, description: "O hash aprovado ainda é o do esquema vigente"}
+    McpGrantInput:
+      type: object
+      required: [server_id, tool, schema_hash]
+      additionalProperties: false
+      properties:
+        server_id: {type: string, format: uuid}
+        tool: {type: string}
+        schema_hash: {type: string}
