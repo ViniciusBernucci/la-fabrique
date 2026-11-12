@@ -328,6 +328,60 @@ export interface EffectiveAgent {
   sources: Record<string, "agent" | "node">;
 }
 
+export type SkillExecutor = "ai" | "script" | "deterministic" | "hybrid";
+
+export interface SkillStep {
+  type: "ai" | "script" | "deterministic";
+  command?: string;
+  op?: "set" | "template" | "assert";
+  key?: string;
+  value?: string;
+  expression?: string;
+}
+
+export interface Skill {
+  id: string;
+  name: string;
+  description: string;
+  executor: SkillExecutor;
+  source_kind: "manual" | "file" | "package" | "git";
+  source_ref: string;
+  revision: string;
+  content_hash: string;
+  body: string;
+  manifest: {
+    permissions: string[];
+    resources: string[];
+    commands: string[];
+    steps: SkillStep[];
+  };
+  needs_approval: boolean;
+  version: number;
+  files?: { path: string; sha256: string; size: number }[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SkillInput {
+  name: string;
+  description?: string;
+  executor: SkillExecutor;
+  instructions?: string;
+  commands?: string[];
+  steps?: SkillStep[];
+}
+
+export interface SkillImport {
+  id: number;
+  name: string;
+  source_kind: string;
+  source_ref: string;
+  outcome: "imported" | "unchanged" | "replaced" | "rejected";
+  reason: string;
+  content_hash: string;
+  created_at: string;
+}
+
 const BASE = "/api";
 
 /** Token CSRF da sessão atual (memória; o servidor o devolve em /session e no login). */
@@ -444,6 +498,17 @@ export const api = {
   ) => put<Workflow>(`/workflows/${encodeURIComponent(id)}`, input),
   validateWorkflowGraph: (graph: WorkflowGraph, signal?: AbortSignal) =>
     post<{ issues: WorkflowIssue[] }>("/workflows/validate", { graph }, signal),
+
+  // Catálogo de skills. O conteúdo importado é dado: nada executa na importação.
+  listSkills: (signal?: AbortSignal) => request<{ items: Skill[] }>("/skills", { signal }),
+  createSkill: (input: SkillInput) => post<Skill>("/skills", input),
+  skillImports: (signal?: AbortSignal) =>
+    request<{ items: SkillImport[] }>("/skills/imports", { signal }),
+  importSkill: (file: Blob, format: "tar.gz" | "zip" | "md", replace: boolean, ref: string) =>
+    request<Skill>(
+      `/skills/import?format=${format}&replace=${replace}&ref=${encodeURIComponent(ref)}`,
+      { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file },
+    ),
 
   // Catálogo de agentes.
   listAgents: (signal?: AbortSignal) => request<{ items: Agent[] }>("/agents", { signal }),

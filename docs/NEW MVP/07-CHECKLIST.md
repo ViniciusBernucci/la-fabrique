@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E08 (T08-01)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E08 (T08-02)._
 
 ## Resumo
 
-**12 feitos · 12 parciais · 43 pendentes** de 67 tickets.
+**12 feitos · 13 parciais · 42 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -83,7 +83,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E08 (T08-01)._
 
 - [x] **[T08-01](03-BACKLOG.md#t08-01)** — Gerenciar agentes e sobrescritas · dep.: T03-03, T04-03, T09-01.
   - PASS (PostgreSQL real + vitest): CRUD com versão; conta compatível com o provedor (revogada/inexistente/tipo errado recusadas); sobrescritas por nó (modelo, conta, instruções, tempo, ferramentas só reduzindo) sem alterar a base; dois workflows com efetivos diferentes e catálogo íntegro; efetivo sanitizado com a origem de cada valor. **Limite:** o efetivo é do rascunho salvo (congelamento por execução é T07-03); execução real NOT_RUN. Revisão independente NOT_RUN. Entrega: [E08](../entregas/2026-11-12-E08-catalogo-de-agentes.md).
-- [ ] **[T08-02](03-BACKLOG.md#t08-02)** — Gerenciar skills e importações · dep.: T03-02, T04-03, T13-01.
+- [~] **[T08-02](03-BACKLOG.md#t08-02)** — Gerenciar skills e importações · dep.: T03-02, T04-03, T13-01.
+  - PASS (PostgreSQL real, Docker real, vitest): 4 modalidades (IA, script, determinística, híbrida), importação de tar.gz/zip/SKILL.md com travessia, links e limites recusados, scripts contra a política, hash/origem/arquivos, idempotência e versão, trilha auditável sem conteúdo, nada executa na importação, execução sob política e nó de skill isolado. **Parcial:** importação por **Git UNSUPPORTED** (T15-01); IA real NOT_RUN (executor de mentira). Revisão independente NOT_RUN. Entrega: [E08 skills](../entregas/2026-11-12-E08-catalogo-de-skills.md).
 - [ ] **[T08-03](03-BACKLOG.md#t08-03)** — Criar catálogo de ferramentas · dep.: T03-02, T13-01.
 - [ ] **[T08-04](03-BACKLOG.md#t08-04)** — Cadastrar MCP, descobrir e autorizar ferramentas · dep.: T08-03, T04-03.
 

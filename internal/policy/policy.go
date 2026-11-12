@@ -388,3 +388,33 @@ func (p *Policy) decideScript(a Action) Decision {
 	}
 	return *best
 }
+
+// ExplicitDeny informa se alguma regra de PROIBIÇÃO casa com a ação (ignora o
+// padrão de negar). Serve a varreduras estáticas, como a de scripts de pacotes
+// importados, onde só interessa o que é comprovadamente proibido.
+func (p *Policy) ExplicitDeny(a Action) (Decision, bool) {
+	hit := func(act Action) (Decision, bool) {
+		for _, r := range p.Rules {
+			if r.Effect == Deny && r.matches(act, HostOf(act.Target)) {
+				return Decision{Effect: Deny, Risk: RiskForbidden, Rule: r.ID, Reason: r.Reason}, true
+			}
+		}
+		return Decision{}, false
+	}
+	if a.Tool != ToolScript {
+		return hit(a)
+	}
+	cmd, _ := a.Params["command"].(string)
+	for _, seg := range segmentSplit.Split(cmd, -1) {
+		seg = strings.TrimSpace(seg)
+		if seg == "" {
+			continue
+		}
+		sub := a
+		sub.Params = map[string]any{"command": seg}
+		if d, ok := hit(sub); ok {
+			return d, true
+		}
+	}
+	return Decision{}, false
+}

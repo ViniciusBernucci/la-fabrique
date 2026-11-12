@@ -433,6 +433,89 @@ paths:
                 required: [items]
                 properties: {items: {type: array, items: {$ref: "#/components/schemas/NodeType"}}}
         "401": {$ref: "#/components/responses/Error"}
+  /skills:
+    get:
+      tags: [skills]
+      summary: Lista o catálogo de skills
+      responses:
+        "200":
+          description: Skills
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/Skill"}}}
+        "401": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [skills]
+      summary: Cadastra uma skill manualmente (ia, script, deterministic ou hybrid)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/SkillInput"}}}
+      responses:
+        "201": {description: Skill criada, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}
+        "200": {description: Já existia com o mesmo conteúdo (idempotente), content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /skills/imports:
+    get:
+      tags: [skills]
+      summary: Trilha de importações (inclusive as rejeitadas, sem o conteúdo do pacote)
+      responses:
+        "200":
+          description: Importações, da mais recente para a mais antiga
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/SkillImport"}}}
+        "401": {$ref: "#/components/responses/Error"}
+  /skills/import:
+    post:
+      tags: [skills]
+      summary: Importa um pacote (tar.gz ou zip) ou um SKILL.md avulso; o conteúdo é tratado como dado e nada é executado
+      description: >
+        Recusa travessia de caminho, links, arquivos acima dos limites (200 arquivos, 1 MiB cada, 5 MiB no total, 8 MiB compactado)
+        e scripts fora da política. Mesmo nome com o mesmo conteúdo é idempotente; conteúdo diferente exige `replace=true`.
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [tar.gz, zip, md]}}
+        - {name: replace, in: query, schema: {type: boolean}}
+        - {name: ref, in: query, schema: {type: string, maxLength: 300}, description: "Rótulo da origem (ex.: nome do arquivo)"}
+      requestBody:
+        required: true
+        content: {application/octet-stream: {schema: {type: string, format: binary}}}
+      responses:
+        "201": {description: Skill importada, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}
+        "200": {description: Já existia com o mesmo conteúdo, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "413": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /skills/import-git:
+    post:
+      tags: [skills]
+      summary: Importação por Git (UNSUPPORTED até o adaptador GitHub, T15-01)
+      responses:
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "501": {$ref: "#/components/responses/Error"}
+  /skills/{id}:
+    get:
+      tags: [skills]
+      summary: Lê uma skill com a lista de arquivos (caminho, hash e tamanho)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
   /agents:
     get:
       tags: [agentes]
@@ -1029,3 +1112,75 @@ components:
           type: object
           description: "Origem de cada valor: agent (base do catálogo) ou node (sobrescrito pelo nó)"
           additionalProperties: {type: string, enum: [agent, node]}
+    SkillStep:
+      type: object
+      required: [type]
+      properties:
+        type: {type: string, enum: [ai, script, deterministic]}
+        command: {type: string}
+        op: {type: string, enum: [set, template, assert]}
+        key: {type: string}
+        value: {type: string}
+        expression: {type: string}
+    SkillManifest:
+      type: object
+      required: [name, description, executor, permissions, resources, commands, steps]
+      properties:
+        name: {type: string}
+        description: {type: string}
+        executor: {type: string, enum: [ai, script, deterministic, hybrid]}
+        permissions: {type: array, items: {type: string}}
+        resources: {type: array, items: {type: string}}
+        commands: {type: array, items: {type: string}}
+        steps: {type: array, items: {$ref: "#/components/schemas/SkillStep"}}
+    SkillInput:
+      type: object
+      required: [name, executor]
+      additionalProperties: false
+      properties:
+        name: {type: string, pattern: "^[a-z0-9][a-z0-9_-]{0,63}$"}
+        description: {type: string, maxLength: 500}
+        executor: {type: string, enum: [ai, script, deterministic, hybrid]}
+        instructions: {type: string, maxLength: 60000}
+        permissions: {type: array, items: {type: string}}
+        resources: {type: array, items: {type: string}}
+        commands: {type: array, maxItems: 30, items: {type: string}}
+        steps: {type: array, maxItems: 30, items: {$ref: "#/components/schemas/SkillStep"}}
+    SkillFile:
+      type: object
+      required: [path, sha256, size]
+      properties:
+        path: {type: string}
+        sha256: {type: string}
+        size: {type: integer}
+    Skill:
+      type: object
+      required: [id, name, description, executor, source_kind, source_ref, revision, content_hash, body, manifest, needs_approval, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        executor: {type: string, enum: [ai, script, deterministic, hybrid]}
+        source_kind: {type: string, enum: [manual, file, package, git]}
+        source_ref: {type: string}
+        revision: {type: string}
+        content_hash: {type: string, description: "SHA-256 do conteúdo (arquivos, manifesto e instruções)"}
+        body: {type: string}
+        manifest: {$ref: "#/components/schemas/SkillManifest"}
+        needs_approval: {type: boolean, description: "Algum comando é sensível e exigirá aprovação ao rodar"}
+        version: {type: integer}
+        files: {type: array, items: {$ref: "#/components/schemas/SkillFile"}}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    SkillImport:
+      type: object
+      required: [id, name, source_kind, source_ref, outcome, reason, content_hash, created_at]
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        source_kind: {type: string}
+        source_ref: {type: string}
+        outcome: {type: string, enum: [imported, unchanged, replaced, rejected]}
+        reason: {type: string}
+        content_hash: {type: string}
+        created_at: {type: string, format: date-time}

@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-12 — E08: catálogo de skills e importação segura (T08-02 parcial)
+Quatro modalidades de skill, importação de pacote/arquivo como dado (sem executar), scripts contra a política, hash e trilha auditável. Importação por Git indisponível até o T15-01. [Entrega](entregas/2026-11-12-E08-catalogo-de-skills.md) · [ADR-0014](adr/0014-catalogo-de-skills-e-importacao-segura.md).
+
 ## 2026-11-12 — E08: catálogo de agentes e sobrescritas por nó (T08-01)
 Catálogo global de agentes com conta por referência de conexão, sobrescritas por nó que não alteram a base (ferramentas só reduzem) e configuração efetiva sanitizada. [Entrega](entregas/2026-11-12-E08-catalogo-de-agentes.md) · [ADR-0013](adr/0013-catalogo-de-agentes-e-sobrescritas.md).
 

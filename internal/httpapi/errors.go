@@ -11,6 +11,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
+	"github.com/ViniciusBernucci/le-fabrique/internal/skills"
 	"github.com/ViniciusBernucci/le-fabrique/internal/workflows"
 )
 
@@ -47,9 +48,15 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 	var invalid *projects.ValidationError
 	var wfField *workflows.FieldError
 	var agField *agents.FieldError
+	var impErr *skills.ImportError
+	var valErr *skills.ValidationError
 	switch {
 	case errors.As(err, &field):
 		writeError(w, r, http.StatusBadRequest, "invalid_request", field.Message, "Corrija o campo \""+field.Field+"\" e tente novamente.")
+	case errors.As(err, &impErr):
+		writeError(w, r, http.StatusUnprocessableEntity, "import_rejected", impErr.Error(), "Corrija o pacote ("+impErr.Code+") e importe de novo.")
+	case errors.As(err, &valErr):
+		writeError(w, r, http.StatusBadRequest, "invalid_request", valErr.Error(), "Corrija o campo \""+valErr.Field+"\" e tente novamente.")
 	case errors.As(err, &agField):
 		writeError(w, r, http.StatusBadRequest, "invalid_request", agField.Message, "Corrija o campo \""+agField.Field+"\" e tente novamente.")
 	case errors.Is(err, agents.ErrConnection):

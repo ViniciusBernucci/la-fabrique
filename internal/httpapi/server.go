@@ -16,6 +16,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/integrations"
 	"github.com/ViniciusBernucci/le-fabrique/internal/logging"
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
+	"github.com/ViniciusBernucci/le-fabrique/internal/policy"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
 )
@@ -37,6 +38,7 @@ type Server struct {
 	redactor *security.Redactor
 	tester   *integrations.Tester
 	trackers func(integrations.Config) (integrations.Tracker, error)
+	policy   *policy.Policy
 }
 
 // Option personaliza o servidor (usado em testes).
@@ -63,7 +65,7 @@ func NewServer(cfg config.API, db Store, log *slog.Logger, opts ...Option) (*Ser
 	s := &Server{
 		cfg: cfg, db: db, log: log, redactor: redactor,
 		vault:  security.NewVault(db, sealer, redactor),
-		tester: integrations.NewTester(), trackers: integrations.NewTracker,
+		tester: integrations.NewTester(), trackers: integrations.NewTracker, policy: policy.DefaultPolicy(policy.Options{}),
 		auth: security.NewAuth(db, sealer, security.AuthConfig{
 			SessionTTL: cfg.SessionTTL,
 		}, log),
@@ -132,6 +134,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/connections/{id}/rotate", s.sensitive(s.rotateConnection))
 	mux.HandleFunc("POST /api/connections/{id}/revoke", s.sensitive(s.revokeConnection))
 
+	mux.HandleFunc("GET /api/skills", s.protected(s.listSkills))
+	mux.HandleFunc("POST /api/skills", s.protected(s.createSkill))
+	mux.HandleFunc("GET /api/skills/imports", s.protected(s.listSkillImports))
+	mux.HandleFunc("POST /api/skills/import", s.protected(s.importSkill))
+	mux.HandleFunc("POST /api/skills/import-git", s.protected(s.importSkillGit))
+	mux.HandleFunc("GET /api/skills/{id}", s.protected(s.getSkill))
 	mux.HandleFunc("GET /api/agents", s.protected(s.listAgents))
 	mux.HandleFunc("POST /api/agents", s.protected(s.createAgent))
 	mux.HandleFunc("GET /api/agents/{id}", s.protected(s.getAgent))
