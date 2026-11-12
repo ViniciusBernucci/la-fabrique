@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E13 (T13-03)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E07 (T07-03)._
 
 ## Resumo
 
-**18 feitos · 19 parciais · 30 pendentes** de 67 tickets.
+**18 feitos · 20 parciais · 29 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -77,7 +77,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E13 (T13-03)._
   - PASS: catálogo de 14 tipos de nó, validador com nó/campo (ciclo só via loop com limite, portas, uma conexão por saída/entrada, obrigatórios), fluxo complexo salvo e reaberto idêntico em outra sessão, rascunho inválido salvo com problemas, concorrência e CSRF, editor de canvas (arrastar, conectar, propriedades, validação ao editar). Editor em navegador real NOT_RUN; sem zoom/pan/desfazer. Revisão independente NOT_RUN. Entrega: [E07](../entregas/2026-11-12-E07-editor-de-workflows.md).
 - [x] **[T07-02](03-BACKLOG.md#t07-02)** — Executar nós e estruturas de controle · dep.: T07-01, T03-02.
   - PASS (`-race`): ramos e convergência (`any`/`all`), loop limitado (limite e saída antecipada), espera durável retomada de estado JSON persistido, decisão humana, `fork` sequencial, rotas de erro, expressões, subfluxos expandidos em linha com recursão/profundidade bloqueadas, determinismo. **Limite:** executores reais (agente, skill, script, Git) NOT_RUN — são de E09/E11/E13/E15; sem persistência de execuções no banco. Revisão independente NOT_RUN. Entrega: [E07 motor](../entregas/2026-11-12-E07-motor-de-workflows.md).
-- [ ] **[T07-03](03-BACKLOG.md#t07-03)** — Publicar e congelar configuração efetiva · dep.: T07-02, T08-01, T09-02.
+- [~] **[T07-03](03-BACKLOG.md#t07-03)** — Publicar e congelar configuração efetiva · dep.: T07-02, T08-01, T09-02.
+  - PASS (PostgreSQL real): versão publicada imutável (gatilho), validação de agentes/contas/modelos/ferramentas/skills/subfluxos antes de publicar, snapshot sanitizado com hash, idempotência, rascunho não executa, execução presa à versão (nova publicação ou mudança no catálogo não a altera), subfluxos fixados por versão, revalidação em runtime respeitando conta revogada. **Parcial:** motor/worker ainda não consome `StartExecution` nem revalida a cada nó; sem tela. Revisão independente NOT_RUN. Entrega: [E07 publicação](../entregas/2026-11-12-E07-publicacao-e-congelamento.md).
 - [ ] **[T07-04](03-BACKLOG.md#t07-04)** — Selecionar fluxo e subfluxo por regras · dep.: T07-03.
 
 ## E08 — Catálogos e MCP

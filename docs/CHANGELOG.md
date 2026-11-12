@@ -1,3 +1,6 @@
+## 2026-11-12 — E07: publicar e congelar configuração efetiva (T07-03)
+Versões publicadas imutáveis com snapshot sanitizado e subfluxos fixados; rascunho não executa; execução presa à versão; revalidação em runtime respeita revogação. [Entrega](entregas/2026-11-12-E07-publicacao-e-congelamento.md) · [ADR-0027](adr/0027-publicacao-e-congelamento-de-workflows.md).
+
 ## 2026-11-12 — E13: escopo, expiração e revogação de autorizações (T13-03)
 Autorização presa à ação canônica com prazo e usos, consumo atômico (a corrida pelo último uso autoriza um), recusa de divergências e revogação com parada segura e checkpoint. [Entrega](entregas/2026-11-12-E13-autorizacoes.md) · [ADR-0026](adr/0026-autorizacoes-com-escopo-uso-e-revogacao.md).
 

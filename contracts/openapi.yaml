@@ -433,6 +433,68 @@ paths:
                 required: [items]
                 properties: {items: {type: array, items: {$ref: "#/components/schemas/NodeType"}}}
         "401": {$ref: "#/components/responses/Error"}
+  /workflows/{id}/publish:
+    post:
+      tags: [workflows]
+      summary: Publica a versão salva do rascunho (imutável); idempotente para o mesmo conteúdo (200)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [expected_version], additionalProperties: false, properties: {expected_version: {type: integer}}}}}
+      responses:
+        "200": {description: Conteúdo igual ao vigente, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowVersion"}}}}
+        "201": {description: Nova versão publicada, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowVersion"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {description: Problemas impedem a publicação (envelope de erro mais a lista `problems`)}
+  /workflows/{id}/unpublish:
+    post:
+      tags: [workflows]
+      summary: Tira a versão vigente de circulação (execuções existentes não mudam)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "204": {description: Despublicado}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /workflows/{id}/versions:
+    get:
+      tags: [workflows]
+      summary: Versões publicadas do workflow (sem os grafos)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Versões
+          content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/WorkflowVersion"}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /workflow-versions/{id}:
+    get:
+      tags: [workflows]
+      summary: Versão publicada com a configuração efetiva congelada (sanitizada)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Versão, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowVersion"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /workflow-versions/{id}/revalidate:
+    get:
+      tags: [workflows]
+      summary: Revalida em tempo de execução (conta revogada, modelo desativado, itens removidos)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Resultado
+          content: {application/json: {schema: {type: object, required: [ok, problems], properties: {ok: {type: boolean}, problems: {type: array, items: {$ref: "#/components/schemas/PublishProblem"}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
   /budgets:
     get:
       tags: [orcamento]
@@ -1545,6 +1607,31 @@ components:
         resolved_at: {type: [string, "null"], format: date-time}
         version: {type: integer}
         created_at: {type: string, format: date-time}
+    PublishProblem:
+      type: object
+      required: [code, message]
+      properties:
+        node: {type: string}
+        code: {type: string}
+        message: {type: string}
+    WorkflowVersion:
+      type: object
+      required: [id, workflow_id, number, draft_version, name, kind, content_hash, published_at]
+      properties:
+        id: {type: string, format: uuid}
+        workflow_id: {type: string, format: uuid}
+        number: {type: integer}
+        draft_version: {type: integer}
+        name: {type: string}
+        kind: {type: string, enum: [feature, subflow]}
+        description: {type: string}
+        graph: {type: object}
+        flat_graph: {type: object}
+        subflows: {type: object, additionalProperties: {type: string}}
+        effective: {type: array, items: {type: object}}
+        content_hash: {type: string}
+        published_at: {type: string, format: date-time}
+        unchanged: {type: boolean}
     Budget:
       type: object
       required: [id, scope, agent_id, period, limit_micros, state, version]
