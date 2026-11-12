@@ -275,6 +275,24 @@ func runContract(t *testing.T, h harness) {
 		}
 	})
 
+	t.Run("subtarefas e links servem de prova de existência", func(t *testing.T) {
+		kids, err := h.tracker.Children(ctx, h.story)
+		if err != nil || len(kids) != 1 || !kids[0].Subtask || kids[0].ParentID != h.story || !strings.Contains(kids[0].Description, "[lf:key=abc123def456]") {
+			t.Fatalf("Children: %+v %v", kids, err)
+		}
+		if ok, err := h.tracker.HasLink(ctx, h.dependent, "https://github.com/o/r/pull/7"); err != nil || !ok {
+			t.Fatalf("HasLink presente: %v %v", ok, err)
+		}
+		if ok, err := h.tracker.HasLink(ctx, h.dependent, "https://github.com/o/r/pull/999"); err != nil || ok {
+			t.Fatalf("HasLink ausente: %v %v", ok, err)
+		}
+		for _, bad := range []string{"", "../x", "a b"} {
+			if _, err := h.tracker.Children(ctx, bad); kindOf(err) != ErrInvalid {
+				t.Errorf("Children(%q): %v", bad, err)
+			}
+		}
+	})
+
 	t.Run("item inexistente", func(t *testing.T) {
 		if _, err := h.tracker.GetItem(ctx, h.missing); kindOf(err) != ErrNotFound {
 			t.Fatalf("esperado not_found: %v", err)
@@ -308,7 +326,9 @@ func runContract(t *testing.T, h harness) {
 			_, err1 := h.tracker.ListItems(ctx, h.container, ListOptions{})
 			_, err2 := h.tracker.GetItem(ctx, h.story)
 			err3 := h.tracker.AddLink(ctx, h.story, "https://github.com/o/r/pull/1", "PR")
-			for _, err := range []error{err1, err2, err3} {
+			_, err4 := h.tracker.Children(ctx, h.story)
+			_, err5 := h.tracker.HasLink(ctx, h.story, "https://github.com/o/r/pull/1")
+			for _, err := range []error{err1, err2, err3, err4, err5} {
 				if kindOf(err) != want {
 					t.Fatalf("esperado %s, veio %v", want, err)
 				}

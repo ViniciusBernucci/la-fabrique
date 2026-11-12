@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-12 — E06: escrita na origem sem duplicação (T06-03)
+Subtarefas, dependências, links e estados mapeados escritos pelo ledger com prova de existência; Draft PR deixa a tarefa aguardando merge e a conclusão exige merge confirmado. [Adendo da entrega](entregas/2026-11-12-E06-adaptadores-jira-clickup.md) · [ADR-0019](adr/0019-escrita-na-origem-sem-duplicacao.md).
+
 ## 2026-11-12 — E13: ledger de efeitos externos (T13-04)
 Intenção antes do envio, prova verificável para reconciliar respostas perdidas (confirmado não duplica, ausente permite repetir, inconclusivo bloqueia e abre decisão com evidência) e reconciliação de envios abandonados. [Entrega](entregas/2026-11-12-E13-ledger-de-efeitos.md) · [ADR-0018](adr/0018-ledger-de-efeitos-externos.md).
 

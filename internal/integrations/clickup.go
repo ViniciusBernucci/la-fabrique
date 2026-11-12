@@ -322,3 +322,42 @@ func (c *clickup) AddLink(ctx context.Context, itemID, linkURL, title string) er
 	text := strings.TrimSpace(clipText(title, 200)) + " " + linkURL
 	return asError(c.api.do(ctx, op, "POST", "/task/"+itemID+"/comment", nil, map[string]string{"comment_text": strings.TrimSpace(text)}, nil))
 }
+
+func (c *clickup) Children(ctx context.Context, parentID string) ([]Item, error) {
+	const op = "clickup: listar subtarefas"
+	if err := checkID(op, parentID); err != nil {
+		return nil, err
+	}
+	var out struct {
+		Subtasks []clickupTask `json:"subtasks"`
+	}
+	if e := c.api.do(ctx, op, "GET", "/task/"+parentID, url.Values{"include_subtasks": {"true"}}, nil, &out); e != nil {
+		return nil, e
+	}
+	items := make([]Item, 0, len(out.Subtasks))
+	for _, t := range out.Subtasks {
+		items = append(items, c.item(t))
+	}
+	return items, nil
+}
+
+func (c *clickup) HasLink(ctx context.Context, itemID, linkURL string) (bool, error) {
+	const op = "clickup: listar links"
+	if err := checkID(op, itemID); err != nil {
+		return false, err
+	}
+	var out struct {
+		Comments []struct {
+			Text string `json:"comment_text"`
+		} `json:"comments"`
+	}
+	if e := c.api.do(ctx, op, "GET", "/task/"+itemID+"/comment", nil, nil, &out); e != nil {
+		return false, e
+	}
+	for _, cm := range out.Comments {
+		if strings.Contains(cm.Text, linkURL) {
+			return true, nil
+		}
+	}
+	return false, nil
+}

@@ -28,6 +28,10 @@ func jiraFake(t *testing.T) *fake {
 		switch {
 		case c.Method == "GET" && p == "/myself":
 			w(rw, 200, `{"accountId":"acc-1","displayName":"Fábrica Bot","emailAddress":"bot@example.com"}`)
+		case c.Method == "GET" && p == "/search/jql" && strings.Contains(c.Query, "jql=parent+%3D+10001"):
+			w(rw, 200, `{"issues":[{"id":"10002","key":"ABC-2","fields":{"summary":"Validar CPF","issuetype":{"name":"Sub-task","subtask":true},"description":{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"Detalhe\n\n[lf:key=abc123def456]"}]}]},"status":{"name":"In Progress","statusCategory":{"key":"indeterminate"}},"parent":{"id":"10001","key":"ABC-1"},"labels":[],"updated":"2026-11-10T13:00:00.000+0000"}}],"isLast":true}`)
+		case c.Method == "GET" && strings.HasSuffix(p, "/remotelink"):
+			w(rw, 200, `[{"id":1,"object":{"url":"https://github.com/o/r/pull/7","title":"Draft PR #7"}}]`)
 		case c.Method == "GET" && p == "/search/jql":
 			if !strings.Contains(c.Query, "jql=project+%3D+ABC+AND+labels+%3D+%22lf-ready%22+AND+statusCategory+%21%3D+Done+ORDER+BY+created+ASC%2C+key+ASC") {
 				w(rw, 400, `{"errorMessages":["jql inesperada"]}`)

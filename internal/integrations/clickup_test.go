@@ -39,6 +39,10 @@ func clickupFake(t *testing.T) *fake {
 			w(rw, 200, `{"id":"L1","statuses":[{"status":"to do","type":"open"},{"status":"in progress","type":"custom"},{"status":"complete","type":"closed"}]}`)
 		case c.Method == "GET" && p == "/list/L1/field":
 			w(rw, 200, `{"fields":[{"id":"f1","name":"Estimativa","type":"number"}]}`)
+		case c.Method == "GET" && p == "/task/t1" && strings.Contains(c.Query, "include_subtasks=true"):
+			w(rw, 200, `{"id":"t1","name":"Cadastro","status":{"status":"to do","type":"open"},"parent":null,"tags":[],"date_updated":"1","url":"u","list":{"id":"L1"},"subtasks":[{"id":"t2","name":"Validar CPF","text_content":"Detalhe\n\n[lf:key=abc123def456]","status":{"status":"in progress","type":"custom"},"parent":"t1","tags":[],"date_updated":"2","url":"u2","list":{"id":"L1"}}]}`)
+		case c.Method == "GET" && p == "/task/t3/comment":
+			w(rw, 200, `{"comments":[{"comment_text":"Draft PR #7 https://github.com/o/r/pull/7"}]}`)
 		case c.Method == "GET" && strings.HasPrefix(p, "/task/"):
 			if body, ok := tasks[strings.TrimPrefix(p, "/task/")]; ok {
 				w(rw, 200, body)

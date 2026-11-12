@@ -32,3 +32,28 @@ O aceite cita **instância de teste**; só fixtures foram exercitadas. Shape rea
 
 ## Rollback
 `git revert` do commit. Sem migration.
+
+---
+
+# Adendo — T06-03: subtarefas e estados sem duplicação
+
+**Ticket:** [T06-03](../NEW%20MVP/03-BACKLOG.md#t06-03). Decisões: [ADR-0019](../adr/0019-escrita-na-origem-sem-duplicacao.md). Revisão independente: NOT_RUN.
+
+## O que mudou
+- `integrations.Tracker` ganhou `Children` e `HasLink` (Jira e ClickUp) para a prova de existência, com os subtestes novos da suíte de contrato.
+- `internal/tasksync`: `Publisher` (subtarefa, dependência, link, mudança de estado mapeada, Draft PR, conclusão só com merge confirmado) sobre o ledger. Sem migration.
+
+## Verificação (2026-11-12)
+| Verificação | Resultado |
+|---|---|
+| `go test -race ./internal/integrations` (contrato Jira e ClickUp, com os novos métodos) | PASS |
+| `go test -race` dos 4 testes de `tasksync` (PostgreSQL real, destino em memória com falhas injetadas) | PASS |
+| Jira e ClickUp **reais**; verificador de merge do GitHub | **NOT_RUN / não implementado** |
+
+## Aceite → evidência
+- "Timeout após criação não duplica subtarefa": `TestSubtaskCreationTimeoutDoesNotDuplicate` (criada na origem + resposta perdida: a prova encontra o marcador, 1 subtarefa, 1 criação; repetir não cria; chamada que nem chegou: ausência comprovada, repete e cria 1; sem conseguir listar: bloqueia em vez de arriscar; outra tentativa da feature é outro efeito).
+- "Draft PR publica aguardando merge e conclusão depende de merge confirmado": `TestDraftPRWaitsForMergeAndCompletionNeedsAConfirmedMerge` (Draft PR → "aguardando merge" com o link, sem duplicar ao repetir; PR aberta, merge sem SHA, falha na consulta e PR fechada **não** concluem e nada é escrito; merge confirmado conclui uma vez e guarda o commit).
+- Estados e dependências: `TestStatusMappingRevalidatesTheTargetBeforeRepeating`, `TestDependenciesAndLinksAreWrittenOnce`.
+
+## Rollback
+`git revert`; sem migration.

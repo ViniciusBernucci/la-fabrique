@@ -431,3 +431,55 @@ func adfText(raw json.RawMessage) string {
 	}
 	return b.String()
 }
+
+func (j *jira) Children(ctx context.Context, parentID string) ([]Item, error) {
+	const op = "jira: listar subtarefas"
+	if err := checkIssue(op, parentID); err != nil {
+		return nil, err
+	}
+	var all []Item
+	cursor := ""
+	for page := 0; page < 5; page++ {
+		q := url.Values{"jql": {"parent = " + parentID + " ORDER BY created ASC, key ASC"}, "fields": {jiraFields}, "maxResults": {"100"}}
+		if cursor != "" {
+			q.Set("nextPageToken", cursor)
+		}
+		var out struct {
+			Issues        []jiraIssue `json:"issues"`
+			NextPageToken string      `json:"nextPageToken"`
+			IsLast        bool        `json:"isLast"`
+		}
+		if e := j.api.do(ctx, op, "GET", "/search/jql", q, nil, &out); e != nil {
+			return nil, e
+		}
+		for _, i := range out.Issues {
+			all = append(all, j.item(i))
+		}
+		if out.IsLast || out.NextPageToken == "" {
+			return all, nil
+		}
+		cursor = out.NextPageToken
+	}
+	return nil, &Error{Kind: ErrUnavailable, Op: op} // lista longa demais para provar com segurança
+}
+
+func (j *jira) HasLink(ctx context.Context, itemID, linkURL string) (bool, error) {
+	const op = "jira: listar links"
+	if err := checkIssue(op, itemID); err != nil {
+		return false, err
+	}
+	var out []struct {
+		Object struct {
+			URL string `json:"url"`
+		} `json:"object"`
+	}
+	if e := j.api.do(ctx, op, "GET", "/issue/"+itemID+"/remotelink", nil, nil, &out); e != nil {
+		return false, e
+	}
+	for _, l := range out {
+		if l.Object.URL == linkURL {
+			return true, nil
+		}
+	}
+	return false, nil
+}

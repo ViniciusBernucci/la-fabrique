@@ -160,6 +160,11 @@ type Tracker interface {
 	AddDependency(ctx context.Context, itemID, dependsOnID string) error
 	// AddLink anexa um link externo (ex.: Draft PR) ao item.
 	AddLink(ctx context.Context, itemID, linkURL, title string) error
+	// Children lista as subtarefas de um item (inclui a descrição, que pode carregar
+	// o marcador da chave de negócio). Base da prova de existência (T13-04).
+	Children(ctx context.Context, parentID string) ([]Item, error)
+	// HasLink informa se o link já está anexado ao item.
+	HasLink(ctx context.Context, itemID, linkURL string) (bool, error)
 }
 
 // Config cria um Tracker. Bases só são sobrescritas em testes.
