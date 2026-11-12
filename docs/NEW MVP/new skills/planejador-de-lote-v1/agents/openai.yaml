@@ -1,0 +1,6 @@
+interface:
+  display_name: "Planejador de Lote v1"
+  short_description: "Encadeia grill-me → tech-lead → worktree-planner e entrega o lote em Markdown"
+  default_prompt: "Use $planejador-de-lote-v1 para entrevistar, especificar e gerar os prompts de worktree e o manifesto deste lote, sem implementar."
+policy:
+  allow_implicit_invocation: true
