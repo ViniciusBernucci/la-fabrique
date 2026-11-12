@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-12 — E06: adaptadores Jira e ClickUp (T06-01, T06-02 parciais)
+Interface `Tracker` simétrica com adaptadores Jira e ClickUp (leitura paginada, subtarefas, transições válidas, dependências, links) e suíte de contrato com fixtures. Instâncias reais NOT_RUN. T06-03 a T06-05 bloqueados por dependências. Detalhes: [entrega](entregas/2026-11-12-E06-adaptadores-jira-clickup.md) · [ADR-0007](adr/0007-adaptadores-jira-e-clickup-simetricos.md).
+
 ## 2026-11-12 — E05: cadastro de projeto em rascunho (T05-01)
 Assistente de cadastro por etapas (Dados, Repositório, Origem, Revisão) com persistência por etapa, relatório de validação com ação por pendência, ativação bloqueada sem preenchimento válido, suspensão/retomada e trilha de alterações. T05-02 e T05-03 seguem pendentes (dependem de E06 a E09). Corrige também o `make check-secrets`, que falhava desde o E04. Detalhes: [entrega](entregas/2026-11-12-E05-cadastro-de-projeto.md) · [ADR-0006](adr/0006-cadastro-de-projeto-em-rascunho.md).
 

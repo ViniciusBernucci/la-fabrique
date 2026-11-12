@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E05 (T05-01)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E06 (T06-01, T06-02)._
 
 ## Resumo
 
-**8 feitos · 5 parciais · 54 pendentes** de 67 tickets.
+**8 feitos · 7 parciais · 52 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -60,8 +60,10 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E05 (T05-01)._
 
 ## E06 — Integrações e sincronização
 
-- [ ] **[T06-01](03-BACKLOG.md#t06-01)** — Implementar adaptador Jira · dep.: T03-02, T04-03.
-- [ ] **[T06-02](03-BACKLOG.md#t06-02)** — Implementar adaptador ClickUp · dep.: T03-02, T04-03.
+- [~] **[T06-01](03-BACKLOG.md#t06-01)** — Implementar adaptador Jira · dep.: T03-02, T04-03.
+  - PASS (contrato com fixtures, `-race`): itens vs subtarefas, paginação por token, transições válidas (inválida não escreve), permissão (403), rate limit (`RetryAfter`), dependência/link/subtarefa, sem vazamento de segredo/URL/corpo, só `*.atlassian.net`. **Parcial:** instância real de teste do Jira NOT_RUN. Entrega: [E06](../entregas/2026-11-12-E06-adaptadores-jira-clickup.md).
+- [~] **[T06-02](03-BACKLOG.md#t06-02)** — Implementar adaptador ClickUp · dep.: T03-02, T04-03.
+  - PASS (mesma suíte de contrato): pai/filho, estados e categorias, prioridade, dependências, paginação, erros e rate limit. **Parcial:** lista real do ClickUp NOT_RUN; link de PR vira comentário (repetir duplica). Entrega: [E06](../entregas/2026-11-12-E06-adaptadores-jira-clickup.md).
 - [ ] **[T06-03](03-BACKLOG.md#t06-03)** — Projetar subtarefas e status sem duplicação · dep.: T06-01, T06-02, T13-04.
 - [ ] **[T06-04](03-BACKLOG.md#t06-04)** — Implementar sincronização manual e preflight · dep.: T05-02, T06-01, T06-02, T13-04.
 - [ ] **[T06-05](03-BACKLOG.md#t06-05)** — Tratar mudança de requisitos e troca de plataforma · dep.: T06-03, T06-04, T10-01, T12-04.

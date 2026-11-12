@@ -1,0 +1,18 @@
+{
+  "issues": [
+    {"id": "10001", "key": "ABC-1", "fields": {
+      "summary": "Cadastro de clientes", "issuetype": {"name": "Story", "subtask": false},
+      "description": {"type": "doc", "version": 1, "content": [
+        {"type": "paragraph", "content": [{"type": "text", "text": "Permitir cadastrar clientes."}]},
+        {"type": "paragraph", "content": [{"type": "text", "text": "Critério: CPF único."}]}]},
+      "status": {"name": "To Do", "statusCategory": {"key": "new"}},
+      "priority": {"name": "High"}, "labels": ["lf-ready", "backend"], "parent": null,
+      "updated": "2026-11-10T12:00:00.000+0000", "issuelinks": []}},
+    {"id": "10002", "key": "ABC-2", "fields": {
+      "summary": "Validar CPF", "issuetype": {"name": "Sub-task", "subtask": true},
+      "description": null, "status": {"name": "In Progress", "statusCategory": {"key": "indeterminate"}},
+      "priority": {"name": "Medium"}, "labels": [], "parent": {"id": "10001", "key": "ABC-1"},
+      "updated": "2026-11-10T13:00:00.000+0000", "issuelinks": []}}
+  ],
+  "nextPageToken": "tok-2", "isLast": false
+}
