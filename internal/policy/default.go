@@ -44,6 +44,12 @@ func DefaultPolicy(o Options) *Policy {
 		{ID: "script.git_local", Effect: Allow, Tool: ToolScript, Params: cmd(`^git (status|diff|log|show|add|commit|branch|checkout|switch|restore|stash)( .*)?$`),
 			Reason: "Git local, sem rede."},
 
+		// --- Ferramentas nativas de arquivo (o caminho já é confinado ao workspace) ---
+		{ID: "fs.read", Effect: Allow, Tool: ToolFS, Operation: "read", Reason: "Leitura no workspace."},
+		{ID: "fs.list", Effect: Allow, Tool: ToolFS, Operation: "list", Reason: "Listagem no workspace."},
+		{ID: "fs.search", Effect: Allow, Tool: ToolFS, Operation: "search", Reason: "Busca no workspace."},
+		{ID: "fs.write", Effect: Allow, Tool: ToolFS, Operation: "write", Reason: "Escrita no workspace da feature."},
+
 		// --- Git (broker da fábrica) ---
 		{ID: "git.force", Effect: Deny, Tool: ToolGit, Params: []ParamMatch{{Key: "force", Equals: true}}, Reason: "Push forçado é proibido."},
 		{ID: "git.push_protected", Effect: Deny, Tool: ToolGit, Operation: "push", Params: []ParamMatch{{Key: "branch", OneOf: []string{"main", "master", "production", "release"}}},

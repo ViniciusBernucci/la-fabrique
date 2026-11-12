@@ -433,6 +433,67 @@ paths:
                 required: [items]
                 properties: {items: {type: array, items: {$ref: "#/components/schemas/NodeType"}}}
         "401": {$ref: "#/components/responses/Error"}
+  /tools:
+    get:
+      tags: [ferramentas]
+      summary: Catálogo de ferramentas (nativas e personalizadas) com esquemas, permissões e limites
+      responses:
+        "200":
+          description: Ferramentas
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/Tool"}}}
+        "401": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [ferramentas]
+      summary: Cadastra uma ferramenta personalizada (script ou integração); o comando passa pela política
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/Tool"}}}
+      responses:
+        "201": {description: Ferramenta criada, content: {application/json: {schema: {$ref: "#/components/schemas/Tool"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /tools/{name}/check:
+    post:
+      tags: [ferramentas]
+      summary: Valida uma chamada sem executá-la (existência, concessão, escopo e argumentos)
+      parameters:
+        - {name: name, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [grant]
+              additionalProperties: false
+              properties:
+                args: {type: object, additionalProperties: true}
+                grant:
+                  type: object
+                  properties:
+                    tools: {type: array, items: {type: string}}
+                    permissions: {type: array, items: {type: string, enum: [read, write, exec, git, api]}}
+      responses:
+        "200":
+          description: Chamada válida; devolve os argumentos normalizados
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, args]
+                properties: {ok: {type: boolean}, args: {type: object, additionalProperties: true}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
   /skills:
     get:
       tags: [skills]
@@ -1184,3 +1245,35 @@ components:
         reason: {type: string}
         content_hash: {type: string}
         created_at: {type: string, format: date-time}
+    ToolField:
+      type: object
+      required: [name, type, required]
+      properties:
+        name: {type: string}
+        type: {type: string, enum: [string, int, bool, path, enum, list]}
+        required: {type: boolean}
+        description: {type: string}
+        max: {type: integer}
+        min: {type: integer}
+        options: {type: array, items: {type: string}}
+        pattern: {type: string}
+    Tool:
+      type: object
+      required: [name, kind, description, input, output, permissions, limits]
+      properties:
+        name: {type: string, pattern: "^[a-z][a-z0-9_]{1,47}$"}
+        kind: {type: string, enum: [native, script, integration]}
+        description: {type: string}
+        input: {type: array, items: {$ref: "#/components/schemas/ToolField"}}
+        output: {type: array, items: {$ref: "#/components/schemas/ToolField"}}
+        permissions: {type: array, items: {type: string, enum: [read, write, exec, git, api]}}
+        limits:
+          type: object
+          required: [timeout_seconds, max_output_bytes]
+          properties:
+            timeout_seconds: {type: integer, minimum: 1, maximum: 3600}
+            max_output_bytes: {type: integer, minimum: 1, maximum: 4194304}
+        command: {type: string, description: "Script: roda com os parâmetros em PARAM_<nome>"}
+        operation: {type: string, description: "Integração: operação do conector"}
+        requires: {type: array, items: {type: string}}
+        version: {type: integer}

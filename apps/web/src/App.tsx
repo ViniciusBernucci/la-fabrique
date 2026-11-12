@@ -15,6 +15,7 @@ import { ProjectSetupPage } from "./pages/ProjectSetupPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { SecurityPage } from "./pages/SecurityPage";
 import { SkillsPage } from "./pages/SkillsPage";
+import { ToolsPage } from "./pages/ToolsPage";
 import { WorkflowEditorPage } from "./pages/WorkflowEditorPage";
 import { WorkflowsPage } from "./pages/WorkflowsPage";
 
@@ -59,6 +60,7 @@ export function App() {
         <Route path="library" element={<LibraryPage />} />
         <Route path="agents" element={<AgentsPage />} />
         <Route path="skills" element={<SkillsPage />} />
+        <Route path="tools" element={<ToolsPage />} />
         <Route path="workflows" element={<WorkflowsPage />} />
         <Route path="workflows/:id" element={<WorkflowEditorPage />} />
         <Route path="decisions" element={<DecisionsPage />} />

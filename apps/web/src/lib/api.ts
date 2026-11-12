@@ -382,6 +382,30 @@ export interface SkillImport {
   created_at: string;
 }
 
+export interface ToolField {
+  name: string;
+  type: "string" | "int" | "bool" | "path" | "enum" | "list";
+  required: boolean;
+  description?: string;
+  max?: number;
+  min?: number;
+  options?: string[];
+}
+
+export interface Tool {
+  name: string;
+  kind: "native" | "script" | "integration";
+  description: string;
+  input: ToolField[];
+  output: ToolField[];
+  permissions: string[];
+  limits: { timeout_seconds: number; max_output_bytes: number };
+  command?: string;
+  operation?: string;
+  requires?: string[];
+  version?: number;
+}
+
 const BASE = "/api";
 
 /** Token CSRF da sessão atual (memória; o servidor o devolve em /session e no login). */
@@ -498,6 +522,9 @@ export const api = {
   ) => put<Workflow>(`/workflows/${encodeURIComponent(id)}`, input),
   validateWorkflowGraph: (graph: WorkflowGraph, signal?: AbortSignal) =>
     post<{ issues: WorkflowIssue[] }>("/workflows/validate", { graph }, signal),
+
+  // Catálogo de ferramentas (leitura; o cadastro de personalizadas é por API).
+  listTools: (signal?: AbortSignal) => request<{ items: Tool[] }>("/tools", { signal }),
 
   // Catálogo de skills. O conteúdo importado é dado: nada executa na importação.
   listSkills: (signal?: AbortSignal) => request<{ items: Skill[] }>("/skills", { signal }),

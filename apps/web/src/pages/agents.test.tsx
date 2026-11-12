@@ -149,7 +149,7 @@ describe("catálogo de agentes", () => {
     ).not.toContain("codex-conta");
     await userEvent.selectOptions(select, CLAUDE_B);
     await userEvent.type(screen.getByLabelText("Modelo"), "claude-sonnet-5-5");
-    await userEvent.type(screen.getByLabelText(/^Ferramentas/), "Read, Edit ,, Bash");
+    await userEvent.type(screen.getByLabelText(/^Ferramentas \(separadas/), "Read, Edit ,, Bash");
     await userEvent.type(screen.getByLabelText("Instruções"), "Seja objetivo.");
     await userEvent.click(screen.getByRole("button", { name: "Cadastrar agente" }));
 

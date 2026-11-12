@@ -12,6 +12,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
 	"github.com/ViniciusBernucci/le-fabrique/internal/skills"
+	"github.com/ViniciusBernucci/le-fabrique/internal/tools"
 	"github.com/ViniciusBernucci/le-fabrique/internal/workflows"
 )
 
@@ -50,9 +51,22 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 	var agField *agents.FieldError
 	var impErr *skills.ImportError
 	var valErr *skills.ValidationError
+	var argErr *tools.ArgError
 	switch {
 	case errors.As(err, &field):
 		writeError(w, r, http.StatusBadRequest, "invalid_request", field.Message, "Corrija o campo \""+field.Field+"\" e tente novamente.")
+	case errors.As(err, &argErr):
+		writeError(w, r, http.StatusBadRequest, "invalid_request", argErr.Error(), "Corrija o campo \""+argErr.Field+"\" e tente novamente.")
+	case errors.Is(err, tools.ErrUnknownTool):
+		writeError(w, r, http.StatusNotFound, "tool_not_found", err.Error(), "Confira o nome em GET /tools.")
+	case errors.Is(err, tools.ErrNotGranted):
+		writeError(w, r, http.StatusForbidden, "tool_not_granted", err.Error(), "Conceda a ferramenta ao agente (uma ferramenta nova não herda acesso).")
+	case errors.Is(err, tools.ErrScope):
+		writeError(w, r, http.StatusForbidden, "scope_insufficient", err.Error(), "Conceda a permissão exigida ao agente.")
+	case errors.Is(err, tools.ErrNativeName):
+		writeError(w, r, http.StatusConflict, "duplicate", "O nome pertence a uma ferramenta nativa.", "Use outro nome.")
+	case errors.Is(err, tools.ErrPolicy):
+		writeError(w, r, http.StatusUnprocessableEntity, "policy_denied", err.Error(), "Use um comando permitido pela política de risco.")
 	case errors.As(err, &impErr):
 		writeError(w, r, http.StatusUnprocessableEntity, "import_rejected", impErr.Error(), "Corrija o pacote ("+impErr.Code+") e importe de novo.")
 	case errors.As(err, &valErr):

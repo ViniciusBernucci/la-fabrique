@@ -134,6 +134,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/connections/{id}/rotate", s.sensitive(s.rotateConnection))
 	mux.HandleFunc("POST /api/connections/{id}/revoke", s.sensitive(s.revokeConnection))
 
+	mux.HandleFunc("GET /api/tools", s.protected(s.listTools))
+	mux.HandleFunc("POST /api/tools", s.protected(s.createTool))
+	mux.HandleFunc("POST /api/tools/{name}/check", s.protected(s.checkTool))
 	mux.HandleFunc("GET /api/skills", s.protected(s.listSkills))
 	mux.HandleFunc("POST /api/skills", s.protected(s.createSkill))
 	mux.HandleFunc("GET /api/skills/imports", s.protected(s.listSkillImports))

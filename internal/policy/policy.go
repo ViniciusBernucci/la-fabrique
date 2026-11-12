@@ -48,6 +48,7 @@ const (
 	ToolMCP       = "mcp"
 	ToolConnector = "connector"
 	ToolGit       = "git"
+	ToolFS        = "fs" // leitura e escrita no workspace do sandbox (ferramentas nativas)
 )
 
 // Action é o que se quer executar, com os parâmetros reais.
@@ -314,7 +315,7 @@ func (p *Policy) Evaluate(a Action) Decision {
 func (p *Policy) decide(a Action) Decision {
 	deny := func(rule, why string) Decision { return Decision{Effect: Deny, Rule: rule, Reason: why} }
 	switch a.Tool {
-	case ToolScript, ToolCLI, ToolAPI, ToolMCP, ToolConnector, ToolGit:
+	case ToolScript, ToolCLI, ToolAPI, ToolMCP, ToolConnector, ToolGit, ToolFS:
 	default:
 		return deny("builtin.unknown_tool", "Ferramenta desconhecida: nada fora da lista é executado.")
 	}
