@@ -10,6 +10,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/agents"
 	"github.com/ViniciusBernucci/le-fabrique/internal/decisions"
 	"github.com/ViniciusBernucci/le-fabrique/internal/mcp"
+	"github.com/ViniciusBernucci/le-fabrique/internal/models"
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
@@ -57,9 +58,14 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 	var decField *decisions.FieldError
 	var mcpField *mcp.FieldError
 	var mcpErr *mcp.Error
+	var modField *models.FieldError
 	switch {
 	case errors.As(err, &field):
 		writeError(w, r, http.StatusBadRequest, "invalid_request", field.Message, "Corrija o campo \""+field.Field+"\" e tente novamente.")
+	case errors.As(err, &modField):
+		writeError(w, r, http.StatusBadRequest, "invalid_request", modField.Message, "Corrija o campo \""+modField.Field+"\" e tente novamente.")
+	case errors.Is(err, models.ErrIncompatible):
+		writeError(w, r, http.StatusConflict, "model_incompatible", err.Error(), "Use um modelo cadastrado, ativo e compatível com a conta e as ferramentas do agente.")
 	case errors.As(err, &mcpField):
 		writeError(w, r, http.StatusBadRequest, "invalid_request", mcpField.Message, "Corrija o campo \""+mcpField.Field+"\" e tente novamente.")
 	case errors.Is(err, mcp.ErrNotGranted):

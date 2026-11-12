@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E08 (T08-04)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E09 (T09-02)._
 
 ## Resumo
 
-**17 feitos · 14 parciais · 36 pendentes** de 67 tickets.
+**17 feitos · 15 parciais · 35 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -95,7 +95,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E08 (T08-04)._
 
 - [~] **[T09-01](03-BACKLOG.md#t09-01)** — Cadastrar contas e adaptar clientes CLI · dep.: T04-03, T11-01.
   - PASS (Docker real, `-race`, com CLI de mentira): comando por modo autorizado (sem `bypassPermissions`/`danger-full-access`), prompt por stdin, entradas validadas, eventos normalizados, duas contas do mesmo provedor com volumes distintos e isoladas, cancelamento encerra a árvore. **Parcial:** Claude Code e Codex CLI reais NOT_RUN (exigem conta do responsável); sem fluxo de login nem imagem de sandbox com os CLIs; formatos de evento não confirmados por execução. Entrega: [E09](../entregas/2026-11-12-E09-clientes-cli.md).
-- [ ] **[T09-02](03-BACKLOG.md#t09-02)** — Cadastrar modelos e adaptar gateways de API · dep.: T04-03, T08-03, T11-01.
+- [~] **[T09-02](03-BACKLOG.md#t09-02)** — Cadastrar modelos e adaptar gateways de API · dep.: T04-03, T08-03, T11-01.
+  - PASS (PostgreSQL real, Docker real, `-race`, gateway de mentira): catálogo com parâmetros validados, compatibilidade com motivos (provedor, conta, gateway, ferramentas, estado), sobreposição agente/nó verificável (`model_check`), OpenRouter e Vercel rodando edição + teste pelo catálogo de ferramentas sob política, credencial só do cofre. **Parcial:** gateways reais NOT_RUN; sem tela; laço ainda não ligado ao worker; sem streaming. Revisão independente NOT_RUN. Entrega: [E09 modelos](../entregas/2026-11-12-E09-modelos-e-gateways.md).
 - [ ] **[T09-03](03-BACKLOG.md#t09-03)** — Impor orçamento e registrar uso · dep.: T09-01, T09-02, T03-02.
 - [ ] **[T09-04](03-BACKLOG.md#t09-04)** — Implementar fallback e disponibilidade · dep.: T09-03, T12-02.
 

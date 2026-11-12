@@ -139,6 +139,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/connections/{id}/rotate", s.sensitive(s.rotateConnection))
 	mux.HandleFunc("POST /api/connections/{id}/revoke", s.sensitive(s.revokeConnection))
 
+	mux.HandleFunc("GET /api/models", s.protected(s.listModels))
+	mux.HandleFunc("POST /api/models", s.protected(s.createModel))
+	mux.HandleFunc("POST /api/models/check", s.protected(s.checkModel))
+	mux.HandleFunc("POST /api/models/{id}/state", s.protected(s.setModelState))
 	mux.HandleFunc("GET /api/mcp/servers", s.protected(s.listMCPServers))
 	mux.HandleFunc("POST /api/mcp/servers", s.protected(s.createMCPServer))
 	mux.HandleFunc("POST /api/mcp/servers/{id}/discover", s.protected(s.discoverMCPServer))

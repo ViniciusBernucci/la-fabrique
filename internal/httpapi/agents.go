@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/ViniciusBernucci/le-fabrique/internal/agents"
+	"github.com/ViniciusBernucci/le-fabrique/internal/models"
 	"github.com/ViniciusBernucci/le-fabrique/internal/workflows"
 )
 
@@ -88,7 +89,19 @@ func (s *Server) workflowNodeEffective(w http.ResponseWriter, r *http.Request) {
 			s.writeDomainError(w, r, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, eff)
+		req := models.Requirement{Provider: eff.Provider, Model: eff.Model, NeedsTools: len(eff.Tools) > 0}
+		if eff.ConnectionID != nil {
+			req.ConnectionID = *eff.ConnectionID
+		}
+		verdict, err := models.Check(r.Context(), s.db, req)
+		if err != nil {
+			s.writeDomainError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, struct {
+			agents.Effective
+			ModelCheck models.Verdict `json:"model_check"`
+		}{eff, verdict})
 		return
 	}
 	writeError(w, r, http.StatusNotFound, "not_found", "Nó não encontrado no workflow.", "Verifique o identificador do nó.")

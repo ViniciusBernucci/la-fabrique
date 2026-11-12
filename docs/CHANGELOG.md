@@ -1,3 +1,6 @@
+## 2026-11-12 — E09: modelos e gateways de API (T09-02)
+Catálogo de modelos com compatibilidade explicada, sobreposição agente/nó verificável e adaptadores OpenRouter e Vercel AI Gateway com ferramentas controladas. Gateways reais NOT_RUN. [Entrega](entregas/2026-11-12-E09-modelos-e-gateways.md) · [ADR-0021](adr/0021-modelos-e-gateways-de-api.md).
+
 ## 2026-11-12 — E08: MCP (T08-04)
 Cadastro de servidores MCP (Streamable HTTP), descoberta, allowlist por agente com hash do contrato pinado e revalidação a cada chamada. Servidor real NOT_RUN, stdio UNSUPPORTED. [Entrega](entregas/2026-11-12-E08-mcp.md) · [ADR-0020](adr/0020-mcp-cadastro-descoberta-e-allowlist.md).
 

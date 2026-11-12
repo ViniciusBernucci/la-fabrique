@@ -433,6 +433,55 @@ paths:
                 required: [items]
                 properties: {items: {type: array, items: {$ref: "#/components/schemas/NodeType"}}}
         "401": {$ref: "#/components/responses/Error"}
+  /models:
+    get:
+      tags: [models]
+      summary: Modelos cadastrados manualmente
+      responses:
+        "200":
+          description: Modelos
+          content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Model"}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [models]
+      summary: Cadastra um modelo (parâmetros e capacidades validados; gateway só no provedor api)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ModelInput"}}}
+      responses:
+        "201": {description: Modelo cadastrado, content: {application/json: {schema: {$ref: "#/components/schemas/Model"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /models/check:
+    post:
+      tags: [models]
+      summary: Diz, sem executar nada, se o modelo serve para provedor, conta e ferramentas
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [provider, model], additionalProperties: false, properties: {provider: {type: string}, connection_id: {type: string}, model: {type: string}, needs_tools: {type: boolean}}}}}
+      responses:
+        "200": {description: Veredito com os motivos, content: {application/json: {schema: {$ref: "#/components/schemas/ModelVerdict"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /models/{id}/state:
+    post:
+      tags: [models]
+      summary: Ativa ou desativa o modelo (controle otimista)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [state, expected_version], additionalProperties: false, properties: {state: {type: string, enum: [active, disabled]}, expected_version: {type: integer}}}}}
+      responses:
+        "200": {description: Modelo atualizado, content: {application/json: {schema: {$ref: "#/components/schemas/Model"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
   /mcp/servers:
     get:
       tags: [mcp]
@@ -1308,8 +1357,9 @@ components:
         updated_at: {type: string, format: date-time}
     EffectiveAgent:
       type: object
-      required: [agent_id, agent_name, agent_version, provider, connection_id, model, instructions, prompt, skills, tools, fallback, timeout_minutes, sources]
+      required: [agent_id, agent_name, agent_version, provider, connection_id, model, instructions, prompt, skills, tools, fallback, timeout_minutes, sources, model_check]
       properties:
+        model_check: {$ref: "#/components/schemas/ModelVerdict"}
         agent_id: {type: string, format: uuid}
         agent_name: {type: string}
         agent_version: {type: integer}
@@ -1464,6 +1514,51 @@ components:
         resolved_at: {type: [string, "null"], format: date-time}
         version: {type: integer}
         created_at: {type: string, format: date-time}
+    ModelParams:
+      type: object
+      properties:
+        temperature: {type: number, minimum: 0, maximum: 2}
+        top_p: {type: number, minimum: 0, maximum: 1}
+        max_tokens: {type: integer, minimum: 1}
+    ModelInput:
+      type: object
+      required: [provider, name]
+      additionalProperties: false
+      properties:
+        provider: {type: string, enum: [claude, codex, api]}
+        gateway: {type: string, enum: ["", openrouter, vercel]}
+        name: {type: string}
+        label: {type: string}
+        supports_tools: {type: boolean}
+        supports_streaming: {type: boolean}
+        context_window: {type: integer, minimum: 0}
+        max_output_tokens: {type: integer, minimum: 0}
+        params: {$ref: "#/components/schemas/ModelParams"}
+    Model:
+      type: object
+      required: [id, provider, gateway, name, supports_tools, supports_streaming, context_window, max_output_tokens, params, state, version]
+      properties:
+        id: {type: string, format: uuid}
+        provider: {type: string}
+        gateway: {type: string}
+        name: {type: string}
+        label: {type: string}
+        supports_tools: {type: boolean}
+        supports_streaming: {type: boolean}
+        context_window: {type: integer}
+        max_output_tokens: {type: integer}
+        params: {$ref: "#/components/schemas/ModelParams"}
+        state: {type: string, enum: [active, disabled]}
+        version: {type: integer}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ModelVerdict:
+      type: object
+      required: [ok, problems]
+      properties:
+        ok: {type: boolean}
+        model: {$ref: "#/components/schemas/Model"}
+        problems: {type: array, items: {type: string}}
     McpServer:
       type: object
       required: [id, name, url, connection_id, protocol, server_name, server_version, discovered_at, created_at]
