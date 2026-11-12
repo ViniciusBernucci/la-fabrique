@@ -35,6 +35,9 @@ func (s *Sandbox) Start(ctx context.Context, es ExecSpec) (*Running, error) {
 	if len(es.Cmd) == 0 {
 		return nil, ErrInvalidSpec
 	}
+	if err := s.usable(); err != nil {
+		return nil, err
+	}
 	id := randomID()
 	pidfile := "/tmp/run-" + id + ".pid"
 	args := []string{"exec", "-i", "--user", sandboxUID + ":" + sandboxUID}

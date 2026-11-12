@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -122,6 +123,34 @@ type Sandbox struct {
 	Network   string // vazio quando NetNone
 	Profile   Profile
 	d         *Docker
+
+	qmu        sync.Mutex
+	quarantine string // motivo; vazio = utilizável
+}
+
+// ErrQuarantined: o estado do sandbox é incerto (um processo pode ainda estar
+// vivo ou escrevendo) e ele não pode ser reutilizado até ser verificado.
+var ErrQuarantined = errors.New("sandbox em quarentena: estado incerto")
+
+// Quarantine bloqueia novas execuções neste sandbox/workspace.
+func (s *Sandbox) Quarantine(reason string) {
+	s.qmu.Lock()
+	s.quarantine = reason
+	s.qmu.Unlock()
+}
+
+// Quarantined informa se o sandbox está bloqueado e por quê.
+func (s *Sandbox) Quarantined() (bool, string) {
+	s.qmu.Lock()
+	defer s.qmu.Unlock()
+	return s.quarantine != "", s.quarantine
+}
+
+func (s *Sandbox) usable() error {
+	if q, why := s.Quarantined(); q {
+		return fmt.Errorf("%w (%s)", ErrQuarantined, why)
+	}
+	return nil
 }
 
 func randomID() string {
@@ -245,6 +274,9 @@ var envKey = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`)
 func (s *Sandbox) Exec(ctx context.Context, es ExecSpec) (ExecResult, error) {
 	if len(es.Cmd) == 0 {
 		return ExecResult{}, ErrInvalidSpec
+	}
+	if err := s.usable(); err != nil {
+		return ExecResult{}, err
 	}
 	if es.Timeout > 0 {
 		var cancel context.CancelFunc

@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-12 — E11: supervisão de processos (T11-03)
+Prazos absoluto e de inatividade, atividade por saída/CPU/I-O da árvore, encerramento confirmado e quarentena do workspace quando o estado é incerto. [Adendo da entrega](entregas/2026-11-12-E11-sandbox.md) · [ADR-0016](adr/0016-supervisao-de-processos.md).
+
 ## 2026-11-12 — E08: catálogo de ferramentas (T08-03)
 Ferramentas nativas e personalizadas com esquema tipado, permissões e limites; validação, concessão e escopo antes de qualquer efeito; política de risco; saída tipada. MCP segue no T08-04. [Entrega](entregas/2026-11-12-E08-catalogo-de-ferramentas.md) · [ADR-0015](adr/0015-catalogo-de-ferramentas.md).
 
