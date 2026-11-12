@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/ViniciusBernucci/le-fabrique/internal/agents"
+	"github.com/ViniciusBernucci/le-fabrique/internal/decisions"
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
@@ -52,9 +53,18 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 	var impErr *skills.ImportError
 	var valErr *skills.ValidationError
 	var argErr *tools.ArgError
+	var decField *decisions.FieldError
 	switch {
 	case errors.As(err, &field):
 		writeError(w, r, http.StatusBadRequest, "invalid_request", field.Message, "Corrija o campo \""+field.Field+"\" e tente novamente.")
+	case errors.As(err, &decField):
+		writeError(w, r, http.StatusBadRequest, "invalid_request", decField.Message, "Corrija o campo \""+decField.Field+"\" e tente novamente.")
+	case errors.Is(err, decisions.ErrInvalidOption):
+		writeError(w, r, http.StatusBadRequest, "invalid_request", "Opção inexistente neste pedido.", "Escolha uma das alternativas listadas.")
+	case errors.Is(err, decisions.ErrAlreadyResolved):
+		writeError(w, r, http.StatusConflict, "decision_conflict", "O pedido já foi resolvido com outra opção.", "Recarregue a Central: a decisão registrada não pode ser trocada.")
+	case errors.Is(err, decisions.ErrStale):
+		writeError(w, r, http.StatusConflict, "decision_stale", "A execução mudou desde o pedido: ele ficou obsoleto.", "Recarregue a Central; se ainda for preciso, a fábrica abrirá um novo pedido.")
 	case errors.As(err, &argErr):
 		writeError(w, r, http.StatusBadRequest, "invalid_request", argErr.Error(), "Corrija o campo \""+argErr.Field+"\" e tente novamente.")
 	case errors.Is(err, tools.ErrUnknownTool):

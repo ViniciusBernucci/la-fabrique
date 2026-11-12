@@ -433,6 +433,61 @@ paths:
                 required: [items]
                 properties: {items: {type: array, items: {$ref: "#/components/schemas/NodeType"}}}
         "401": {$ref: "#/components/responses/Error"}
+  /decisions:
+    get:
+      tags: [decisões]
+      summary: Central de decisões humanas
+      parameters:
+        - {name: state, in: query, schema: {type: string, enum: [pending, resolved, stale]}, description: "Vazio = todos"}
+      responses:
+        "200":
+          description: Pedidos, do mais recente para o mais antigo
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/DecisionRequest"}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+  /decisions/{id}:
+    get:
+      tags: [decisões]
+      summary: Lê um pedido (problema, alternativas, impacto e evidência)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Pedido, content: {application/json: {schema: {$ref: "#/components/schemas/DecisionRequest"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /decisions/{id}/resolve:
+    post:
+      tags: [decisões]
+      summary: Registra a decisão; altera só a execução do pedido e emite o sinal de retomada
+      description: >
+        Repetir a mesma opção é idempotente (cabeçalho `X-Decision-Replayed: true`, sem novo sinal). Outra opção
+        depois de resolvido → 409 `decision_conflict`. Execução que mudou desde o pedido → 409 `decision_stale`
+        (o pedido vira `stale`). Pedido de operação sensível exige reautenticação (403 `reauth_required`).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [option]
+              additionalProperties: false
+              properties:
+                option: {type: string}
+                note: {type: string, maxLength: 500}
+      responses:
+        "200": {description: Pedido resolvido, content: {application/json: {schema: {$ref: "#/components/schemas/DecisionRequest"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
   /tools:
     get:
       tags: [ferramentas]
@@ -1277,3 +1332,37 @@ components:
         operation: {type: string, description: "Integração: operação do conector"}
         requires: {type: array, items: {type: string}}
         version: {type: integer}
+    DecisionOption:
+      type: object
+      required: [id, label, description]
+      properties:
+        id: {type: string}
+        label: {type: string}
+        description: {type: string}
+    DecisionEvidence:
+      type: object
+      required: [label, text]
+      properties:
+        label: {type: string}
+        text: {type: string, description: "Já redigido: sem segredos"}
+    DecisionRequest:
+      type: object
+      required: [id, project_id, execution_id, node_id, kind, title, problem, impact, evidence, options, state, execution_version, resolution_option, resolution_note, resolved_at, version, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        execution_id: {type: string, format: uuid}
+        node_id: {type: string}
+        kind: {type: string, enum: [conflict, missing_requirement, sensitive_operation, uncertain_result, pr_closed, other]}
+        title: {type: string}
+        problem: {type: string}
+        impact: {type: string}
+        evidence: {type: array, items: {$ref: "#/components/schemas/DecisionEvidence"}}
+        options: {type: array, minItems: 2, maxItems: 6, items: {$ref: "#/components/schemas/DecisionOption"}}
+        state: {type: string, enum: [pending, resolved, stale]}
+        execution_version: {type: integer}
+        resolution_option: {type: string}
+        resolution_note: {type: string}
+        resolved_at: {type: [string, "null"], format: date-time}
+        version: {type: integer}
+        created_at: {type: string, format: date-time}

@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-12 — E13: pedidos e decisões humanas (T13-02)
+Central de Decisões com pedidos por execução, resolução transacional restrita à execução afetada, decisão repetida e obsoleta com resultado definido, e reautenticação para operações sensíveis. [Entrega](entregas/2026-11-12-E13-decisoes-humanas.md) · [ADR-0017](adr/0017-pedidos-e-decisoes-humanas.md).
+
 ## 2026-11-12 — E11: supervisão de processos (T11-03)
 Prazos absoluto e de inatividade, atividade por saída/CPU/I-O da árvore, encerramento confirmado e quarentena do workspace quando o estado é incerto. [Adendo da entrega](entregas/2026-11-12-E11-sandbox.md) · [ADR-0016](adr/0016-supervisao-de-processos.md).
 

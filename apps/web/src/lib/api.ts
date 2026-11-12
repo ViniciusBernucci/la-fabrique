@@ -406,6 +406,34 @@ export interface Tool {
   version?: number;
 }
 
+export type DecisionKind =
+  | "conflict"
+  | "missing_requirement"
+  | "sensitive_operation"
+  | "uncertain_result"
+  | "pr_closed"
+  | "other";
+
+export interface DecisionRequest {
+  id: string;
+  project_id: string;
+  execution_id: string;
+  node_id: string;
+  kind: DecisionKind;
+  title: string;
+  problem: string;
+  impact: string;
+  evidence: { label: string; text: string }[];
+  options: { id: string; label: string; description: string }[];
+  state: "pending" | "resolved" | "stale";
+  execution_version: number;
+  resolution_option: string;
+  resolution_note: string;
+  resolved_at: string | null;
+  version: number;
+  created_at: string;
+}
+
 const BASE = "/api";
 
 /** Token CSRF da sessão atual (memória; o servidor o devolve em /session e no login). */
@@ -522,6 +550,12 @@ export const api = {
   ) => put<Workflow>(`/workflows/${encodeURIComponent(id)}`, input),
   validateWorkflowGraph: (graph: WorkflowGraph, signal?: AbortSignal) =>
     post<{ issues: WorkflowIssue[] }>("/workflows/validate", { graph }, signal),
+
+  // Central de decisões.
+  listDecisions: (state: "pending" | "resolved" | "stale", signal?: AbortSignal) =>
+    request<{ items: DecisionRequest[] }>(`/decisions?state=${state}`, { signal }),
+  resolveDecision: (id: string, option: string, note: string) =>
+    post<DecisionRequest>(`/decisions/${encodeURIComponent(id)}/resolve`, { option, note }),
 
   // Catálogo de ferramentas (leitura; o cadastro de personalizadas é por API).
   listTools: (signal?: AbortSignal) => request<{ items: Tool[] }>("/tools", { signal }),
