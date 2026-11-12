@@ -201,7 +201,7 @@ func TestCatalogIsConsistent(t *testing.T) {
 			}
 		}
 	}
-	for _, want := range []string{TStart, TEnd, TAgent, TSkill, TScript, TChecks, TGit, TDocs, TCondition, TLoop, TWait, THuman, TSubflow, TConverge} {
+	for _, want := range []string{TStart, TEnd, TAgent, TSkill, TScript, TChecks, TGit, TDocs, TCondition, TLoop, TWait, THuman, TSubflow, TConverge, TFork} {
 		if !seen[want] {
 			t.Errorf("tipo %s ausente do catálogo", want)
 		}

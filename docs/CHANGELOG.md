@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-12 — E07: motor de workflows (T07-02)
+Motor determinístico com estado serializável, condições, loops limitados, espera durável, decisão humana, ramificação/convergência, rotas de erro e subfluxos expandidos em linha (sem recursão). Executores reais seguem em outros épicos. [Entrega](entregas/2026-11-12-E07-motor-de-workflows.md) · [ADR-0010](adr/0010-motor-de-workflows.md).
+
 ## 2026-11-12 — E07: editor visual de workflows (T07-01)
 Documento de workflow, catálogo de nós, validador com nó/campo, API de rascunhos e editor de canvas. Publicação, motor e seleção por regras seguem em T07-02 a T07-04. [Entrega](entregas/2026-11-12-E07-editor-de-workflows.md) · [ADR-0009](adr/0009-documento-de-workflow-e-validacao.md).
 

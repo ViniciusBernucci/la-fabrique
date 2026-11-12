@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E07 (T07-01)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E07 (T07-02)._
 
 ## Resumo
 
-**9 feitos · 11 parciais · 47 pendentes** de 67 tickets.
+**10 feitos · 11 parciais · 46 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -74,7 +74,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E07 (T07-01)._
 
 - [x] **[T07-01](03-BACKLOG.md#t07-01)** — Construir editor visual de workflows · dep.: T03-03.
   - PASS: catálogo de 14 tipos de nó, validador com nó/campo (ciclo só via loop com limite, portas, uma conexão por saída/entrada, obrigatórios), fluxo complexo salvo e reaberto idêntico em outra sessão, rascunho inválido salvo com problemas, concorrência e CSRF, editor de canvas (arrastar, conectar, propriedades, validação ao editar). Editor em navegador real NOT_RUN; sem zoom/pan/desfazer. Revisão independente NOT_RUN. Entrega: [E07](../entregas/2026-11-12-E07-editor-de-workflows.md).
-- [ ] **[T07-02](03-BACKLOG.md#t07-02)** — Executar nós e estruturas de controle · dep.: T07-01, T03-02.
+- [x] **[T07-02](03-BACKLOG.md#t07-02)** — Executar nós e estruturas de controle · dep.: T07-01, T03-02.
+  - PASS (`-race`): ramos e convergência (`any`/`all`), loop limitado (limite e saída antecipada), espera durável retomada de estado JSON persistido, decisão humana, `fork` sequencial, rotas de erro, expressões, subfluxos expandidos em linha com recursão/profundidade bloqueadas, determinismo. **Limite:** executores reais (agente, skill, script, Git) NOT_RUN — são de E09/E11/E13/E15; sem persistência de execuções no banco. Revisão independente NOT_RUN. Entrega: [E07 motor](../entregas/2026-11-12-E07-motor-de-workflows.md).
 - [ ] **[T07-03](03-BACKLOG.md#t07-03)** — Publicar e congelar configuração efetiva · dep.: T07-02, T08-01, T09-02.
 - [ ] **[T07-04](03-BACKLOG.md#t07-04)** — Selecionar fluxo e subfluxo por regras · dep.: T07-03.
 

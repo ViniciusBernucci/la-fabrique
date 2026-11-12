@@ -19,6 +19,7 @@ const (
 	THuman     = "human_decision"
 	TSubflow   = "subflow"
 	TConverge  = "converge"
+	TFork      = "fork"
 )
 
 // Port names.
@@ -114,6 +115,7 @@ func Catalog() []NodeType {
 		{Type: TSubflow, Label: "Subfluxo", Category: "controle", Inputs: []string{PortIn}, Outputs: exec, Fields: []FieldSpec{
 			{Name: "workflow_id", Label: "Subfluxo (ID)", Kind: KindText, Required: true, Hint: "ID de um workflow do tipo subfluxo"},
 		}},
+		{Type: TFork, Label: "Ramificação", Category: "controle", Inputs: []string{PortIn}, Outputs: []string{"a", "b"}},
 		{Type: TConverge, Label: "Convergência", Category: "controle", Inputs: []string{PortIn}, MultiIn: true, Outputs: []string{PortOut}, Fields: []FieldSpec{
 			{Name: "mode", Label: "Modo", Kind: KindEnum, Required: true, Options: []string{"all", "any"}},
 		}},

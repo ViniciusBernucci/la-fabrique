@@ -12,7 +12,15 @@ var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 
 // Validate verifica o grafo e devolve todos os problemas com nó e campo. Um
 // rascunho pode ser salvo inválido; só a publicação (T07-03) exige zero problemas.
-func Validate(g Graph) []Issue {
+func Validate(g Graph) []Issue { return validate(g, idPattern) }
+
+// flatIDPattern aceita os IDs gerados por Flatten ("<subfluxo>/<nó>").
+var flatIDPattern = regexp.MustCompile(`^[A-Za-z0-9_/-]{1,512}$`)
+
+// ValidateFlat valida um grafo já achatado (IDs prefixados por Flatten).
+func ValidateFlat(g Graph) []Issue { return validate(g, flatIDPattern) }
+
+func validate(g Graph, idRe *regexp.Regexp) []Issue {
 	var issues []Issue
 	add := func(node, field, code, msg string) {
 		issues = append(issues, Issue{Node: node, Field: field, Code: code, Message: msg})
@@ -29,7 +37,7 @@ func Validate(g Graph) []Issue {
 	byID := map[string]Node{}
 	starts, ends := 0, 0
 	for _, n := range g.Nodes {
-		if !idPattern.MatchString(n.ID) {
+		if !idRe.MatchString(n.ID) {
 			add(n.ID, "", "invalid_id", "Identificador de nó inválido.")
 			continue
 		}
@@ -162,6 +170,16 @@ func validateProps(n Node, nt NodeType, add func(node, field, code, msg string))
 		case KindEnum:
 			if !contains(f.Options, text) {
 				add(n.ID, f.Name, "invalid_option", fmt.Sprintf("O campo %q deve ser um de: %s.", f.Label, strings.Join(f.Options, ", ")))
+			}
+		}
+	}
+	// Expressões precisam ser analisáveis (a avaliação em tempo de execução é do motor).
+	for _, f := range []string{"expression", "condition"} {
+		if (n.Type == TCondition && f == "expression") || (n.Type == TLoop && f == "condition") {
+			if src, _ := n.Props[f].(string); strings.TrimSpace(src) != "" {
+				if _, err := ParseExpr(src); err != nil {
+					add(n.ID, f, "invalid_expression", err.Error())
+				}
 			}
 		}
 	}
