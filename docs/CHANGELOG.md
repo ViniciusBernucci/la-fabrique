@@ -1,3 +1,6 @@
+## 2026-11-12 — E05: perfil técnico e recursos do projeto (T05-03)
+Descoberta segura de manifestos (sugere com origem, nunca lê `.env`), perfil com segredo só por referência, associação explícita de recursos globais com sobrescrita local, validação que bloqueia workflow em rascunho e conta incompatível, e aptidão para executar. Repositório real e tela NOT_RUN. [Entrega](entregas/2026-11-12-E05-perfil-e-recursos.md) · [ADR-0034](adr/0034-perfil-tecnico-e-recursos-do-projeto.md).
+
 ## 2026-11-12 — E06: sincronização manual e preflight (T06-04)
 Leitura da origem só sob demanda (manual ou preflight), com diferenças registradas uma vez, importação deduplicada, elegibilidade/prioridade reavaliadas e conflito com edição humana. Plataformas reais, GitHub e tela NOT_RUN. [Entrega](entregas/2026-11-12-E06-sincronizacao-manual-e-preflight.md) · [ADR-0033](adr/0033-sincronizacao-manual-e-preflight.md).
 

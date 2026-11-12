@@ -276,8 +276,13 @@ func (s *Store) Set(ctx context.Context, projectID string, cfg Config) (Config, 
 
 // Get lê as regras (em ordem) e o padrão.
 func (s *Store) Get(ctx context.Context, projectID string) (Config, error) {
+	return Load(ctx, s.DB, projectID)
+}
+
+// Load lê a configuração com qualquer consulta (inclusive dentro de uma transação).
+func Load(ctx context.Context, q persistence.DBTX, projectID string) (Config, error) {
 	cfg := Config{Rules: []Rule{}}
-	rows, err := s.DB.Query(ctx, `SELECT id, position, name, conditions, workflow_id, COALESCE(subflow_id::text, ''), enabled FROM selection_rules WHERE project_id = $1 ORDER BY position`, projectID)
+	rows, err := q.Query(ctx, `SELECT id, position, name, conditions, workflow_id, COALESCE(subflow_id::text, ''), enabled FROM selection_rules WHERE project_id = $1 ORDER BY position`, projectID)
 	if err != nil {
 		return cfg, persistence.MapError(err)
 	}
@@ -293,7 +298,7 @@ func (s *Store) Get(ctx context.Context, projectID string) (Config, error) {
 	}
 	rows.Close()
 	var t Target
-	err = s.DB.QueryRow(ctx, `SELECT workflow_id, COALESCE(subflow_id::text, '') FROM selection_defaults WHERE project_id = $1`, projectID).Scan(&t.WorkflowID, &t.SubflowID)
+	err = q.QueryRow(ctx, `SELECT workflow_id, COALESCE(subflow_id::text, '') FROM selection_defaults WHERE project_id = $1`, projectID).Scan(&t.WorkflowID, &t.SubflowID)
 	if err == nil {
 		cfg.Default = &t
 	} else if !errors.Is(persistence.MapError(err), persistence.ErrNotFound) {

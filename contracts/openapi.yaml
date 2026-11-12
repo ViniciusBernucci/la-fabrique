@@ -495,6 +495,89 @@ paths:
           content: {application/json: {schema: {type: object, required: [ok, problems], properties: {ok: {type: boolean}, problems: {type: array, items: {$ref: "#/components/schemas/PublishProblem"}}}}}}
         "401": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/profile/discover:
+    post:
+      tags: [recursos]
+      summary: Inspeciona manifestos enviados (package.json, go.mod, Makefile, Compose, .env.example) e sugere comandos com a origem
+      description: >
+        Nada é lido do disco do servidor nem executado. Só os NOMES de .env.example são devolvidos.
+        As sugestões só viram perfil por escolha explícita (PUT /profile).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [files], properties: {files: {type: object, additionalProperties: {type: string}}}}}}
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectDiscovery"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+
+  /projects/{id}/profile:
+    get:
+      tags: [recursos]
+      summary: Perfil técnico do projeto (comandos com origem, serviços, referências de segredo, última descoberta)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectProfile"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+
+    put:
+      tags: [recursos]
+      summary: Grava o perfil escolhido. Segredo só por referência connection:<id>; literal é recusado
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ProjectProfileInput"}}}
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectProfile"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+
+  /projects/{id}/resources:
+    get:
+      tags: [recursos]
+      summary: Recursos globais associados explicitamente ao projeto, com a configuração efetiva dos agentes
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectResources"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+
+    put:
+      tags: [recursos]
+      summary: Substitui, de forma atômica, as associações. A sobrescrita local nunca altera o recurso global
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [resources], properties: {resources: {type: array, items: {$ref: "#/components/schemas/ProjectResourceInput"}}}}}}
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectResources"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+
+  /projects/{id}/readiness:
+    get:
+      tags: [recursos]
+      summary: Diz se o projeto pode iniciar uma execução agora (ativo, recursos válidos, fluxo padrão publicado)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectReadiness"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+
   /projects/{id}/sync:
     post:
       tags: [sincronizacao]
@@ -1328,6 +1411,54 @@ components:
         mapped_priority: {type: [integer, "null"], minimum: 0, maximum: 4}
         subtask: {type: boolean}
         url: {type: string}
+    ProjectDiscovery:
+      type: object
+      required: [stack, commands, services, secret_names, inspected, skipped]
+      properties:
+        stack: {type: array, items: {type: string}}
+        commands: {type: array, items: {type: object, required: [name, value, source], properties: {name: {type: string}, value: {type: string}, source: {type: string}}}}
+        services: {type: array, items: {type: string}}
+        secret_names: {type: array, items: {type: string}}
+        inspected: {type: array, items: {type: string}}
+        skipped: {type: array, items: {type: string}}
+    ProjectProfile:
+      type: object
+      required: [project_id, commands, services, secret_refs, version]
+      properties:
+        project_id: {type: string, format: uuid}
+        commands: {type: object, additionalProperties: {type: object, properties: {value: {type: string}, source: {type: string}}}}
+        services: {type: array, items: {type: string}}
+        secret_refs: {type: object, additionalProperties: {type: string}}
+        discovery: {oneOf: [{$ref: "#/components/schemas/ProjectDiscovery"}, {type: "null"}]}
+        discovered_at: {type: [string, "null"], format: date-time}
+        version: {type: integer}
+    ProjectProfileInput:
+      type: object
+      required: [expected_version]
+      properties:
+        expected_version: {type: integer, minimum: 0}
+        commands: {type: object, additionalProperties: {type: string}}
+        services: {type: array, items: {type: string}}
+        secret_refs: {type: object, additionalProperties: {type: string}}
+    ProjectResourceInput:
+      type: object
+      required: [kind, ref]
+      properties:
+        kind: {type: string, enum: [workflow, agent, skill, tool, model]}
+        ref: {type: string}
+        override: {type: object, additionalProperties: true}
+    ProjectResources:
+      type: object
+      required: [resources]
+      properties:
+        resources: {type: array, items: {type: object, required: [kind, ref, name, override], properties: {kind: {type: string}, ref: {type: string}, name: {type: string}, override: {type: object, additionalProperties: true}, effective: {type: object, additionalProperties: true}}}}
+    ProjectReadiness:
+      type: object
+      required: [ready, problems]
+      properties:
+        ready: {type: boolean}
+        problems: {type: array, items: {type: string}}
+        target: {type: object, properties: {workflow_id: {type: string}, subflow_id: {type: string}}}
     SyncChange:
       type: object
       required: [remote_id, key, kind, fields, before_version, after_version]

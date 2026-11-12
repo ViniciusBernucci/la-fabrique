@@ -306,7 +306,28 @@ func (e *ValidationError) Error() string {
 var notVerified = []string{
 	"Acesso remoto ao repositório GitHub (T05-02, depende do adaptador GitHub — T15-01)",
 	"Permissão de escrita na origem: só é provada ao escrever, no primeiro uso (T06-03)",
-	"Workflows, agentes e demais recursos associados (T05-03)",
+}
+
+// Validator acrescenta itens ao relatório (ex.: recursos associados, T05-03).
+type Validator func(ctx context.Context, db persistence.DBTX, p Project) ([]Check, error)
+
+type namedValidator struct {
+	name string
+	fn   Validator
+}
+
+var validators []namedValidator
+
+// AddValidator registra um validador adicional (idempotente por nome). Chame na
+// inicialização do pacote que o define, nunca em tempo de execução.
+func AddValidator(name string, fn Validator) {
+	for i := range validators {
+		if validators[i].name == name {
+			validators[i].fn = fn
+			return
+		}
+	}
+	validators = append(validators, namedValidator{name, fn})
 }
 
 type connInfo struct {
@@ -387,6 +408,14 @@ func Validate(ctx context.Context, db persistence.DBTX, p Project) (Report, erro
 		return Report{}, err
 	}
 	add("source.remote", "source", "Verificação remota da origem", remoteOK, remoteAction)
+
+	for _, v := range validators {
+		extra, err := v.fn(ctx, db, p)
+		if err != nil {
+			return Report{}, err
+		}
+		checks = append(checks, extra...)
+	}
 
 	ok := true
 	for _, c := range checks {
