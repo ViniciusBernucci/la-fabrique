@@ -1,3 +1,6 @@
+## 2026-11-12 — E15: GitHub, branches, commits e push (T15-01)
+Conexão validada por clone, commit por tarefa validada (fast-import, trailers), push restrito à branch da feature com prova por ref pelo ledger. GitHub real NOT_RUN. [Entrega](entregas/2026-11-12-E15-github-branch-commit-push.md) · [ADR-0024](adr/0024-github-branch-commit-e-push.md).
+
 ## 2026-11-12 — E12: checkpoints íntegros (T12-01)
 Captura do workspace com hashes, gravação atômica, restauração em container novo com comparação de árvore e parada segura. Git real NOT_RUN. [Entrega](entregas/2026-11-12-E12-checkpoints.md) · [ADR-0023](adr/0023-checkpoints-integros.md).
 
