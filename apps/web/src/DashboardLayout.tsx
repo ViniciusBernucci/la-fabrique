@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import { type LayoutChoice, useLayoutPreference } from "./layout-preference";
 import { OrchestrationCore } from "./OrchestrationCore";
+import { SobrioHome } from "./SobrioHome";
 import "./home-dashboard.css";
 
-export type HomeDestination = "control" | "settings" | "tasks" | "account" | "users";
+export type HomeDestination = "control" | "settings" | "tasks" | "account" | "users" | "office";
 type IconName =
   | "home"
   | "folder"
@@ -104,12 +106,12 @@ const navigation: { name: string; icon: IconName; destination?: HomeDestination 
   { name: "Projetos", icon: "folder", destination: "control" },
   { name: "Tarefas", icon: "content", destination: "tasks" },
   { name: "Agentes de IA", icon: "robot", destination: "settings" },
-  { name: "Núcleo IA", icon: "robot" },
+  { name: "Núcleos", icon: "robot" },
   { name: "Pipeline", icon: "chart" },
   { name: "Revisões", icon: "content" },
   { name: "Repositórios", icon: "folder" },
   { name: "Histórico", icon: "clock" },
-  { name: "Escritório", icon: "home" },
+  { name: "Escritório", icon: "home", destination: "office" },
   { name: "Usuários", icon: "users", destination: "users" },
   { name: "Configurações", icon: "settings", destination: "settings" },
 ];
@@ -190,7 +192,7 @@ const notifications: {
 ];
 const agents = [
   {
-    name: "JARVIS",
+    name: "Núcleos",
     role: " (Orquestrador)",
     status: "Online",
     progress: 100,
@@ -238,12 +240,17 @@ export function DashboardLayout({
   onHome,
   activeDestination,
   children,
+  layout: layoutOverride,
 }: {
   onNavigate: (destination: HomeDestination) => void;
   onHome?: () => void;
   activeDestination?: HomeDestination;
   children?: ReactNode;
+  /** Força um visual (testes/demonstração); por padrão usa a escolha salva no seletor. */
+  layout?: LayoutChoice;
 }) {
+  const [storedLayout, setLayout] = useLayoutPreference();
+  const layout = layoutOverride ?? storedLayout;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -319,11 +326,16 @@ export function DashboardLayout({
               ? "Minha conta"
               : activeDestination === "tasks"
                 ? "Tarefas"
-                : "Painel")
+                : activeDestination === "office"
+                  ? "Escritório"
+                  : "Painel")
     );
   }
   return (
-    <div className={`home-dashboard${sidebarCollapsed ? " is-menu-collapsed" : ""}`}>
+    <div
+      className={`home-dashboard${sidebarCollapsed ? " is-menu-collapsed" : ""}`}
+      data-layout={layout}
+    >
       <a className="home-skip" href="#home-content">
         Ir para o conteúdo
       </a>
@@ -406,6 +418,24 @@ export function DashboardLayout({
               <small>Centro de Comando</small>
             </span>
           </button>
+          <fieldset className="layout-switch">
+            <legend className="home-sr-only">Visual do sistema</legend>
+            {(
+              [
+                ["novo", "Novo"],
+                ["antigo", "Antigo"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                type="button"
+                key={value}
+                aria-pressed={layout === value}
+                onClick={() => setLayout(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </fieldset>
           <span className="home-operational">
             <i />
             OPERACIONAL <small>· demonstração</small>
@@ -479,6 +509,20 @@ export function DashboardLayout({
           <section id="home-content" className="workspace-content" tabIndex={-1}>
             {children}
           </section>
+        ) : layout === "novo" ? (
+          <SobrioHome
+            agents={agents}
+            notifications={notifications}
+            greeting={greeting}
+            dateLabel={now.toLocaleDateString("pt-BR", {
+              weekday: "short",
+              day: "numeric",
+              month: "short",
+            })}
+            onNewProject={() => onNavigate("control")}
+            onNewTask={() => onNavigate("tasks")}
+            onPreview={setPreview}
+          />
         ) : (
           <main id="home-content" className="home-columns" tabIndex={-1}>
             <h1 className="home-sr-only">Central de controle La fabrique</h1>
@@ -526,7 +570,7 @@ export function DashboardLayout({
                 <OrchestrationCore agents={agents} />
                 <div className="home-greeting">
                   <h2>{greeting}, Administrador</h2>
-                  <p>JARVIS · Workspace de demonstração</p>
+                  <p>Núcleos · Workspace de demonstração</p>
                   <button
                     type="button"
                     className="home-command"

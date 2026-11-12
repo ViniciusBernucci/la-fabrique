@@ -2,6 +2,14 @@
 
 # Changelog
 
+## 2026-10-25 — FAC-043
+
+Visual sóbrio aplicado ao painel com seletor Novo/Antigo no topo (padrão Novo, HUD preservado como Antigo). Home nova com decisão pendente, indicadores e Orquestração em destaque; JARVIS renomeado para Núcleos. 86 testes web, typecheck, build e lint PASS. [Entrega](09-entregas/2026/2026-10-25-FAC-043-visual-sobrio.md).
+
+## 2026-10-24 — FAC-042
+
+Escritório virtual isométrico no item Escritório: agentes como funcionários (mesa e digitação, entrega indo à mesa do outro, café/leitura quando livres), 10 mesas e dados simulados preparados para eventos reais. Canvas 2D sem dependência nova, desenho só com o painel visível. 82 testes web, typecheck, build e lint PASS. [Entrega](09-entregas/2026/2026-10-24-FAC-042-escritorio-virtual.md).
+
 ## 2026-10-24 — Integração FAC-036 e ARQ-MEM-001
 
 FAC-036 e ARQ-MEM-001 integrados à developer local; FAC-036 verificado em browser com fixture descartável (7 verificações PASS). Dois ADR-007 coexistem até decisão de numeração. [Verificação FAC-036](09-entregas/2026/evidencias/FAC-036/revisao-integracao.md).

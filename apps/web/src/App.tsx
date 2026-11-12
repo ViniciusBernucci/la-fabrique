@@ -25,6 +25,10 @@ import { TasksPanel } from "./TasksPanel";
 const AccountPanel = lazy(() =>
   import("./AccountPanel").then((module) => ({ default: module.AccountPanel })),
 );
+// Carregado só quando o escritório é aberto: o canvas não pesa nas outras telas.
+const OfficePanel = lazy(() =>
+  import("./office/OfficePanel").then((module) => ({ default: module.OfficePanel })),
+);
 
 export function App() {
   const [showHome, setShowHome] = useState(
@@ -38,7 +42,7 @@ export function App() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [message, setMessage] = useState("Informe o token administrativo.");
   const [activeArea, setActiveArea] = useState<
-    "control" | "settings" | "tasks" | "account" | "users"
+    "control" | "settings" | "tasks" | "account" | "users" | "office"
   >(() =>
     /^#account-(invite|verify|reset|transfer|billing)=/.test(window.location.hash)
       ? "account"
@@ -172,6 +176,18 @@ export function App() {
         }
       >
         <AccountPanel initialTab={activeArea === "users" ? "members" : "profile"} />
+      </Suspense>
+    );
+  else if (!showHome && activeArea === "office")
+    content = (
+      <Suspense
+        fallback={
+          <main className="shell">
+            <p role="status">Abrindo o escritório…</p>
+          </main>
+        }
+      >
+        <OfficePanel />
       </Suspense>
     );
   else if (!showHome && activeArea === "tasks")

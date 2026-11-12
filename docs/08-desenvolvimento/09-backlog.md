@@ -217,3 +217,11 @@ FAC-036, adendo 2026-10-24: integrado localmente à developer no merge `82bcfc7`
 Pedido do responsável: oito planos e documentação didática, sem backlog detalhado nesta etapa. [Planos](planos-memoria-e-decisoes/00-README.md), [requisitos e pendências](planos-memoria-e-decisoes/01-decisoes-e-dependencias.md), [matriz](planos-memoria-e-decisoes/10-matriz-fluxo.md) e [entrega documental](../09-entregas/2026/2026-10-09-ARQ-MEM-001-planos-memoria-decisoes.md). Estado: DOCUMENTADO / AWAITING_HUMAN para revisão exata; nenhum ticket de software promovido ou novo ID FAC criado. ARQ-MEM-001 é identificador documental desta análise, não ticket de implementação. Tech Lead define tickets posteriores após avaliação conjunta.
 
 ARQ-MEM-001, adendo 2026-10-24: documentação integrada localmente à developer no merge `05a9877`. Colisão de número com ADR-007 da conta (FAC-038) mantida por nome de arquivo, sem renumerar; decisão de numeração pendente do responsável. Estado DOCUMENTADO / AWAITING_HUMAN inalterado.
+
+## FAC-042 — Escritório virtual isométrico
+
+READY por pedido do responsável em 2026-10-24; IMPLEMENTADO / AWAITING_HUMAN no diff local sobre `d923802`. Demonstração visual com dados simulados e contrato `OfficeFeed` para eventos reais; sem API, dependências ou ações. Browser no app completo e revisão independente NOT_RUN; aceite exato pendente. [Ticket](tickets/controle/FAC-042-escritorio-virtual.md) · [Entrega](../09-entregas/2026/2026-10-24-FAC-042-escritorio-virtual.md).
+
+## FAC-043 — Visual sóbrio com seletor Novo/Antigo
+
+READY por pedido do responsável em 2026-10-25; IMPLEMENTADO / AWAITING_HUMAN no diff local sobre `d923802`, junto com FAC-042. Tema por tokens + home nova + renomeação para Núcleos; HUD mantido como opção. Pendentes: decisão final de visual, página de lista de projetos, verificação no app completo, revisão independente e aceite. [Ticket](tickets/controle/FAC-043-visual-sobrio.md) · [Entrega](../09-entregas/2026/2026-10-25-FAC-043-visual-sobrio.md).

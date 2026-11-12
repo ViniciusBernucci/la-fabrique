@@ -42,3 +42,12 @@ it("exposes the user account entry and a real users destination", () => {
   expect(html).not.toContain("Perfil de demonstração");
   expect(html).toContain("Perfil e equipe");
 });
+
+it("abre o escritório virtual como destino próprio", () => {
+  const html = renderToStaticMarkup(
+    <DashboardLayout onNavigate={() => undefined} activeDestination="office">
+      <p>Escritório</p>
+    </DashboardLayout>,
+  );
+  expect(html).toMatch(/aria-label="Escritório"[^>]*class="is-active" aria-current="page"/);
+});
