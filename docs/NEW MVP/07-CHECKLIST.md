@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E05 (T05-02 origem)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E02 (T02-01, T02-03 preparo)._
 
 ## Resumo
 
-**8 feitos · 8 parciais · 51 pendentes** de 67 tickets.
+**8 feitos · 10 parciais · 49 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -24,10 +24,12 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E05 (T05-02 origem)._
 
 ## E02 — VPS, CI e recuperação da instalação
 
-- [ ] **[T02-01](03-BACKLOG.md#t02-01)** — Inventariar e medir VPS existente · dep.: T01-01.
+- [~] **[T02-01](03-BACKLOG.md#t02-01)** — Inventariar e medir VPS existente · dep.: T01-01.
+  - Pronto: `scripts/vps-inventory.sh` e `scripts/vps-benchmark.sh` (somente leitura/não destrutivos; sintaxe e execução parcial validadas localmente) e o registro [vps-inventario.md](../operacao/vps-inventario.md) com valores "NÃO MEDIDO" identificados. **NOT_RUN:** nenhuma medida da VPS (sem acesso).
 - [~] **[T02-02](03-BACKLOG.md#t02-02)** — Configurar ambientes, rede, proxy e containers · dep.: T01-03, T02-01.
   - Compose dev/prod PASS (só web publicado, rootfs RO, healthchecks). Reboot, TLS e homologação NOT_RUN; limites não medidos.
-- [ ] **[T02-03](03-BACKLOG.md#t02-03)** — Automatizar CI e promoção por revisão · dep.: T01-03, T02-02, T03-01.
+- [~] **[T02-03](03-BACKLOG.md#t02-03)** — Automatizar CI e promoção por revisão · dep.: T01-03, T02-02, T03-01.
+  - Pronto: `.github/workflows/ci.yml` (Go com integração em PostgreSQL, web, segredos/dependências, build de imagens com tag = commit, smoke e evidência por commit; sem `secrets.*`) e [ci-e-promocao.md](../operacao/ci-e-promocao.md) com promoção e rollback. **NOT_RUN:** o workflow nunca executou no GitHub (sem push/autorização); checks obrigatórios na `main` pendentes; ações fixadas por tag, não por SHA.
 - [~] **[T02-04](03-BACKLOG.md#t02-04)** — Documentar e ensaiar backup e restauração · dep.: T02-02, T03-02, T04-03, T12-01.
   - Só o necessário p/ dev: backup/restore do banco PASS em dev. Chave do cofre (`VAULT_KEY`) documentada; decifrar com chave certa/errada PASS em integração. Restore ponta a ponta (dump + chave) em destino isolado, volumes e snapshot da VPS pendentes.
 

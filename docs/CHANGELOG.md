@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-12 — E02: scripts de inventário da VPS e CI (T02-01, T02-03 parciais)
+Scripts somente leitura para inventariar e medir a VPS e workflow de CI com imagens por commit e evidência. Nada executado contra a VPS nem no GitHub (NOT_RUN). [Entrega](entregas/2026-11-12-E02-vps-e-ci.md).
+
 ## 2026-11-12 — E05: origem do projeto com verificação e preview (T05-02 parcial)
 Critérios de elegibilidade, mapa de prioridade e escopo; verificação remota da origem (Jira/ClickUp) com preview dos itens elegíveis; ativação exige verificação atual; uma lista não alimenta dois projetos ativos. GitHub segue não verificado (T15-01). Detalhes: [adendo da entrega](entregas/2026-11-12-E05-cadastro-de-projeto.md).
 

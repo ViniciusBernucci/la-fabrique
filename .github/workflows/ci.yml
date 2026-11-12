@@ -1,0 +1,124 @@
+# CI da La fabrique (T02-03). Nenhum job de PR usa segredos do repositório:
+# o banco é descartável e as credenciais abaixo existem só para o CI.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [developer, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.27.3"
+  NODE_VERSION: "24"
+  CI_DB_PASSWORD: ci-only-descartavel # banco efêmero do job; não é segredo de nenhum ambiente
+
+jobs:
+  go:
+    name: Go (lint, unidade, contrato, integração)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: le_fabrique
+          POSTGRES_PASSWORD: ci-only-descartavel
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U le_fabrique" --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: "${{ env.GO_VERSION }}", cache: true}
+      - name: gofmt
+        run: test -z "$(gofmt -l cmd internal db tests)" || (gofmt -l cmd internal db tests; exit 1)
+      - run: go vet ./...
+      - name: Unidade e contrato (sem banco)
+        run: go test -race -count=1 ./internal/... ./tests/contract/...
+      - name: Integração (PostgreSQL real)
+        env:
+          TEST_DATABASE_URL: postgres://le_fabrique:ci-only-descartavel@127.0.0.1:5432/postgres?sslmode=disable
+        run: go test -race -count=1 ./tests/integration/...
+
+  web:
+    name: Web (Biome, tipos, testes, build)
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: apps/web}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "${{ env.NODE_VERSION }}", cache: npm, cache-dependency-path: apps/web/package-lock.json}
+      - run: npm ci
+      - run: npx biome check .
+      - run: npx tsc -b
+      - run: npx vitest run
+      - run: npm run build
+
+  security:
+    name: Segredos e dependências
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Segredos em arquivos rastreados
+        run: scripts/check-secrets.sh
+      - uses: actions/setup-go@v5
+        with: {go-version: "${{ env.GO_VERSION }}", cache: true}
+      - name: Vulnerabilidades Go
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+      - uses: actions/setup-node@v4
+        with: {node-version: "${{ env.NODE_VERSION }}"}
+      - name: Vulnerabilidades npm (produção)
+        working-directory: apps/web
+        run: npm audit --omit=dev --audit-level=high
+
+  build:
+    name: Imagens e smoke
+    runs-on: ubuntu-latest
+    needs: [go, web, security]
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build das imagens (tag = commit)
+        run: |
+          docker build -f infra/images/Dockerfile.backend --target runtime --build-arg CMD=api     -t lafabrique-api:${IMAGE_TAG} .
+          docker build -f infra/images/Dockerfile.backend --target runtime --build-arg CMD=worker  -t lafabrique-worker:${IMAGE_TAG} .
+          docker build -f infra/images/Dockerfile.backend --target runtime --build-arg CMD=migrate -t lafabrique-migrate:${IMAGE_TAG} .
+          docker build -f infra/images/Dockerfile.web --target runtime -t lafabrique-web:${IMAGE_TAG} .
+      - name: Smoke (migrate + API + readyz)
+        run: |
+          set -euo pipefail
+          docker network create ci-net
+          docker run -d --name pg --network ci-net -e POSTGRES_USER=le_fabrique -e POSTGRES_PASSWORD=${CI_DB_PASSWORD} -e POSTGRES_DB=le_fabrique postgres:17-alpine
+          for i in $(seq 1 30); do docker exec pg pg_isready -U le_fabrique -d le_fabrique && break; sleep 2; done
+          DB="postgres://le_fabrique:${CI_DB_PASSWORD}@pg:5432/le_fabrique?sslmode=disable"
+          docker run --rm --network ci-net -e APP_ENV=development -e DATABASE_URL="$DB" lafabrique-migrate:${IMAGE_TAG} up
+          KEY="$(head -c 32 /dev/urandom | base64)" # chave efêmera só deste job
+          docker run -d --name api --network ci-net -p 8480:8480 -e APP_ENV=development -e DATABASE_URL="$DB" -e VAULT_KEY="$KEY" -e API_ADDR=0.0.0.0:8480 lafabrique-api:${IMAGE_TAG}
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8480/api/readyz && exit 0; sleep 2; done
+          docker logs api; exit 1
+      - name: Evidência do commit
+        run: |
+          {
+            echo "{\"commit\":\"${GITHUB_SHA}\",\"run\":\"${GITHUB_RUN_ID}\",\"images\":["
+            first=1
+            for n in api worker migrate web; do
+              id="$(docker image inspect lafabrique-${n}:${IMAGE_TAG} --format '{{.Id}}')"
+              [ $first = 1 ] || echo ","; first=0
+              echo "{\"name\":\"lafabrique-${n}\",\"tag\":\"${IMAGE_TAG}\",\"id\":\"${id}\"}"
+            done
+            echo "]}"
+          } > evidence-${GITHUB_SHA}.json
+          cat evidence-${GITHUB_SHA}.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evidencia-${{ github.sha }}
+          path: evidence-${{ github.sha }}.json
+          if-no-files-found: error
