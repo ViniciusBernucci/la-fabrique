@@ -386,3 +386,23 @@
 .badge--draft {
   color: var(--hud-text-muted);
 }
+.form-wide {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 12px;
+}
+.preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.preview-table th,
+.preview-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--hud-line-strong);
+}
+.preview-table th {
+  color: var(--hud-text-muted);
+  font-weight: 500;
+}

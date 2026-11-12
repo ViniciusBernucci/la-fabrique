@@ -1,8 +1,11 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
+	"time"
 
+	"github.com/ViniciusBernucci/le-fabrique/internal/integrations"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
 )
 
@@ -48,9 +51,13 @@ type repositoryBody struct {
 }
 
 type sourceBody struct {
-	Kind         string  `json:"kind"`
-	ConnectionID *string `json:"connection_id"`
-	Container    string  `json:"container"`
+	Kind              string         `json:"kind"`
+	ConnectionID      *string        `json:"connection_id"`
+	Container         string         `json:"container"`
+	EligibilityMarker string         `json:"eligibility_marker"`
+	EligibleStatuses  []string       `json:"eligible_statuses"`
+	PriorityMap       map[string]int `json:"priority_map"`
+	Access            string         `json:"access"`
 }
 
 // updateProject persiste uma etapa do assistente (ou ajuste de dados) com controle
@@ -86,6 +93,8 @@ func (s *Server) updateProject(w http.ResponseWriter, r *http.Request) {
 	if req.Source != nil {
 		patch.Source = &projects.Source{
 			Kind: req.Source.Kind, ConnectionID: req.Source.ConnectionID, Container: req.Source.Container,
+			EligibilityMarker: req.Source.EligibilityMarker, EligibleStatuses: req.Source.EligibleStatuses,
+			PriorityMap: req.Source.PriorityMap, Access: req.Source.Access,
 		}
 	}
 	p, err := projects.Configure(r.Context(), s.db, s.adminID(r), id, req.ExpectedVersion, patch)
@@ -172,4 +181,49 @@ func (s *Server) listProjectChanges(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+// checkProjectSource prova o acesso à origem com a conexão do cofre, devolve o
+// preview dos itens elegíveis e registra o resultado para a configuração atual.
+// Nada é escrito na origem; o segredo não sai do adaptador.
+func (s *Server) checkProjectSource(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.projectID(w, r)
+	if !ok {
+		return
+	}
+	p, err := projects.Get(r.Context(), s.db, id)
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	if p.Source.Kind == "" || p.Source.ConnectionID == nil || p.Source.Container == "" {
+		s.writeDomainError(w, r, projects.ErrSourceIncomplete)
+		return
+	}
+	secret, conn, err := s.vault.Resolve(r.Context(), *p.Source.ConnectionID)
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	if conn.Kind != p.Source.Kind {
+		s.writeDomainError(w, r, projects.ErrSourceIncomplete)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+	var res projects.SourceCheck
+	tr, err := s.trackers(integrations.Config{Kind: conn.Kind, Target: conn.Target, Secret: secret})
+	if err != nil {
+		res = projects.SourceCheck{CheckedAt: time.Now().UTC(), Items: []projects.PreviewItem{}, Steps: []projects.SourceStep{{
+			ID: "credential", Label: "Credencial aceita", Status: projects.StepFailed,
+			Detail: "O destino ou o formato da credencial da conexão é inválido. Corrija a conexão em Conexões.",
+		}}}
+	} else {
+		res = projects.CheckSource(ctx, tr, p, time.Now().UTC())
+	}
+	if err := projects.RecordSourceCheck(r.Context(), s.db, s.adminID(r), id, projects.Fingerprint(p, conn.SecretVersion), res); err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }

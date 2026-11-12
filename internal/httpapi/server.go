@@ -36,6 +36,7 @@ type Server struct {
 	vault    *security.Vault
 	redactor *security.Redactor
 	tester   *integrations.Tester
+	trackers func(integrations.Config) (integrations.Tracker, error)
 }
 
 // Option personaliza o servidor (usado em testes).
@@ -43,6 +44,11 @@ type Option func(*Server)
 
 // WithTester troca o testador de conexões.
 func WithTester(t *integrations.Tester) Option { return func(s *Server) { s.tester = t } }
+
+// WithTrackerFactory troca a fábrica de adaptadores Jira/ClickUp (testes).
+func WithTrackerFactory(f func(integrations.Config) (integrations.Tracker, error)) Option {
+	return func(s *Server) { s.trackers = f }
+}
 
 // WithClock troca o relógio dos códigos TOTP (testes).
 func WithClock(now func() time.Time) Option { return func(s *Server) { s.auth.SetClock(now) } }
@@ -57,7 +63,7 @@ func NewServer(cfg config.API, db Store, log *slog.Logger, opts ...Option) (*Ser
 	s := &Server{
 		cfg: cfg, db: db, log: log, redactor: redactor,
 		vault:  security.NewVault(db, sealer, redactor),
-		tester: integrations.NewTester(),
+		tester: integrations.NewTester(), trackers: integrations.NewTracker,
 		auth: security.NewAuth(db, sealer, security.AuthConfig{
 			SessionTTL: cfg.SessionTTL,
 		}, log),
@@ -132,6 +138,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/projects/{id}", s.protected(s.updateProject))
 	mux.HandleFunc("GET /api/projects/{id}/validation", s.protected(s.validateProject))
 	mux.HandleFunc("GET /api/projects/{id}/changes", s.protected(s.listProjectChanges))
+	mux.HandleFunc("POST /api/projects/{id}/source/check", s.protected(s.checkProjectSource))
 	mux.HandleFunc("POST /api/projects/{id}/activate", s.protected(s.activateProject()))
 	mux.HandleFunc("POST /api/projects/{id}/suspend", s.protected(s.suspendProject()))
 	mux.HandleFunc("POST /api/projects/{id}/resume", s.protected(s.resumeProject()))

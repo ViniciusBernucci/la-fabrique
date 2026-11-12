@@ -6,6 +6,7 @@ import { App } from "../App";
 import type { Connection, Project, ValidationReport } from "../lib/api";
 import { SessionProvider } from "../lib/session";
 import { suggestSlug } from "./NewProjectPage";
+import { parsePriorityMap, parseStatuses } from "./ProjectSetupPage";
 
 const session = {
   id: "s1",
@@ -72,7 +73,15 @@ function project(over: Partial<Project> = {}): Project {
     priority: 2,
     wizard_step: "repository",
     repository: { owner: "", name: "", base_branch: "", connection_id: null },
-    source: { kind: "", connection_id: null, container: "" },
+    source: {
+      kind: "",
+      connection_id: null,
+      container: "",
+      eligibility_marker: "",
+      eligible_statuses: [],
+      priority_map: {},
+      access: "read",
+    },
     version: 2,
     activated_at: null,
     created_at: "2026-11-12T10:00:00Z",
@@ -145,6 +154,17 @@ describe("suggestSlug", () => {
   it("normaliza acentos, espaços e símbolos", () => {
     expect(suggestSlug("  Meu Ápp — Teste! ")).toBe("meu-app-teste");
     expect(suggestSlug("!!!")).toBe("");
+  });
+});
+
+describe("critérios da origem", () => {
+  it("interpreta estados e mapa de prioridade, recusando valores inválidos", () => {
+    expect(parseStatuses(" To Do, Pronto para dev ,, ")).toEqual(["To Do", "Pronto para dev"]);
+    expect(parsePriorityMap("High=1, medium = 2")).toEqual({ high: 1, medium: 2 });
+    expect(parsePriorityMap("")).toEqual({});
+    for (const bad of ["high", "high=9", "high=x", "=1", "a=1=2", "high=1.5"]) {
+      expect(parsePriorityMap(bad)).toEqual(expect.stringContaining("inválido"));
+    }
   });
 });
 
@@ -236,6 +256,10 @@ describe("cadastro de projeto", () => {
               kind: "jira",
               connection_id: "44444444-4444-4444-8444-444444444444",
               container: "ABC",
+              eligibility_marker: "",
+              eligible_statuses: [],
+              priority_map: {},
+              access: "read",
             },
           }),
         ),
@@ -342,5 +366,134 @@ describe("detalhe do projeto", () => {
     await waitFor(() =>
       expect(calls.find((c) => c.url.endsWith("/suspend"))?.body).toEqual({ expected_version: 5 }),
     );
+  });
+});
+
+describe("verificação da origem", () => {
+  const JIRA = "44444444-4444-4444-8444-444444444444";
+  const sourceProject = (over: Partial<Project["source"]> = {}) =>
+    project({
+      wizard_step: "source",
+      source: {
+        kind: "jira",
+        connection_id: JIRA,
+        container: "ABC",
+        eligibility_marker: "lf-ready",
+        eligible_statuses: ["To Do"],
+        priority_map: { high: 1 },
+        access: "read",
+        ...over,
+      },
+    });
+
+  it("salva a origem com os critérios e mostra o preview dos itens elegíveis", async () => {
+    const calls = stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(sourceProject()),
+      "GET /connections": () => json(connections),
+      [`PATCH /projects/${ID}`]: (c) =>
+        json(project({ version: 3, wizard_step: "source", source: c.body?.source as never })),
+      [`POST /projects/${ID}/source/check`]: () =>
+        json({
+          ok: true,
+          has_more: true,
+          checked_at: "2026-11-12T10:00:00Z",
+          steps: [
+            { id: "credential", label: "Credencial aceita", status: "ok", detail: "Conta Bot." },
+            {
+              id: "write",
+              label: "Permissão de escrita",
+              status: "skipped",
+              detail: "Só no primeiro uso.",
+            },
+          ],
+          items: [
+            {
+              key: "ABC-1",
+              title: "Cadastro",
+              status: "To Do",
+              priority: "High",
+              mapped_priority: 1,
+              subtask: false,
+              url: "",
+            },
+            {
+              key: "ABC-4",
+              title: "Outro",
+              status: "To Do",
+              priority: "Highest",
+              mapped_priority: null,
+              subtask: false,
+              url: "",
+            },
+          ],
+        }),
+    });
+    renderAt(`/projects/${ID}/setup`);
+    await screen.findByRole("heading", { name: "Origem de tarefas" });
+    expect(screen.getByLabelText("Marcador de elegibilidade")).toHaveValue("lf-ready");
+    await userEvent.clear(screen.getByLabelText("Mapa de prioridade"));
+    await userEvent.type(screen.getByLabelText("Mapa de prioridade"), "high=1, medium=2");
+    await userEvent.click(screen.getByRole("button", { name: "Salvar e verificar origem" }));
+
+    expect(await screen.findByText("Origem verificada.")).toBeInTheDocument();
+    expect(screen.getByText("ABC-4")).toBeInTheDocument();
+    expect(screen.getByText(/Highest → sem mapa/)).toBeInTheDocument();
+    expect(screen.getByText(/Há mais itens/)).toBeInTheDocument();
+    const patch = calls.find((c) => c.method === "PATCH");
+    expect(patch?.body).toMatchObject({
+      expected_version: 2,
+      wizard_step: "source",
+      source: {
+        eligibility_marker: "lf-ready",
+        eligible_statuses: ["To Do"],
+        priority_map: { high: 1, medium: 2 },
+        access: "read",
+      },
+    });
+    // Salvar antes de verificar: a verificação sempre vale para o que foi salvo.
+    const order = calls.map((c) => `${c.method} ${c.url}`);
+    expect(order.indexOf(`PATCH /projects/${ID}`)).toBeLessThan(
+      order.indexOf(`POST /projects/${ID}/source/check`),
+    );
+  });
+
+  it("mostra o motivo quando a origem falha e não chama a verificação com mapa inválido", async () => {
+    const calls = stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(sourceProject()),
+      "GET /connections": () => json(connections),
+      [`PATCH /projects/${ID}`]: () => json(sourceProject()),
+      [`POST /projects/${ID}/source/check`]: () =>
+        json({
+          ok: false,
+          has_more: false,
+          checked_at: "2026-11-12T10:00:00Z",
+          items: [],
+          steps: [
+            {
+              id: "credential",
+              label: "Credencial aceita",
+              status: "failed",
+              detail: "A credencial não tem permissão para este projeto ou lista.",
+            },
+          ],
+        }),
+    });
+    renderAt(`/projects/${ID}/setup`);
+    await screen.findByRole("heading", { name: "Origem de tarefas" });
+
+    await userEvent.clear(screen.getByLabelText("Mapa de prioridade"));
+    await userEvent.type(screen.getByLabelText("Mapa de prioridade"), "high=9");
+    await userEvent.click(screen.getByRole("button", { name: "Salvar e verificar origem" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Mapa de prioridade inválido");
+    expect(calls.some((c) => c.method === "PATCH")).toBe(false);
+
+    await userEvent.clear(screen.getByLabelText("Mapa de prioridade"));
+    await userEvent.type(screen.getByLabelText("Mapa de prioridade"), "high=1");
+    await userEvent.click(screen.getByRole("button", { name: "Salvar e verificar origem" }));
+    expect(await screen.findByText("A verificação da origem falhou.")).toBeInTheDocument();
+    expect(screen.getByText(/não tem permissão/)).toBeInTheDocument();
+    expect(screen.queryByText("Itens elegíveis agora")).not.toBeInTheDocument();
   });
 });

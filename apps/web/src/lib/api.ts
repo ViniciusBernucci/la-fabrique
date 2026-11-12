@@ -44,6 +44,37 @@ export interface SourceConfig {
   kind: "" | "jira" | "clickup";
   connection_id: string | null;
   container: string;
+  /** Rótulo (Jira) ou tag (ClickUp) que marca o item como elegível. */
+  eligibility_marker: string;
+  eligible_statuses: string[];
+  /** Prioridade da origem (minúsculas) → faixa 0..4 da fábrica. */
+  priority_map: Record<string, number>;
+  access: "read" | "read_write";
+}
+
+export interface SourceStep {
+  id: "credential" | "container" | "statuses" | "priorities" | "items" | "write";
+  label: string;
+  status: "ok" | "failed" | "skipped";
+  detail: string;
+}
+
+export interface PreviewItem {
+  key: string;
+  title: string;
+  status: string;
+  priority: string;
+  mapped_priority: number | null;
+  subtask: boolean;
+  url: string;
+}
+
+export interface SourceCheck {
+  ok: boolean;
+  steps: SourceStep[];
+  items: PreviewItem[];
+  has_more: boolean;
+  checked_at: string;
 }
 
 export interface Project {
@@ -95,7 +126,14 @@ export interface ValidationReport {
 
 export interface ProjectChange {
   id: number;
-  action: "created" | "updated" | "source_changed" | "activated" | "suspended" | "resumed";
+  action:
+    | "created"
+    | "updated"
+    | "source_changed"
+    | "source_checked"
+    | "activated"
+    | "suspended"
+    | "resumed";
   detail: Record<string, unknown>;
   created_at: string;
 }
@@ -250,6 +288,9 @@ export const api = {
   /** Persiste uma etapa do assistente com controle otimista de versão. */
   updateProject: (id: string, expected_version: number, changes: ProjectPatch) =>
     patch<Project>(`/projects/${encodeURIComponent(id)}`, { expected_version, ...changes }),
+  /** Prova o acesso à origem e devolve o preview dos itens elegíveis (não escreve na origem). */
+  checkSource: (id: string) =>
+    post<SourceCheck>(`/projects/${encodeURIComponent(id)}/source/check`),
   validateProject: (id: string, signal?: AbortSignal) =>
     request<ValidationReport>(`/projects/${encodeURIComponent(id)}/validation`, { signal }),
   projectChanges: (id: string, signal?: AbortSignal) =>

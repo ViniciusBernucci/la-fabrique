@@ -2,6 +2,7 @@ package projects
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -105,7 +106,66 @@ func (p *Patch) normalize() error {
 			}
 		}
 		c.ConnectionID = blankToNil(c.ConnectionID)
+		if err := normalizeEligibility(&c); err != nil {
+			return err
+		}
 		p.Source = &c
+	}
+	return nil
+}
+
+var labelPattern = regexp.MustCompile(`^[^\x00-\x1f"\\]{1,50}$`)
+
+// normalizeEligibility valida marcador, estados elegíveis, mapa de prioridade e
+// escopo; cada falha diz qual campo e por quê (mapeamento inválido falha com motivo).
+func normalizeEligibility(c *Source) error {
+	c.EligibilityMarker = strings.TrimSpace(c.EligibilityMarker)
+	if c.EligibilityMarker != "" {
+		ok := labelPattern.MatchString(c.EligibilityMarker)
+		if c.Kind == "jira" {
+			ok = ok && !strings.ContainsAny(c.EligibilityMarker, " ")
+		}
+		if !ok {
+			return &FieldError{"source.eligibility_marker", "Marcador inválido: use até 50 caracteres sem aspas (no Jira, sem espaços)."}
+		}
+	}
+	seen := map[string]bool{}
+	statuses := []string{}
+	for _, st := range c.EligibleStatuses {
+		st = strings.TrimSpace(st)
+		if st == "" || len(st) > 80 {
+			return &FieldError{"source.eligible_statuses", "Cada estado elegível deve ter entre 1 e 80 caracteres."}
+		}
+		if !seen[strings.ToLower(st)] {
+			seen[strings.ToLower(st)] = true
+			statuses = append(statuses, st)
+		}
+	}
+	if len(statuses) > 30 {
+		return &FieldError{"source.eligible_statuses", "No máximo 30 estados elegíveis."}
+	}
+	c.EligibleStatuses = statuses
+	pm := map[string]int{}
+	for k, v := range c.PriorityMap {
+		k = strings.ToLower(strings.TrimSpace(k))
+		if k == "" || len(k) > 60 {
+			return &FieldError{"source.priority_map", "Cada prioridade da origem deve ter entre 1 e 60 caracteres."}
+		}
+		if v < 0 || v > 4 {
+			return &FieldError{"source.priority_map", "A prioridade \"" + k + "\" deve mapear para um valor entre 0 e 4."}
+		}
+		pm[k] = v
+	}
+	if len(pm) > 20 {
+		return &FieldError{"source.priority_map", "No máximo 20 prioridades mapeadas."}
+	}
+	c.PriorityMap = pm
+	switch c.Access {
+	case "":
+		c.Access = AccessRead
+	case AccessRead, AccessReadWrite:
+	default:
+		return &FieldError{"source.access", "O escopo deve ser leitura ou leitura e escrita."}
 	}
 	return nil
 }
@@ -142,6 +202,8 @@ func Update(ctx context.Context, db persistence.DBTX, id string, expectedVersion
 	if p.Source != nil {
 		src = *p.Source
 	}
+	statusesJSON, _ := json.Marshal(nonNilStrings(src.EligibleStatuses))
+	priorityJSON, _ := json.Marshal(nonNilMap(src.PriorityMap))
 	var srcKind *string
 	if src.Kind != "" {
 		srcKind = &src.Kind
@@ -160,6 +222,10 @@ func Update(ctx context.Context, db persistence.DBTX, id string, expectedVersion
 			source_kind = CASE WHEN $13::boolean THEN $14::text ELSE source_kind END,
 			source_connection_id = CASE WHEN $13::boolean THEN $15::uuid ELSE source_connection_id END,
 			source_container = CASE WHEN $13::boolean THEN $16 ELSE source_container END,
+			eligibility_marker = CASE WHEN $13::boolean THEN $18 ELSE eligibility_marker END,
+			eligible_statuses = CASE WHEN $13::boolean THEN $19::jsonb ELSE eligible_statuses END,
+			priority_map = CASE WHEN $13::boolean THEN $20::jsonb ELSE priority_map END,
+			source_access = CASE WHEN $13::boolean THEN $21 ELSE source_access END,
 			activated_at = CASE WHEN $5::text = 'active' AND activated_at IS NULL THEN now() ELSE activated_at END,
 			version = version + 1, updated_at = now()
 		WHERE id = $1 AND version = $2 AND NOT ($17::boolean AND state = 'active')
@@ -167,7 +233,7 @@ func Update(ctx context.Context, db persistence.DBTX, id string, expectedVersion
 		id, expectedVersion, p.Name, p.Description, p.State, p.Priority, p.WizardStep,
 		p.Repository != nil, repo.Owner, repo.Name, repo.BaseBranch, repo.ConnectionID,
 		p.Source != nil, srcKind, src.ConnectionID, src.Container,
-		p.touchesConfig()))
+		p.touchesConfig(), src.EligibilityMarker, string(statusesJSON), string(priorityJSON), accessOrRead(src.Access)))
 	if errors.Is(err, persistence.ErrNotFound) {
 		if cur, getErr := Get(ctx, db, id); getErr == nil {
 			if cur.Version != expectedVersion {
@@ -177,6 +243,27 @@ func Update(ctx context.Context, db persistence.DBTX, id string, expectedVersion
 		}
 	}
 	return updated, err
+}
+
+func nonNilStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
+func nonNilMap(m map[string]int) map[string]int {
+	if m == nil {
+		return map[string]int{}
+	}
+	return m
+}
+
+func accessOrRead(a string) string {
+	if a == "" {
+		return AccessRead
+	}
+	return a
 }
 
 // Status de cada item do relatório de validação.
@@ -217,12 +304,14 @@ func (e *ValidationError) Error() string {
 }
 
 var notVerified = []string{
-	"Acesso remoto ao repositório e à origem de tarefas (T05-02)",
+	"Acesso remoto ao repositório GitHub (T05-02, depende do adaptador GitHub — T15-01)",
+	"Permissão de escrita na origem: só é provada ao escrever, no primeiro uso (T06-03)",
 	"Workflows, agentes e demais recursos associados (T05-03)",
 }
 
 type connInfo struct {
 	kind, state string
+	secretVer   int
 	found       bool
 }
 
@@ -231,7 +320,7 @@ func lookupConnection(ctx context.Context, db persistence.DBTX, id *string) (con
 		return connInfo{}, nil
 	}
 	var c connInfo
-	err := db.QueryRow(ctx, `SELECT kind, state FROM connections WHERE id = $1`, *id).Scan(&c.kind, &c.state)
+	err := db.QueryRow(ctx, `SELECT kind, state, secret_version FROM connections WHERE id = $1`, *id).Scan(&c.kind, &c.state, &c.secretVer)
 	if errors.Is(persistence.MapError(err), persistence.ErrNotFound) {
 		return connInfo{}, nil
 	}
@@ -278,6 +367,26 @@ func Validate(ctx context.Context, db persistence.DBTX, p Project) (Report, erro
 		add("source.connection", "source", "Conexão "+srcLabel, ok, action)
 	}
 	add("source.container", "source", "Projeto ou lista na origem", p.Source.Container != "", "Informe a chave do projeto (Jira) ou o ID da lista (ClickUp) na etapa Origem.")
+	add("source.eligibility", "source", "Critério de elegibilidade",
+		p.Source.EligibilityMarker != "" || len(p.Source.EligibleStatuses) > 0,
+		"Defina um marcador (rótulo/tag) ou ao menos um estado elegível na etapa Origem.")
+
+	// Duas origens ativas: a mesma lista não pode alimentar dois projetos ativos.
+	if p.Source.Kind != "" && p.Source.Container != "" {
+		other, err := activeSourceOwner(ctx, db, p)
+		if err != nil {
+			return Report{}, err
+		}
+		add("source.exclusive", "source", "Origem exclusiva", other == "",
+			"Esta lista já alimenta o projeto ativo \""+other+"\". Suspenda-o ou escolha outra lista na etapa Origem.")
+	}
+
+	// Verificação remota: precisa existir, ter passado e valer para a configuração atual.
+	remoteOK, remoteAction, err := remoteCheckState(ctx, db, p, srcConn)
+	if err != nil {
+		return Report{}, err
+	}
+	add("source.remote", "source", "Verificação remota da origem", remoteOK, remoteAction)
 
 	ok := true
 	for _, c := range checks {
@@ -298,4 +407,41 @@ func connectionState(id *string, c connInfo, wantKind, kindLabel, stepLabel stri
 		return false, "A conexão selecionada não é do tipo " + kindLabel + ". Escolha uma conexão " + kindLabel + "."
 	}
 	return true, ""
+}
+
+// activeSourceOwner devolve o nome de outro projeto ativo que usa a mesma origem
+// (mesma plataforma e lista, na mesma conexão ou no mesmo destino), ou "".
+func activeSourceOwner(ctx context.Context, db persistence.DBTX, p Project) (string, error) {
+	var name string
+	err := db.QueryRow(ctx, `
+		SELECT o.name FROM projects o
+		LEFT JOIN connections oc ON oc.id = o.source_connection_id
+		LEFT JOIN connections mc ON mc.id = $4::uuid
+		WHERE o.id <> $1 AND o.state = 'active' AND o.source_kind = $2 AND o.source_container = $3
+		  AND (o.source_connection_id = $4::uuid OR (mc.target <> '' AND oc.target = mc.target))
+		ORDER BY o.created_at LIMIT 1`,
+		p.ID, p.Source.Kind, p.Source.Container, p.Source.ConnectionID).Scan(&name)
+	if errors.Is(persistence.MapError(err), persistence.ErrNotFound) {
+		return "", nil
+	}
+	return name, persistence.MapError(err)
+}
+
+func remoteCheckState(ctx context.Context, db persistence.DBTX, p Project, conn connInfo) (bool, string, error) {
+	var ok *bool
+	var fp string
+	err := db.QueryRow(ctx, `SELECT source_check_ok, source_check_fingerprint FROM projects WHERE id = $1`, p.ID).Scan(&ok, &fp)
+	if err != nil {
+		return false, "", persistence.MapError(err)
+	}
+	const run = "Use \"Verificar origem\" na etapa Origem para provar o acesso e ver os itens elegíveis."
+	switch {
+	case ok == nil:
+		return false, "A origem ainda não foi verificada. " + run, nil
+	case fp != Fingerprint(p, conn.secretVer):
+		return false, "A configuração, a conexão ou o segredo mudou depois da última verificação. " + run, nil
+	case !*ok:
+		return false, "A última verificação da origem falhou. Corrija os pontos indicados e verifique de novo. " + run, nil
+	}
+	return true, "", nil
 }

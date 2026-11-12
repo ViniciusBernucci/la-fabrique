@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ViniciusBernucci/le-fabrique/internal/httpapi"
+	"github.com/ViniciusBernucci/le-fabrique/internal/integrations"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
 )
@@ -13,12 +15,16 @@ type changesResp struct {
 	Items []projects.Change `json:"items"`
 }
 
-func newProjectEnv(t *testing.T) (*authEnv, *client) {
+func newProjectEnv(t *testing.T) (*authEnv, *client, *fakeJira) {
 	t.Helper()
-	e := newAuthEnv(t, nil)
+	fj := newFakeJira(t)
+	e := newAuthEnv(t, nil, httpapi.WithTrackerFactory(func(cfg integrations.Config) (integrations.Tracker, error) {
+		cfg.BaseURL = fj.URL // todos os tipos falam com a plataforma falsa
+		return integrations.NewTracker(cfg)
+	}))
 	c := e.newClient()
 	c.login(nil)
-	return e, c
+	return e, c, fj
 }
 
 func createProject(t *testing.T, c *client, slug string) projects.Project {
@@ -48,24 +54,48 @@ func pending(r projects.Report) map[string]projects.Check {
 func conn(t *testing.T, c *client, kind, name string) security.Connection {
 	t.Helper()
 	var out security.Connection
-	c.expect(c.post("/api/connections", map[string]string{"kind": kind, "name": name, "secret": "segredo-" + name}), 201).JSON(&out)
+	secret := "segredo-" + name
+	if kind == "jira" {
+		secret = "bot@example.com:" + secret // formato exigido pelo adaptador
+	}
+	c.expect(c.post("/api/connections", map[string]string{"kind": kind, "name": name, "secret": secret}), 201).JSON(&out)
 	return out
 }
 
-// completeConfig preenche todas as etapas com conexões compatíveis.
-func completeConfig(t *testing.T, c *client, p projects.Project, gh, jira security.Connection) projects.Project {
+func jiraSource(connID string) map[string]any {
+	return map[string]any{
+		"kind": "jira", "container": "ABC", "connection_id": connID,
+		"eligibility_marker": "lf-ready", "eligible_statuses": []string{"To Do"},
+		"priority_map": map[string]int{"high": 1, "medium": 2}, "access": "read",
+	}
+}
+
+// configure preenche todas as etapas com conexões compatíveis, sem verificar a origem.
+func configure(t *testing.T, c *client, p projects.Project, gh, jira security.Connection) projects.Project {
 	t.Helper()
 	var out projects.Project
 	c.expect(c.do("PATCH", "/api/projects/"+p.ID, map[string]any{
 		"expected_version": p.Version, "wizard_step": "review",
 		"repository": map[string]any{"owner": "org-exemplo", "name": "app", "base_branch": "main", "connection_id": gh.ID},
-		"source":     map[string]any{"kind": "jira", "container": "ABC", "connection_id": jira.ID},
+		"source":     jiraSource(jira.ID),
 	}, nil), 200).JSON(&out)
 	return out
 }
 
+// completeConfig configura e verifica a origem (a verificação não muda a versão).
+func completeConfig(t *testing.T, c *client, p projects.Project, gh, jira security.Connection) projects.Project {
+	t.Helper()
+	out := configure(t, c, p, gh, jira)
+	var check projects.SourceCheck
+	c.expect(c.post("/api/projects/"+p.ID+"/source/check", nil), 200).JSON(&check)
+	if !check.OK {
+		t.Fatalf("a origem deveria verificar: %+v", check.Steps)
+	}
+	return out
+}
+
 func TestPriorityZeroIsAcceptedOnCreate(t *testing.T) {
-	_, c := newProjectEnv(t)
+	_, c, _ := newProjectEnv(t)
 	var p projects.Project
 	c.expect(c.post("/api/projects", map[string]any{"slug": "baixa", "name": "Baixa", "priority": 0}), 201).JSON(&p)
 	if p.Priority != 0 {
@@ -75,7 +105,7 @@ func TestPriorityZeroIsAcceptedOnCreate(t *testing.T) {
 
 // T05-01 — "Projeto novo vazio de vínculos persiste e retorna ao assistente."
 func TestNewProjectIsDraftWithoutLinksAndResumesWizard(t *testing.T) {
-	_, c := newProjectEnv(t)
+	_, c, _ := newProjectEnv(t)
 	p := createProject(t, c, "novo")
 	if p.State != projects.StateDraft || p.WizardStep != projects.StepRepository || p.Version != 1 || p.Priority != 2 {
 		t.Fatalf("estado inicial: %+v", p)
@@ -103,7 +133,7 @@ func TestNewProjectIsDraftWithoutLinksAndResumesWizard(t *testing.T) {
 
 // T05-01 — "Sem preenchimento obrigatório válido, ativação é bloqueada."
 func TestActivationBlockedUntilRequiredFieldsAreValid(t *testing.T) {
-	_, c := newProjectEnv(t)
+	_, c, _ := newProjectEnv(t)
 	p := createProject(t, c, "bloqueado")
 
 	r := validation(t, c, p.ID)
@@ -112,7 +142,7 @@ func TestActivationBlockedUntilRequiredFieldsAreValid(t *testing.T) {
 	}
 	pend := pending(r)
 	for _, id := range []string{"repository.owner", "repository.name", "repository.base_branch", "repository.connection",
-		"source.kind", "source.connection", "source.container"} {
+		"source.kind", "source.connection", "source.container", "source.eligibility", "source.remote"} {
 		chk, ok := pend[id]
 		if !ok || strings.TrimSpace(chk.Action) == "" {
 			t.Fatalf("pendência %s deveria existir com ação concreta: %+v", id, chk)
@@ -145,7 +175,7 @@ func TestActivationBlockedUntilRequiredFieldsAreValid(t *testing.T) {
 }
 
 func TestConnectionCompatibilityIsReportedWithReason(t *testing.T) {
-	_, c := newProjectEnv(t)
+	_, c, _ := newProjectEnv(t)
 	p := createProject(t, c, "compat")
 	gh := conn(t, c, "github", "gh-ok")
 	jira := conn(t, c, "jira", "jira-ok")
@@ -156,7 +186,7 @@ func TestConnectionCompatibilityIsReportedWithReason(t *testing.T) {
 	c.expect(c.do("PATCH", "/api/projects/"+p.ID, map[string]any{
 		"expected_version": 1,
 		"repository":       map[string]any{"owner": "org", "name": "app", "base_branch": "main", "connection_id": jira.ID},
-		"source":           map[string]any{"kind": "jira", "container": "ABC", "connection_id": clickup.ID},
+		"source":           map[string]any{"kind": "jira", "container": "ABC", "connection_id": clickup.ID, "eligibility_marker": "lf-ready"},
 	}, nil), 200).JSON(&cur)
 	pend := pending(validation(t, c, p.ID))
 	if !strings.Contains(pend["repository.connection"].Action, "GitHub") || !strings.Contains(pend["source.connection"].Action, "Jira") {
@@ -182,7 +212,7 @@ func TestConnectionCompatibilityIsReportedWithReason(t *testing.T) {
 }
 
 func TestInvalidFieldsAreRejectedWithMessage(t *testing.T) {
-	_, c := newProjectEnv(t)
+	_, c, _ := newProjectEnv(t)
 	p := createProject(t, c, "campos")
 	cases := map[string]map[string]any{
 		"dono":    {"repository": map[string]any{"owner": "-ruim-", "name": "a", "base_branch": "main"}},
@@ -225,7 +255,7 @@ func TestInvalidFieldsAreRejectedWithMessage(t *testing.T) {
 }
 
 func TestLifecycleActivateSuspendResumeWithTrail(t *testing.T) {
-	_, c := newProjectEnv(t)
+	_, c, _ := newProjectEnv(t)
 	p := createProject(t, c, "ciclo")
 	gh := conn(t, c, "github", "gh-ciclo")
 	jira := conn(t, c, "jira", "jira-ciclo")
@@ -273,7 +303,7 @@ func TestLifecycleActivateSuspendResumeWithTrail(t *testing.T) {
 	}
 	var back projects.Project
 	c.expect(c.do("PATCH", "/api/projects/"+p.ID, map[string]any{
-		"expected_version": changed.Version, "source": map[string]any{"kind": "jira", "container": "ABC", "connection_id": jira.ID},
+		"expected_version": changed.Version, "source": jiraSource(jira.ID),
 	}, nil), 200).JSON(&back)
 	c.expect(c.post("/api/projects/"+p.ID+"/resume", map[string]any{"expected_version": back.Version}), 200).JSON(&back)
 	if back.State != projects.StateActive {
@@ -299,7 +329,7 @@ func TestLifecycleActivateSuspendResumeWithTrail(t *testing.T) {
 
 // E05 aceite — "Alterar projeto A e demonstrar que projeto B ... preservam suas configurações."
 func TestChangingProjectADoesNotTouchProjectB(t *testing.T) {
-	_, c := newProjectEnv(t)
+	_, c, _ := newProjectEnv(t)
 	a, b := createProject(t, c, "projeto-a"), createProject(t, c, "projeto-b")
 	gh := conn(t, c, "github", "gh-ab")
 	var bCfg projects.Project
@@ -325,7 +355,7 @@ func TestChangingProjectADoesNotTouchProjectB(t *testing.T) {
 }
 
 func TestConcurrentStepSavesAllowExactlyOneWinner(t *testing.T) {
-	_, c := newProjectEnv(t)
+	_, c, _ := newProjectEnv(t)
 	p := createProject(t, c, "corrida")
 	const n = 8
 	var wg sync.WaitGroup
@@ -355,7 +385,7 @@ func TestConcurrentStepSavesAllowExactlyOneWinner(t *testing.T) {
 }
 
 func TestProjectWritesRequireSessionAndCSRF(t *testing.T) {
-	e, c := newProjectEnv(t)
+	e, c, _ := newProjectEnv(t)
 	p := createProject(t, c, "seguro")
 	anon := e.newClient()
 	for _, r := range []apiResp{

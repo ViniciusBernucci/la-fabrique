@@ -10,6 +10,7 @@ import {
   type Project,
   type ProjectPatch,
   type RepositoryConfig,
+  type SourceCheck,
   type SourceConfig,
   type WizardStep,
 } from "../lib/api";
@@ -59,6 +60,27 @@ function Wizard({ initial, connections }: { initial: Project; connections: Conne
       });
       setProject(updated);
       setStep(next);
+    } catch (e) {
+      setError(toApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const [check, setCheck] = useState<SourceCheck | null>(null);
+
+  /** Salva a origem e a verifica com a conexão do cofre, sem sair da etapa. */
+  async function saveAndCheck(source: SourceConfig) {
+    setBusy(true);
+    setError(null);
+    setCheck(null);
+    try {
+      const updated = await api.updateProject(project.id, project.version, {
+        source,
+        wizard_step: "source",
+      });
+      setProject(updated);
+      setCheck(await api.checkSource(project.id));
     } catch (e) {
       setError(toApiError(e));
     } finally {
@@ -129,7 +151,9 @@ function Wizard({ initial, connections }: { initial: Project; connections: Conne
             busy={busy}
             locked={locked}
             onBack={() => goto("repository")}
+            check={check}
             onSave={(source) => save({ source }, "review")}
+            onSaveAndCheck={saveAndCheck}
           />
         )}
         {step === "review" && (
@@ -324,26 +348,80 @@ const containerHint = {
   "": "Escolha a plataforma primeiro",
 } as const;
 
+/** Estados separados por vírgula ou quebra de linha. */
+export function parseStatuses(text: string): string[] {
+  return text
+    .split(/[,\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** "high=1, medium=2" → { high: 1, medium: 2 }; devolve o erro em português se inválido. */
+export function parsePriorityMap(text: string): Record<string, number> | string {
+  const map: Record<string, number> = {};
+  for (const part of text
+    .split(/[,\n]/)
+    .map((p) => p.trim())
+    .filter(Boolean)) {
+    const [name, value, ...rest] = part.split("=").map((p) => p.trim());
+    const n = Number(value);
+    if (!name || rest.length > 0 || value === undefined || !Number.isInteger(n) || n < 0 || n > 4) {
+      return `Mapa de prioridade inválido em "${part}". Use nome=número de 0 a 4 (ex.: high=1).`;
+    }
+    map[name.toLowerCase()] = n;
+  }
+  return map;
+}
+
+const formatStatuses = (s: string[]) => s.join(", ");
+const formatPriorityMap = (m: Record<string, number>) =>
+  Object.entries(m)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(", ");
+
 function SourceStep({
   project,
   connections,
   busy,
   locked,
+  check,
   onBack,
   onSave,
+  onSaveAndCheck,
 }: {
   project: Project;
   connections: Connection[];
   busy: boolean;
   locked: boolean;
+  check: SourceCheck | null;
   onBack: () => void;
   onSave: (source: SourceConfig) => void;
+  onSaveAndCheck: (source: SourceConfig) => void;
 }) {
   const [source, setSource] = useState<SourceConfig>(project.source);
+  const [statuses, setStatuses] = useState(formatStatuses(project.source.eligible_statuses));
+  const [priorities, setPriorities] = useState(formatPriorityMap(project.source.priority_map));
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  function build(): SourceConfig | null {
+    const map = parsePriorityMap(priorities);
+    if (typeof map === "string") {
+      setLocalError(map);
+      return null;
+    }
+    setLocalError(null);
+    return { ...source, eligible_statuses: parseStatuses(statuses), priority_map: map };
+  }
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    onSave(source);
+    const built = build();
+    if (built) onSave(built);
+  }
+
+  function verify() {
+    const built = build();
+    if (built) onSaveAndCheck(built);
   }
 
   return (
@@ -357,6 +435,7 @@ function SourceStep({
             value={source.kind}
             onChange={(e) =>
               setSource({
+                ...source,
                 // Trocar de plataforma descarta a conexão e o identificador da anterior.
                 kind: e.target.value as SourceConfig["kind"],
                 connection_id: null,
@@ -386,16 +465,126 @@ function SourceStep({
             onChange={(e) => setSource({ ...source, container: e.target.value })}
           />
         </label>
+        <label>
+          Marcador de elegibilidade
+          <input
+            value={source.eligibility_marker}
+            maxLength={50}
+            placeholder={source.kind === "clickup" ? "tag, ex.: lf-ready" : "rótulo, ex.: lf-ready"}
+            onChange={(e) => setSource({ ...source, eligibility_marker: e.target.value })}
+          />
+        </label>
+        <label>
+          Estados elegíveis
+          <input
+            value={statuses}
+            placeholder="ex.: To Do, Pronto para dev"
+            onChange={(e) => setStatuses(e.target.value)}
+          />
+        </label>
+        <label>
+          Mapa de prioridade
+          <input
+            value={priorities}
+            placeholder="ex.: highest=0, high=1, medium=2, low=3"
+            onChange={(e) => setPriorities(e.target.value)}
+          />
+        </label>
+        <label>
+          Escopo na origem
+          <select
+            value={source.access}
+            onChange={(e) =>
+              setSource({ ...source, access: e.target.value as SourceConfig["access"] })
+            }
+          >
+            <option value="read">Somente leitura</option>
+            <option value="read_write">Leitura e escrita (subtarefas e estados)</option>
+          </select>
+        </label>
       </fieldset>
+      {localError && (
+        <p className="form-error" role="alert">
+          {localError}
+        </p>
+      )}
+      {check && <SourceCheckResult check={check} />}
       <div className="actions">
         <button type="button" className="secondary-action" onClick={onBack}>
           Voltar
+        </button>
+        <button
+          type="button"
+          className="secondary-action"
+          disabled={busy || locked}
+          onClick={verify}
+        >
+          Salvar e verificar origem
         </button>
         <button type="submit" disabled={busy || locked}>
           Salvar e continuar
         </button>
       </div>
     </form>
+  );
+}
+
+function SourceCheckResult({ check }: { check: SourceCheck }) {
+  return (
+    <section className="form-wide" aria-label="Resultado da verificação da origem">
+      <p className={check.ok ? "callout" : "callout callout--warn"} role="status">
+        {check.ok ? "Origem verificada." : "A verificação da origem falhou."}
+      </p>
+      <ul className="checklist">
+        {check.steps.map((s) => (
+          <li
+            key={s.id}
+            className={`checklist-item checklist-item--${s.status === "failed" ? "pending" : "ok"}`}
+          >
+            <span className="checklist-mark" aria-hidden="true">
+              {s.status === "ok" ? "✓" : s.status === "failed" ? "!" : "–"}
+            </span>
+            <span>
+              <strong>{s.label}</strong>
+              <small>{s.detail}</small>
+            </span>
+          </li>
+        ))}
+      </ul>
+      {check.ok && (
+        <>
+          <h3 className="form-title">Itens elegíveis agora</h3>
+          {check.items.length === 0 ? (
+            <p className="muted">Nenhum item elegível no momento.</p>
+          ) : (
+            <table className="preview-table">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Estado</th>
+                  <th>Prioridade (origem → fábrica)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {check.items.map((i) => (
+                  <tr key={i.key}>
+                    <td>
+                      <strong>{i.key}</strong> {i.title}
+                      {i.subtask && <small> (subtarefa)</small>}
+                    </td>
+                    <td>{i.status}</td>
+                    <td>
+                      {i.priority || "—"} → {i.mapped_priority ?? "sem mapa"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {check.has_more && <p className="muted">Há mais itens além dos mostrados.</p>}
+        </>
+      )}
+    </section>
   );
 }
 

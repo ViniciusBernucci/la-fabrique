@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E06 (T06-01, T06-02)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E05 (T05-02 origem)._
 
 ## Resumo
 
-**8 feitos · 7 parciais · 52 pendentes** de 67 tickets.
+**8 feitos · 8 parciais · 51 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -53,8 +53,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E06 (T06-01, T06-02)._
 
 - [x] **[T05-01](03-BACKLOG.md#t05-01)** — Cadastrar projeto em rascunho · dep.: T03-03, T04-02.
   - PASS (PostgreSQL real + vitest): projeto novo nasce em rascunho sem vínculos, persiste por etapa e retoma na etapa certa (inclusive em outra sessão); ativação bloqueada (422) sem preenchimento válido, com pendências e ação concreta; conexão revogada ou de tipo errado vira pendência; configuração travada enquanto ativo; suspensão/retomada revalidam; trilha sem segredos; projeto A não altera B; 8 gravações concorrentes → 1 vencedor; CSRF e sessão exigidos. **Não verificado nesta versão (declarado na tela):** acesso remoto ao repositório/origem (T05-02) e recursos associados (T05-03). Revisão independente NOT_RUN. Entrega: [2026-11-12-E05](../entregas/2026-11-12-E05-cadastro-de-projeto.md).
-- [ ] **[T05-02](03-BACKLOG.md#t05-02)** — Configurar repositório, origem e elegibilidade · dep.: T05-01, T06-01, T06-02, T15-01.
-  - Bloqueado: T06-01, T06-02 (adaptadores Jira/ClickUp) e T15-01 pendentes. Já existe em T05-01: origem única por construção e checagem local de tipo/estado da conexão. Falta: escopos, itens, status, prioridade, critérios de marcação, leitura/escrita e preview de itens elegíveis.
+- [~] **[T05-02](03-BACKLOG.md#t05-02)** — Configurar repositório, origem e elegibilidade · dep.: T05-01, T06-01, T06-02, T15-01.
+  - PASS (PostgreSQL real + fakes de Jira): origem Jira/ClickUp com marcador, estados elegíveis, mapa de prioridade e escopo; conexão incompatível/revogada, duas origens ativas e mapeamento inválido falham com motivo; verificação remota registrada devolve preview correto (marcador + estado, sem concluídos, prioridade mapeada) sem escrever na origem; ativação exige verificação bem-sucedida e atual (invalidada por mudança de config ou rotação do segredo); sem vazamento de segredo. **Parcial:** repositório GitHub não verificado (depende de T15-01); escrita na origem só provada no primeiro uso; Jira/ClickUp reais NOT_RUN. Entrega: [E05 adendo](../entregas/2026-11-12-E05-cadastro-de-projeto.md).
 - [ ] **[T05-03](03-BACKLOG.md#t05-03)** — Descobrir stack e associar recursos manualmente · dep.: T05-02, T07-03, T07-04, T08-04, T09-02.
   - Bloqueado: depende de T05-02 e dos catálogos de E07 a E09 (pendentes).
 

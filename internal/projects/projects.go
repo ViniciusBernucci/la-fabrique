@@ -47,11 +47,26 @@ type Repository struct {
 	ConnectionID *string `json:"connection_id"`
 }
 
-// Source é a origem oficial de tarefas (uma por projeto): Jira ou ClickUp.
+// Escopo de acesso declarado para a origem.
+const (
+	AccessRead      = "read"
+	AccessReadWrite = "read_write"
+)
+
+// Source é a origem oficial de tarefas (uma por projeto): Jira ou ClickUp, com
+// os critérios que tornam um item elegível e o mapa de prioridade.
 type Source struct {
 	Kind         string  `json:"kind"`
 	ConnectionID *string `json:"connection_id"`
 	Container    string  `json:"container"`
+	// EligibilityMarker é o rótulo (Jira) ou tag (ClickUp) que marca o item como elegível.
+	EligibilityMarker string `json:"eligibility_marker"`
+	// EligibleStatuses são os estados da origem dos quais o item pode ser tomado.
+	EligibleStatuses []string `json:"eligible_statuses"`
+	// PriorityMap converte a prioridade da origem (minúsculas) na faixa 0..4 da fábrica.
+	PriorityMap map[string]int `json:"priority_map"`
+	// Access: "read" (padrão) ou "read_write" (a fábrica poderá criar subtarefas e mover estados).
+	Access string `json:"access"`
 }
 
 func (s Source) empty() bool { return s.Kind == "" && s.ConnectionID == nil && s.Container == "" }
@@ -85,15 +100,24 @@ type NewProject struct {
 const columns = `id, slug, name, description, state, priority, wizard_step,
 	repo_owner, repo_name, base_branch, repo_connection_id,
 	COALESCE(source_kind, ''), source_connection_id, source_container,
+	eligibility_marker, eligible_statuses, priority_map, source_access,
 	version, activated_at, created_at, updated_at`
 
 func scan(row interface{ Scan(...any) error }) (Project, error) {
 	var p Project
+	var statuses, priorities []byte
 	err := row.Scan(&p.ID, &p.Slug, &p.Name, &p.Description, &p.State, &p.Priority, &p.WizardStep,
 		&p.Repository.Owner, &p.Repository.Name, &p.Repository.BaseBranch, &p.Repository.ConnectionID,
 		&p.Source.Kind, &p.Source.ConnectionID, &p.Source.Container,
+		&p.Source.EligibilityMarker, &statuses, &priorities, &p.Source.Access,
 		&p.Version, &p.ActivatedAt, &p.CreatedAt, &p.UpdatedAt)
-	return p, persistence.MapError(err)
+	if err != nil {
+		return p, persistence.MapError(err)
+	}
+	p.Source.EligibleStatuses, p.Source.PriorityMap = []string{}, map[string]int{}
+	_ = json.Unmarshal(statuses, &p.Source.EligibleStatuses)
+	_ = json.Unmarshal(priorities, &p.Source.PriorityMap)
+	return p, nil
 }
 
 // Create cria um projeto em rascunho, sem vínculos.

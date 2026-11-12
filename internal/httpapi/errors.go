@@ -48,6 +48,8 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 		writeError(w, r, http.StatusBadRequest, "invalid_request", field.Message, "Corrija o campo \""+field.Field+"\" e tente novamente.")
 	case errors.As(err, &invalid):
 		writeError(w, r, http.StatusUnprocessableEntity, "validation_failed", "O projeto tem pendências e não pode ser ativado.", "Resolva os itens pendentes em GET /api/projects/{id}/validation.")
+	case errors.Is(err, projects.ErrSourceIncomplete):
+		writeError(w, r, http.StatusUnprocessableEntity, "source_incomplete", "Faltam plataforma, conexão compatível ou lista na origem.", "Complete a etapa Origem e salve antes de verificar.")
 	case errors.Is(err, projects.ErrActiveLocked):
 		writeError(w, r, http.StatusConflict, "project_active", "O projeto está ativo: repositório e origem não podem mudar agora.", "Suspenda o projeto, altere a configuração e ative novamente.")
 	case errors.Is(err, projects.ErrInvalidState):

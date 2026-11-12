@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -22,6 +23,7 @@ const (
 	ChangeCreated       = "created"
 	ChangeUpdated       = "updated"
 	ChangeSourceChanged = "source_changed"
+	ChangeSourceChecked = "source_checked"
 	ChangeActivated     = "activated"
 	ChangeSuspended     = "suspended"
 	ChangeResumed       = "resumed"
@@ -114,7 +116,9 @@ func sameRepo(a, b Repository) bool {
 }
 
 func sameSource(a, b Source) bool {
-	return a.Kind == b.Kind && a.Container == b.Container && sameStr(a.ConnectionID, b.ConnectionID)
+	return a.Kind == b.Kind && a.Container == b.Container && sameStr(a.ConnectionID, b.ConnectionID) &&
+		a.EligibilityMarker == b.EligibilityMarker && a.Access == b.Access &&
+		reflect.DeepEqual(a.EligibleStatuses, b.EligibleStatuses) && reflect.DeepEqual(a.PriorityMap, b.PriorityMap)
 }
 
 func sourceDetail(s Source) map[string]any {

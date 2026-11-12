@@ -46,3 +46,41 @@ make lint && make test && make test-integration && make check-secrets
 
 ## Rollback
 `git revert` do commit desta entrega. A migration 5 tem `Down` (`go run ./cmd/migrate down`), que **descarta** os dados de rascunho e a trilha de alterações dos projetos. Em produção, prefira restaurar o backup do banco.
+
+---
+
+# Adendo — T05-02, parte da origem (Jira/ClickUp)
+
+**Estado:** [T05-02](../NEW%20MVP/03-BACKLOG.md#t05-02) **parcial** (`[~]`). Entregue a origem; **o GitHub segue não verificado** (depende de T15-01). Decisões: ADR-0006, itens 9 a 13. **Revisão independente: NOT_RUN.**
+
+## O que mudou
+- **Banco:** migration 6 (critérios, mapas, escopo, resultado/impressão digital da verificação; `source_checked` na trilha).
+- **Backend:** `projects.CheckSource` (usa `integrations.Tracker`), `Fingerprint`, `RecordSourceCheck`, itens novos no relatório (`source.eligibility`, `source.exclusive`, `source.remote`), `POST /projects/{id}/source/check`, fábrica de adaptadores injetável (`WithTrackerFactory`).
+- **Front:** na etapa Origem: marcador, estados elegíveis, mapa de prioridade, escopo, **"Salvar e verificar origem"** com passos e tabela de itens elegíveis (prioridade da origem → fábrica).
+- **Contrato:** `Source` ampliado; `SourceCheck`, `SourceStep`, `PreviewItem`.
+
+## Critérios de aceite → evidência
+- **"Conexão incompatível ... falham com motivo":** `TestConnectionCompatibilityIsReportedWithReason`, `TestSourceCheckPreconditionsAndAccess` (tipo errado e revogada).
+- **"Duas origens ativas":** `TestSameSourceCannotFeedTwoActiveProjects` (aponta o projeto; outra lista na mesma conexão é permitida).
+- **"Mapeamento inválido falha com motivo":** `TestSourceCheckFailsWithReasonForInvalidMapping` (400 na gravação para faixa/escopo/marcador/estado vazio; estado e prioridade inexistentes na origem falham na verificação citando os nomes; vitest do mapa).
+- **"Origem válida devolve preview correto de itens elegíveis":** `TestSourceCheckReturnsEligiblePreviewAndGatesActivation` (só "To Do", sem concluídos; prioridade mapeada e "sem mapa"; nenhuma escrita na origem).
+- **Ativação só com verificação válida:** o mesmo teste (422 antes, 200 depois) e `TestSourceCheckBecomesStaleWhenConfigOrSecretChanges` (mudar marcador ou rotacionar o segredo invalida).
+- **Sem vazamento:** `TestSourceCheckReportsPermissionWithoutLeakingSecret` (corpo e logs sem credencial nem eco do corpo remoto).
+
+## Limites
+- **Origem real (Jira/ClickUp) NOT_RUN:** só fakes. Escrita na origem não verificada. GitHub não verificado.
+- Preview: até 3 páginas e 20 itens; o filtro por estado é local depois do marcador.
+- Fingerprint não cobre o que mudar fora da fábrica (ex.: renomear um estado na origem); reverifique antes de ativar.
+
+## Rollback
+`git revert`. Migration 6 tem `Down` (descarta critérios e resultados de verificação).
+
+## Verificação do adendo (2026-11-12)
+| Verificação | Resultado |
+|---|---|
+| `make lint` | PASS |
+| `go test` (config, httpapi, integrations, logging, security, worker, contrato) | PASS |
+| `make test-integration` (inclui 6 testes novos da origem e rollback de 5 migrations) | PASS |
+| vitest (48 testes), `tsc`, Biome | PASS — executados numa **cópia no disco interno**: o SSD externo ficou lento e os workers do vitest estouravam o tempo no diretório original |
+| `make check-secrets` | PASS |
+| Jira/ClickUp reais, GitHub | NOT_RUN |

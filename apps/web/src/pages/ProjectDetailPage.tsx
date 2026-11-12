@@ -49,6 +49,7 @@ const changeLabel: Record<ProjectChange["action"], string> = {
   created: "Rascunho criado",
   updated: "Dados atualizados",
   source_changed: "Origem de tarefas alterada",
+  source_checked: "Origem verificada",
   activated: "Projeto ativado",
   suspended: "Projeto suspenso",
   resumed: "Projeto retomado",

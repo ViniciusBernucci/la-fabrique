@@ -22,3 +22,11 @@ O projeto precisa ser cadastrado por etapas, voltar ao assistente onde parou e s
 - Ativar um projeto hoje significa "configuração obrigatória preenchida e coerente", não "pronto para executar". O worker não consome projetos ativos ainda.
 - Rotas de projeto usam CSRF (`protected`), mas não reautenticação: não manipulam credenciais, só referências.
 - Mudanças futuras de schema do projeto seguem em novas migrations; o relatório cresce sem mudar o contrato dos itens.
+
+## Adendo — T05-02, parte da origem (Jira/ClickUp)
+
+9. **Critérios na própria origem:** `eligibility_marker` (rótulo/tag), `eligible_statuses`, `priority_map` (prioridade da origem em minúsculas → 0..4) e `access` (`read` | `read_write`) fazem parte do grupo `source` do `PATCH`. Valores fora da faixa, marcador inválido (no Jira, sem espaços ou aspas, porque vira JQL) e escopo desconhecido falham na gravação com campo e motivo.
+10. **Verificação remota registrada:** `POST /projects/{id}/source/check` usa a conexão do cofre e o adaptador do E06 para provar credencial, projeto/lista, estados e prioridades do mapa e listar até 20 itens elegíveis (marcador **e** estado elegível, sem concluídos), com a prioridade já mapeada. Falhas remotas voltam como passos `failed` com motivo (HTTP 200); **nada é escrito na origem**.
+11. **Validade da verificação:** o resultado fica gravado com uma impressão digital (plataforma, conexão, **versão do segredo**, lista, marcador, estados, mapa, escopo). Qualquer mudança nesses itens, inclusive rotacionar o segredo, torna a verificação obsoleta. `activate` e `resume` exigem verificação **bem-sucedida e atual** (item `source.remote`), além de critério de elegibilidade (`source.eligibility`).
+12. **Origem exclusiva:** uma mesma plataforma+lista não pode alimentar dois projetos ativos (mesma conexão ou mesmo destino); o item `source.exclusive` aponta o projeto que já a usa.
+13. **Limites declarados:** escrita na origem não é provável sem escrever (passo `write` fica `skipped`; confirma no primeiro uso, T06-03). O repositório GitHub continua **não verificado** até o adaptador GitHub (T15-01) e aparece em `not_verified`.

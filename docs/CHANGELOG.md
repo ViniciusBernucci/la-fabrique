@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-12 — E05: origem do projeto com verificação e preview (T05-02 parcial)
+Critérios de elegibilidade, mapa de prioridade e escopo; verificação remota da origem (Jira/ClickUp) com preview dos itens elegíveis; ativação exige verificação atual; uma lista não alimenta dois projetos ativos. GitHub segue não verificado (T15-01). Detalhes: [adendo da entrega](entregas/2026-11-12-E05-cadastro-de-projeto.md).
+
 ## 2026-11-12 — E06: adaptadores Jira e ClickUp (T06-01, T06-02 parciais)
 Interface `Tracker` simétrica com adaptadores Jira e ClickUp (leitura paginada, subtarefas, transições válidas, dependências, links) e suíte de contrato com fixtures. Instâncias reais NOT_RUN. T06-03 a T06-05 bloqueados por dependências. Detalhes: [entrega](entregas/2026-11-12-E06-adaptadores-jira-clickup.md) · [ADR-0007](adr/0007-adaptadores-jira-e-clickup-simetricos.md).
 

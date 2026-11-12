@@ -352,6 +352,23 @@ paths:
                 properties: {items: {type: array, items: {$ref: "#/components/schemas/ProjectChange"}}}
         "401": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/source/check:
+    post:
+      tags: [projetos]
+      summary: Verifica a origem (Jira/ClickUp) com a conexão do cofre e devolve o preview dos itens elegíveis
+      description: >
+        Prova credencial, projeto/lista, estados elegíveis e prioridades do mapa e lista até 20 itens
+        elegíveis. Nada é escrito na origem. Falhas remotas voltam como passos `failed` com motivo
+        (HTTP 200); o resultado fica gravado para a configuração atual e a ativação o exige.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Resultado da verificação, content: {application/json: {schema: {$ref: "#/components/schemas/SourceCheck"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
   /projects/{id}/activate:
     post:
       tags: [projetos]
@@ -582,11 +599,47 @@ components:
         connection_id: {type: [string, "null"], format: uuid, description: "Referência de conexão GitHub (nunca o segredo)"}
     Source:
       type: object
-      required: [kind, connection_id, container]
+      required: [kind, connection_id, container, eligibility_marker, eligible_statuses, priority_map, access]
       properties:
         kind: {type: string, enum: ["", jira, clickup]}
         connection_id: {type: [string, "null"], format: uuid}
         container: {type: string, description: "Chave do projeto Jira ou ID da lista ClickUp"}
+        eligibility_marker: {type: string, maxLength: 50, description: "Rótulo (Jira) ou tag (ClickUp) que marca o item como elegível"}
+        eligible_statuses: {type: array, maxItems: 30, items: {type: string}, description: "Estados da origem dos quais o item pode ser tomado"}
+        priority_map:
+          type: object
+          maxProperties: 20
+          additionalProperties: {type: integer, minimum: 0, maximum: 4}
+          description: "Prioridade da origem (minúsculas) para a faixa 0..4 da fábrica"
+        access: {type: string, enum: [read, read_write]}
+    SourceStep:
+      type: object
+      required: [id, label, status, detail]
+      properties:
+        id: {type: string, enum: [credential, container, statuses, priorities, items, write]}
+        label: {type: string}
+        status: {type: string, enum: [ok, failed, skipped]}
+        detail: {type: string}
+    PreviewItem:
+      type: object
+      required: [key, title, status, priority, mapped_priority, subtask, url]
+      properties:
+        key: {type: string}
+        title: {type: string}
+        status: {type: string}
+        priority: {type: string}
+        mapped_priority: {type: [integer, "null"], minimum: 0, maximum: 4}
+        subtask: {type: boolean}
+        url: {type: string}
+    SourceCheck:
+      type: object
+      required: [ok, steps, items, has_more, checked_at]
+      properties:
+        ok: {type: boolean}
+        steps: {type: array, items: {$ref: "#/components/schemas/SourceStep"}}
+        items: {type: array, items: {$ref: "#/components/schemas/PreviewItem"}}
+        has_more: {type: boolean}
+        checked_at: {type: string, format: date-time}
     Project:
       type: object
       required: [id, slug, name, description, state, priority, wizard_step, repository, source, version, activated_at, created_at, updated_at]
@@ -651,7 +704,7 @@ components:
       required: [id, action, detail, created_at]
       properties:
         id: {type: integer}
-        action: {type: string, enum: [created, updated, source_changed, activated, suspended, resumed]}
+        action: {type: string, enum: [created, updated, source_changed, source_checked, activated, suspended, resumed]}
         detail: {type: object, additionalProperties: true, description: "Só nomes de campos e referências; nunca segredos"}
         created_at: {type: string, format: date-time}
     ProjectPage:
