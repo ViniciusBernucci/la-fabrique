@@ -1,5 +1,5 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
-import { ApiError, api, type Session } from "./api";
+import { ApiError, api, type Session, setCsrfToken } from "./api";
 
 type SessionState =
   | { status: "loading" }
@@ -12,8 +12,10 @@ interface SessionContextValue {
   /** Marca a sessão como perdida (ex.: um 401 numa chamada qualquer). */
   expire: () => void;
   retry: () => void;
-  /** Disponível só em dev (Vite) enquanto o login real (T04-01) não existe. */
-  signInDev?: () => Promise<void>;
+  /** Aplica uma sessão devolvida pelo login ou pela reautenticação. */
+  setSession: (session: Session) => void;
+  /** Encerra a sessão no servidor e volta ao login. */
+  signOut: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -28,7 +30,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setState({ status: "loading" });
     api
       .session(controller.signal)
-      .then((session) => setState({ status: "authenticated", session }))
+      .then((session) => {
+        setCsrfToken(session.csrf_token);
+        setState({ status: "authenticated", session });
+      })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         if (error instanceof ApiError && error.isUnauthorized)
@@ -45,17 +50,27 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => controller.abort();
   }, [attempt]);
 
-  const expire = useCallback(() => setState({ status: "unauthenticated" }), []);
+  const expire = useCallback(() => {
+    setCsrfToken("");
+    setState({ status: "unauthenticated" });
+  }, []);
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
-  const signInDev = import.meta.env.DEV
-    ? async () => {
-        const session = await api.devSignIn();
-        setState({ status: "authenticated", session });
-      }
-    : undefined;
+  const setSession = useCallback((session: Session) => {
+    setCsrfToken(session.csrf_token);
+    setState({ status: "authenticated", session });
+  }, []);
+  const signOut = useCallback(async () => {
+    try {
+      await api.logout();
+    } finally {
+      // Mesmo que a chamada falhe, o painel deixa de mostrar a sessão; o servidor decide a validade.
+      setCsrfToken("");
+      setState({ status: "unauthenticated" });
+    }
+  }, []);
 
   return (
-    <SessionContext.Provider value={{ state, expire, retry, signInDev }}>
+    <SessionContext.Provider value={{ state, expire, retry, setSession, signOut }}>
       {children}
     </SessionContext.Provider>
   );

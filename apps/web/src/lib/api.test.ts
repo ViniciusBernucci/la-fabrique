@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, api, request } from "./api";
+import { ApiError, api, request, setCsrfToken } from "./api";
 
 function mockFetch(response: Response | Error) {
   const fn = vi.fn(async () => {
@@ -63,5 +63,35 @@ describe("request", () => {
     await api.getProject("a/b?c");
     const [url] = fn.mock.calls[0] as unknown as [string];
     expect(url).toBe("/api/projects/a%2Fb%3Fc");
+  });
+
+  it("envia o token CSRF só em métodos que alteram estado", async () => {
+    const fn = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fn);
+    setCsrfToken("csrf-xyz");
+    await api.listConnections();
+    await api.revokeConnection("c1");
+    const headers = (i: number) =>
+      (fn.mock.calls[i] as unknown as [string, RequestInit])[1].headers as Record<string, string>;
+    expect(headers(0)["X-CSRF-Token"]).toBeUndefined();
+    expect(headers(1)["X-CSRF-Token"]).toBe("csrf-xyz");
+    setCsrfToken("");
+    await api.revokeConnection("c1");
+    expect(headers(2)["X-CSRF-Token"]).toBeUndefined();
+  });
+
+  it("envia JSON com Content-Type e nunca recebe o segredo de volta no tipo", async () => {
+    const fn = mockFetch(new Response("{}", { status: 201 }));
+    await api.createConnection({
+      kind: "github",
+      name: "x",
+      target: "",
+      scopes: "",
+      secret: "valor",
+    });
+    const [url, init] = fn.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/connections");
+    expect((init.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+    expect(JSON.parse(String(init.body))).toMatchObject({ kind: "github", secret: "valor" });
   });
 });

@@ -1,6 +1,6 @@
 # ADR-0004 — Sessão validada no servidor e acesso de dev provisório
 
-- **Estado:** ACEITA, **PROVISÓRIA** até o [T04-01](../NEW%20MVP/03-BACKLOG.md#t04-01) · **Ticket:** [T03-03](../NEW%20MVP/03-BACKLOG.md#t03-03) · **Épico:** E03
+- **Estado:** PARCIALMENTE SUPERADA pela [ADR-0005](0005-autenticacao-sessoes-e-cofre-de-conexoes.md): o item 1 (sessão validada no servidor) **segue valendo**; o item 2 (acesso dev sem senha: `POST /api/dev/session`, `DEV_AUTH_ENABLED` e o botão) foi **removido no [T04-01](../NEW%20MVP/03-BACKLOG.md#t04-01)** (a configuração agora recusa `DEV_AUTH_ENABLED=true` em qualquer ambiente; a migration 3 apaga o admin `dev-admin`) · **Ticket:** [T03-03](../NEW%20MVP/03-BACKLOG.md#t03-03) · **Épico:** E03
 
 ## Contexto
 

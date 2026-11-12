@@ -61,9 +61,14 @@ func redactConnErr(err error) error {
 	return errors.New("falha de conexão ou configuração do pool")
 }
 
+// TxStarter é implementado por *pgxpool.Pool.
+type TxStarter interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
 // WithTx executa fn em uma transação e faz commit se fn retornar nil.
 // Qualquer erro ou panic desfaz a transação.
-func WithTx(ctx context.Context, pool *pgxpool.Pool, fn func(tx pgx.Tx) error) (err error) {
+func WithTx(ctx context.Context, pool TxStarter, fn func(tx pgx.Tx) error) (err error) {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("iniciar transação: %w", err)

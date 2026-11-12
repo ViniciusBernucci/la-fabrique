@@ -3,9 +3,12 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"mime"
 	"net/http"
+	"strconv"
 
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
+	"github.com/ViniciusBernucci/le-fabrique/internal/security"
 )
 
 // ErrorBody é o formato de erro de todos os endpoints (ver contracts/openapi.yaml):
@@ -36,7 +39,24 @@ func writeError(w http.ResponseWriter, r *http.Request, status int, code, messag
 
 // writeDomainError traduz erros de persistência para respostas HTTP sem expor detalhes internos.
 func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err error) {
+	var locked *security.LockedError
 	switch {
+	case errors.As(err, &locked):
+		secs := int(locked.RetryAfter.Seconds()) + 1
+		w.Header().Set("Retry-After", strconv.Itoa(secs))
+		writeError(w, r, http.StatusTooManyRequests, "too_many_attempts", "Muitas tentativas.", "Aguarde alguns minutos antes de tentar novamente.")
+	case errors.Is(err, security.ErrInvalidCredentials):
+		writeError(w, r, http.StatusUnauthorized, "invalid_credentials", "Usuário, senha ou código inválidos.", "Confira os dados e tente novamente.")
+	case errors.Is(err, security.ErrInvalidCode):
+		writeError(w, r, http.StatusUnauthorized, "invalid_code", "Código inválido ou já utilizado.", "Use o código atual do app autenticador ou um código de recuperação não usado.")
+	case errors.Is(err, security.ErrChallenge):
+		writeError(w, r, http.StatusUnauthorized, "challenge_expired", "A verificação expirou ou foi esgotada.", "Entre novamente com usuário e senha.")
+	case errors.Is(err, security.ErrTOTPState):
+		writeError(w, r, http.StatusConflict, "totp_state", "Operação incompatível com o estado do segundo fator.", "Recomece o login ou a substituição do 2FA.")
+	case errors.Is(err, security.ErrWeakPassword), errors.Is(err, security.ErrInvalidUsername), errors.Is(err, security.ErrInvalidSecret):
+		writeError(w, r, http.StatusBadRequest, "invalid_request", "Os dados enviados são inválidos.", "Corrija os dados e tente novamente.")
+	case errors.Is(err, security.ErrConnectionRevoked):
+		writeError(w, r, http.StatusConflict, "connection_revoked", "A conexão está revogada.", "Crie uma nova conexão para voltar a usar este destino.")
 	case errors.Is(err, persistence.ErrNotFound):
 		writeError(w, r, http.StatusNotFound, "not_found", "Recurso não encontrado.", "Verifique o identificador.")
 	case errors.Is(err, persistence.ErrVersionConflict):
@@ -49,4 +69,21 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 		s.log.ErrorContext(r.Context(), "erro interno", "error", err.Error(), "correlation_id", correlationID(r.Context()))
 		writeError(w, r, http.StatusInternalServerError, "internal_error", "Erro interno.", "Tente novamente; se persistir, informe o ID de correlação.")
 	}
+}
+
+// decodeJSON lê o corpo como JSON estrito (tipo, campos desconhecidos). Em caso
+// de erro já responde e devolve false; o corpo nunca é ecoado na resposta.
+func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mt != "application/json" {
+		writeError(w, r, http.StatusUnsupportedMediaType, "unsupported_media_type", "Envie o corpo como application/json.", "Defina Content-Type: application/json.")
+		return false
+	}
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_request", "Corpo JSON inválido.", "Confira os campos conforme contracts/openapi.yaml.")
+		return false
+	}
+	return true
 }

@@ -5,6 +5,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
@@ -41,7 +42,15 @@ type API struct {
 	SessionTTL          time.Duration
 	SessionCookieName   string
 	SessionCookieSecure bool
-	DevAuthEnabled      bool
+	// RequireHTTPS recusa requisições que o proxy não marcou como HTTPS
+	// (X-Forwarded-Proto) e envia HSTS. Padrão: ligado em produção.
+	RequireHTTPS bool
+	// TrustProxy confia em X-Forwarded-For/Host/Proto (API atrás do nginx do painel).
+	TrustProxy bool
+	// VaultKey é a chave AES-256 (32 bytes) do cofre e do segredo TOTP. Fica
+	// fora do banco e nunca é logada.
+	VaultKey   []byte
+	VaultKeyID string
 }
 
 // Worker é a configuração do cmd/worker.
@@ -193,14 +202,38 @@ func LoadAPI(lookup Lookup) (API, error) {
 	cfg.SessionTTL = l.duration("SESSION_TTL", 12*time.Hour, time.Minute)
 	cfg.SessionCookieName = l.str("SESSION_COOKIE_NAME", "lf_session")
 	cfg.SessionCookieSecure = l.boolean("SESSION_COOKIE_SECURE", cfg.Env == Production)
-	cfg.DevAuthEnabled = l.boolean("DEV_AUTH_ENABLED", false)
-	if cfg.DevAuthEnabled && cfg.Env != Development {
-		l.fail("DEV_AUTH_ENABLED só pode ser true com APP_ENV=development")
+	if _, ok := l.lookup("DEV_AUTH_ENABLED"); ok && l.boolean("DEV_AUTH_ENABLED", false) {
+		l.fail("DEV_AUTH_ENABLED foi removida no T04-01 (ADR-0005); crie a conta com `make create-admin`")
+	}
+	cfg.RequireHTTPS = l.boolean("REQUIRE_HTTPS", cfg.Env == Production)
+	cfg.TrustProxy = l.boolean("TRUST_PROXY", false)
+	cfg.VaultKeyID = l.str("VAULT_KEY_ID", "k1")
+	cfg.VaultKey = l.vaultKey()
+	if cfg.Env == Production && !cfg.RequireHTTPS {
+		l.fail("REQUIRE_HTTPS deve ser true com APP_ENV=production")
 	}
 	if cfg.Env == Production && !cfg.SessionCookieSecure {
 		l.fail("SESSION_COOKIE_SECURE deve ser true com APP_ENV=production")
 	}
 	return cfg, l.result()
+}
+
+// vaultKey decodifica VAULT_KEY (base64 de 32 bytes). Nunca inclui o valor na mensagem.
+func (l *loader) vaultKey() []byte {
+	raw := l.required("VAULT_KEY")
+	if raw == "" {
+		return nil
+	}
+	for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
+		if b, err := enc.DecodeString(raw); err == nil {
+			if len(b) != 32 {
+				break
+			}
+			return b
+		}
+	}
+	l.fail("VAULT_KEY deve ser base64 de exatamente 32 bytes (ex.: openssl rand -base64 32)")
+	return nil
 }
 
 // LoadWorker valida a configuração do worker.

@@ -4,14 +4,34 @@ info:
   version: 0.1.0
   description: |
     Contrato interno entre o painel web e a API Go. Cresce a cada épico; esta
-    versão cobre o T03 (fundação): saúde, sessão e leitura de projetos.
-    Toda rota fora de /api/healthz e /api/readyz exige o cookie de sessão
-    `lf_session` (HttpOnly, SameSite=Strict). Erros seguem `ErrorBody`.
+    versão cobre T03 (saúde, sessão, projetos) e E04 (login com senha + TOTP,
+    recuperação, sessões, reautenticação, CSRF e cofre de conexões).
+
+    **Autenticação.** Toda rota fora de /healthz, /readyz e /auth/login|totp|
+    recover|totp/setup|totp/enable exige o cookie de sessão `lf_session`
+    (HttpOnly, SameSite=Strict, Secure em produção). A sessão só nasce depois
+    de senha + segundo fator.
+
+    **CSRF.** Em POST/PUT/PATCH/DELETE autenticados envie `X-CSRF-Token` com o
+    `csrf_token` devolvido por `GET /session` ou pelo login. A API também recusa
+    `Origin`/`Sec-Fetch-Site` de outra origem (403 `csrf_rejected`).
+
+    **Ações sensíveis** (marcadas abaixo) exigem reautenticação recente
+    (`reauth_until` na sessão); sem ela: 403 `reauth_required`. Reautentique com
+    `POST /auth/reauth` e repita a ação.
+
+    **HTTPS.** Em produção a API recusa requisições que o proxy não marcou como
+    HTTPS (400 `https_required`) e envia HSTS.
+
+    Erros seguem `ErrorBody`. Nenhuma resposta contém segredos; o valor de uma
+    conexão nunca volta pela API.
 servers:
   - url: /api
 tags:
   - name: operacao
   - name: sessao
+  - name: autenticacao
+  - name: conexoes
   - name: projetos
 paths:
   /healthz:
@@ -36,16 +56,221 @@ paths:
       responses:
         "200": {description: Sessão válida, content: {application/json: {schema: {$ref: "#/components/schemas/Session"}}}}
         "401": {$ref: "#/components/responses/Error"}
-  /dev/session:
+  /auth/login:
     post:
-      tags: [sessao]
-      summary: "[SOMENTE DEV] Emite sessão sem senha"
+      tags: [autenticacao]
+      summary: Passo 1 do login — valida usuário e senha
       description: |
-        Existe apenas com DEV_AUTH_ENABLED=true, que a API recusa fora de
-        APP_ENV=development. Será removido quando o login (T04-01) existir.
+        NÃO abre sessão. Em caso de sucesso define o cookie de desafio
+        `lf_challenge` (10 min, HttpOnly) e informa o próximo passo. Após 5
+        falhas na conta (ou 20 no IP) em 15 min: 429 `too_many_attempts`.
+        Usuário inexistente e senha errada têm a mesma resposta.
+      security: []
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/LoginRequest"}}}}
+      responses:
+        "200": {description: Senha correta; falta o segundo fator, content: {application/json: {schema: {$ref: "#/components/schemas/LoginStage"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+  /auth/totp:
+    post:
+      tags: [autenticacao]
+      summary: Passo 2 do login — código TOTP
+      description: Exige o cookie `lf_challenge`. Cada código só vale uma vez (anti-replay). Abre a sessão.
+      security: []
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/CodeRequest"}}}}
+      responses:
+        "200": {description: Sessão aberta e cookie definido, content: {application/json: {schema: {$ref: "#/components/schemas/Session"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+  /auth/recover:
+    post:
+      tags: [autenticacao]
+      summary: Passo 2 alternativo — código de recuperação (uso único)
+      description: |
+        Exige `lf_challenge`. O código é consumido atomicamente: requisições
+        concorrentes com o mesmo código resultam em uma única sessão. A sessão
+        volta com `totp_reset_required=true` (substitua o 2FA).
+      security: []
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/RecoveryRequest"}}}}
+      responses:
+        "200": {description: Sessão aberta e cookie definido, content: {application/json: {schema: {$ref: "#/components/schemas/Session"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+  /auth/totp/setup:
+    post:
+      tags: [autenticacao]
+      summary: Primeiro acesso — gera o segredo TOTP
+      description: Exige `lf_challenge` de uma conta ainda sem 2FA. O segredo é guardado cifrado.
       security: []
       responses:
-        "201": {description: Sessão criada e cookie definido, content: {application/json: {schema: {$ref: "#/components/schemas/Session"}}}}
+        "200": {description: Material para o app autenticador, content: {application/json: {schema: {$ref: "#/components/schemas/Enrollment"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /auth/totp/enable:
+    post:
+      tags: [autenticacao]
+      summary: Primeiro acesso — confirma o TOTP, emite códigos de recuperação e abre a sessão
+      description: Os códigos de recuperação são mostrados **uma única vez**.
+      security: []
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/CodeRequest"}}}}
+      responses:
+        "201": {description: 2FA ativo e sessão aberta, content: {application/json: {schema: {$ref: "#/components/schemas/SessionWithRecoveryCodes"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+  /auth/logout:
+    post:
+      tags: [autenticacao]
+      summary: Encerra e revoga a sessão atual
+      responses:
+        "200": {description: Sessão revogada, content: {application/json: {schema: {$ref: "#/components/schemas/Status"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /auth/reauth:
+    post:
+      tags: [autenticacao]
+      summary: Reautentica (senha + código TOTP) e abre a janela de ações sensíveis
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/ReauthRequest"}}}}
+      responses:
+        "200": {description: Janela aberta (`reauth_until`), content: {application/json: {schema: {$ref: "#/components/schemas/Session"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+  /auth/events:
+    get:
+      tags: [autenticacao]
+      summary: Trilha de autenticação (últimos 50 eventos)
+      description: Nunca contém senha, código, token nem nome de usuário tentado.
+      responses:
+        "200": {description: Eventos, mais novos primeiro, content: {application/json: {schema: {$ref: "#/components/schemas/AuthEventList"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+  /auth/totp/replace/begin:
+    post:
+      tags: [autenticacao]
+      summary: "[SENSÍVEL] Inicia a substituição do segundo fator"
+      description: Gera um segredo pendente; o atual segue valendo até a confirmação.
+      responses:
+        "200": {description: Material para o novo autenticador, content: {application/json: {schema: {$ref: "#/components/schemas/Enrollment"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /auth/totp/replace/confirm:
+    post:
+      tags: [autenticacao]
+      summary: "[SENSÍVEL] Confirma a substituição do segundo fator"
+      description: Emite novos códigos de recuperação (invalida os anteriores) e revoga as demais sessões.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/CodeRequest"}}}}
+      responses:
+        "200": {description: Segundo fator substituído, content: {application/json: {schema: {$ref: "#/components/schemas/RecoveryCodes"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+  /sessions:
+    get:
+      tags: [sessao]
+      summary: Sessões ativas do administrador
+      responses:
+        "200": {description: Sessões, content: {application/json: {schema: {$ref: "#/components/schemas/SessionList"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+  /sessions/{id}:
+    delete:
+      tags: [sessao]
+      summary: Revoga uma sessão (a própria é livre; outra é SENSÍVEL)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Sessão revogada, content: {application/json: {schema: {$ref: "#/components/schemas/Status"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /sessions/revoke-others:
+    post:
+      tags: [sessao]
+      summary: "[SENSÍVEL] Revoga todas as sessões exceto a atual"
+      responses:
+        "200": {description: Quantidade revogada, content: {application/json: {schema: {$ref: "#/components/schemas/RevokedCount"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /connections:
+    get:
+      tags: [conexoes]
+      summary: Lista conexões do cofre (sem segredos)
+      responses:
+        "200": {description: Conexões, content: {application/json: {schema: {$ref: "#/components/schemas/ConnectionList"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [conexoes]
+      summary: "[SENSÍVEL] Cria uma conexão (o segredo é cifrado com chave externa ao banco)"
+      description: |
+        `secret` é aceito aqui e **nunca** devolvido. Jira: `email:token` com
+        `target` https://<site>.atlassian.net. Use escopos mínimos no destino.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/NewConnection"}}}}
+      responses:
+        "201": {description: Conexão criada, content: {application/json: {schema: {$ref: "#/components/schemas/Connection"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /connections/{id}:
+    get:
+      tags: [conexoes]
+      summary: Detalhe de uma conexão (sem segredo)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Conexão, content: {application/json: {schema: {$ref: "#/components/schemas/Connection"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /connections/{id}/test:
+    post:
+      tags: [conexoes]
+      summary: Testa a credencial no destino e grava o resultado
+      description: |
+        GitHub, ClickUp e Jira têm teste remoto. cli/api/mcp devolvem
+        `not_run` (sem teste remoto seguro): o segredo só é decifrado.
+        O detalhe nunca contém corpo remoto nem o segredo.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Resultado em `last_test_*`, content: {application/json: {schema: {$ref: "#/components/schemas/Connection"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /connections/{id}/rotate:
+    post:
+      tags: [conexoes]
+      summary: "[SENSÍVEL] Troca o segredo mantendo id e vínculos"
+      description: O valor anterior é descartado. `expected_version` evita sobrescrever alteração concorrente (409 `version_conflict`).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/RotateConnection"}}}}
+      responses:
+        "200": {description: Conexão rotacionada, content: {application/json: {schema: {$ref: "#/components/schemas/Connection"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /connections/{id}/revoke:
+    post:
+      tags: [conexoes]
+      summary: "[SENSÍVEL] Revoga a conexão e apaga o segredo (irreversível, idempotente)"
+      description: O efeito vale para o próximo uso, sem cache (`Vault.Resolve` consulta o banco).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Conexão revogada, content: {application/json: {schema: {$ref: "#/components/schemas/Connection"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
   /projects:
     get:
@@ -97,12 +322,142 @@ components:
             correlation_id: {type: string}
     Session:
       type: object
-      required: [id, admin_id, username, expires_at]
+      required: [id, admin_id, username, expires_at, csrf_token, totp_reset_required]
       properties:
         id: {type: string, format: uuid}
         admin_id: {type: string, format: uuid}
         username: {type: string}
         expires_at: {type: string, format: date-time}
+        csrf_token: {type: string, description: "Enviar em X-CSRF-Token nas requisições que alteram estado"}
+        reauth_until: {type: string, format: date-time, description: "Ausente = ações sensíveis exigem reautenticação"}
+        totp_reset_required: {type: boolean, description: "Entrou com código de recuperação: substitua o 2FA"}
+    LoginRequest:
+      type: object
+      required: [username, password]
+      additionalProperties: false
+      properties:
+        username: {type: string}
+        password: {type: string, format: password}
+    CodeRequest:
+      type: object
+      required: [code]
+      additionalProperties: false
+      properties:
+        code: {type: string, example: "123456", description: "Código TOTP de 6 dígitos"}
+    RecoveryRequest:
+      type: object
+      required: [recovery_code]
+      additionalProperties: false
+      properties:
+        recovery_code: {type: string, example: "ABCD-EFGH-IJKL-MNOP"}
+    ReauthRequest:
+      type: object
+      required: [password, code]
+      additionalProperties: false
+      properties:
+        password: {type: string, format: password}
+        code: {type: string}
+    LoginStage:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [totp_required, totp_enrollment_required]}
+    Enrollment:
+      type: object
+      required: [secret, otpauth_uri]
+      properties:
+        secret: {type: string, description: "Segredo em base32 para entrada manual"}
+        otpauth_uri: {type: string, description: "URI otpauth:// para QR code"}
+    RecoveryCodes:
+      type: object
+      required: [recovery_codes]
+      properties:
+        recovery_codes: {type: array, items: {type: string}, description: "Mostrados uma única vez; uso único"}
+    SessionWithRecoveryCodes:
+      allOf:
+        - $ref: "#/components/schemas/Session"
+        - $ref: "#/components/schemas/RecoveryCodes"
+    SessionInfo:
+      type: object
+      required: [id, created_at, expires_at, ip, user_agent, auth_method, current]
+      properties:
+        id: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        ip: {type: string}
+        user_agent: {type: string}
+        auth_method: {type: string, enum: [totp, recovery]}
+        current: {type: boolean}
+    SessionList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/SessionInfo"}}
+    RevokedCount:
+      type: object
+      required: [revoked]
+      properties:
+        revoked: {type: integer}
+    AuthEvent:
+      type: object
+      required: [id, type, ip, user_agent, detail, created_at]
+      properties:
+        id: {type: integer}
+        type: {type: string, example: login_success}
+        ip: {type: string}
+        user_agent: {type: string}
+        detail: {type: object}
+        created_at: {type: string, format: date-time}
+    AuthEventList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/AuthEvent"}}
+    ConnectionKind:
+      type: string
+      enum: [github, jira, clickup, cli, api, mcp]
+    NewConnection:
+      type: object
+      required: [kind, name, secret]
+      additionalProperties: false
+      properties:
+        kind: {$ref: "#/components/schemas/ConnectionKind"}
+        name: {type: string, minLength: 1, maxLength: 80}
+        target: {type: string, maxLength: 200, description: "Destino não secreto (URL do site, organização)"}
+        scopes: {type: string, maxLength: 200, description: "Escopos mínimos declarados (documentação)"}
+        secret: {type: string, format: password, maxLength: 8192, description: "Somente escrita; nunca devolvido"}
+    RotateConnection:
+      type: object
+      required: [secret, expected_version]
+      additionalProperties: false
+      properties:
+        secret: {type: string, format: password, maxLength: 8192}
+        expected_version: {type: integer, minimum: 1}
+    Connection:
+      type: object
+      required: [id, kind, name, target, scopes, state, secret_version, last_test_status, last_test_detail, version, created_at, updated_at]
+      description: Nunca inclui o segredo.
+      properties:
+        id: {type: string, format: uuid, description: "Estável: referência de uso é `connection:<id>`"}
+        kind: {$ref: "#/components/schemas/ConnectionKind"}
+        name: {type: string}
+        target: {type: string}
+        scopes: {type: string}
+        state: {type: string, enum: [active, revoked]}
+        secret_version: {type: integer}
+        rotated_at: {type: string, format: date-time}
+        revoked_at: {type: string, format: date-time}
+        last_test_at: {type: string, format: date-time}
+        last_test_status: {type: string, enum: [ok, failed, not_run]}
+        last_test_detail: {type: string}
+        version: {type: integer, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ConnectionList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/Connection"}}
     ProjectState:
       type: string
       enum: [draft, active, paused, archived]

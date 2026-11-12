@@ -11,6 +11,8 @@ const session = {
   admin_id: "a1",
   username: "admin",
   expires_at: "2030-01-01T00:00:00Z",
+  csrf_token: "csrf-1",
+  totp_reset_required: false,
 };
 
 const project: Project = {
@@ -69,28 +71,14 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("sem sessão", () => {
-  it("mostra a tela de acesso restrito e não renderiza o menu", async () => {
+  it("mostra o login e não renderiza o menu nem as rotas do painel", async () => {
     stubApi({ "/session": () => apiError(401, "unauthorized", "Sessão ausente.") });
     renderAt("/projects");
-    expect(await screen.findByRole("heading", { name: "Sessão necessária" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Entrar" })).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: /menu/i })).not.toBeInTheDocument();
     expect(screen.queryByText("Projetos")).not.toBeInTheDocument();
-  });
-
-  it("em dev, o acesso de dev cria a sessão e abre o painel", async () => {
-    let signedIn = false;
-    stubApi({
-      "/session": () =>
-        signedIn ? json(session) : apiError(401, "unauthorized", "Sessão ausente."),
-      "/dev/session": () => {
-        signedIn = true;
-        return json(session, 201);
-      },
-      "/readyz": ready,
-    });
-    renderAt("/");
-    await userEvent.click(await screen.findByRole("button", { name: "Entrar (somente dev)" }));
-    expect(await screen.findByRole("heading", { name: "Central de comando" })).toBeInTheDocument();
+    // O acesso dev sem senha foi removido (T04-01).
+    expect(screen.queryByRole("button", { name: /dev/i })).not.toBeInTheDocument();
   });
 
   it("falha do servidor na verificação mostra erro com nova tentativa", async () => {
@@ -115,6 +103,8 @@ describe("com sessão", () => {
       ["Projetos", "/projects"],
       ["Biblioteca", "/library"],
       ["Decisões", "/decisions"],
+      ["Conexões", "/connections"],
+      ["Segurança", "/security"],
     ]);
     expect(screen.getByRole("link", { name: "Painel" })).toHaveAttribute("aria-current", "page");
   });
@@ -170,7 +160,7 @@ describe("com sessão", () => {
   it("um 401 numa página devolve o usuário à tela de sessão", async () => {
     stubApi({ ...base, "/projects": () => apiError(401, "unauthorized", "Sessão revogada.") });
     renderAt("/projects");
-    expect(await screen.findByRole("heading", { name: "Sessão necessária" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Entrar" })).toBeInTheDocument();
   });
 
   it("detalhe do projeto mostra os dados", async () => {

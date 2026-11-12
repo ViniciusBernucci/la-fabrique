@@ -51,18 +51,89 @@ export interface Session {
   admin_id: string;
   username: string;
   expires_at: string;
+  /** Vai em X-CSRF-Token nas requisições que alteram estado. */
+  csrf_token: string;
+  /** Ausente = ações sensíveis exigem reautenticação. */
+  reauth_until?: string;
+  /** Entrou com código de recuperação: o 2FA deve ser substituído. */
+  totp_reset_required: boolean;
+}
+
+export type LoginStatus = "totp_required" | "totp_enrollment_required";
+
+export interface Enrollment {
+  secret: string;
+  otpauth_uri: string;
+}
+
+export interface SessionInfo {
+  id: string;
+  created_at: string;
+  expires_at: string;
+  ip: string;
+  user_agent: string;
+  auth_method: "totp" | "recovery";
+  current: boolean;
+}
+
+export interface AuthEvent {
+  id: number;
+  type: string;
+  ip: string;
+  user_agent: string;
+  created_at: string;
+}
+
+export type ConnectionKind = "github" | "jira" | "clickup" | "cli" | "api" | "mcp";
+
+export interface Connection {
+  id: string;
+  kind: ConnectionKind;
+  name: string;
+  target: string;
+  scopes: string;
+  state: "active" | "revoked";
+  secret_version: number;
+  rotated_at?: string;
+  revoked_at?: string;
+  last_test_at?: string;
+  last_test_status: "ok" | "failed" | "not_run";
+  last_test_detail: string;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NewConnection {
+  kind: ConnectionKind;
+  name: string;
+  target: string;
+  scopes: string;
+  secret: string;
 }
 
 const BASE = "/api";
+
+/** Token CSRF da sessão atual (memória; o servidor o devolve em /session e no login). */
+let csrfToken = "";
+export function setCsrfToken(token: string): void {
+  csrfToken = token;
+}
 
 /** Chama a API com cookie de sessão e converte falhas em ApiError. */
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
   try {
+    const method = (init.method ?? "GET").toUpperCase();
+    const unsafe = method !== "GET" && method !== "HEAD";
     response = await fetch(`${BASE}${path}`, {
       credentials: "same-origin",
       ...init,
-      headers: { Accept: "application/json", ...init.headers },
+      headers: {
+        Accept: "application/json",
+        ...(unsafe && csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+        ...init.headers,
+      },
     });
   } catch (cause) {
     if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
@@ -92,11 +163,52 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   });
 }
 
+function post<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+  return request<T>(path, {
+    method: "POST",
+    signal,
+    ...(body === undefined
+      ? {}
+      : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  });
+}
+
 export const api = {
   session: (signal?: AbortSignal) => request<Session>("/session", { signal }),
-  devSignIn: () => request<Session>("/dev/session", { method: "POST" }),
   ready: (signal?: AbortSignal) => request<{ status: string }>("/readyz", { signal }),
   listProjects: (signal?: AbortSignal) => request<ProjectPage>("/projects?limit=100", { signal }),
   getProject: (id: string, signal?: AbortSignal) =>
     request<Project>(`/projects/${encodeURIComponent(id)}`, { signal }),
+
+  // Login em duas etapas.
+  login: (username: string, password: string) =>
+    post<{ status: LoginStatus }>("/auth/login", { username, password }),
+  loginTotp: (code: string) => post<Session>("/auth/totp", { code }),
+  loginRecover: (recovery_code: string) => post<Session>("/auth/recover", { recovery_code }),
+  totpSetup: () => post<Enrollment>("/auth/totp/setup"),
+  totpEnable: (code: string) =>
+    post<Session & { recovery_codes: string[] }>("/auth/totp/enable", { code }),
+
+  // Conta e sessões.
+  logout: () => post<{ status: string }>("/auth/logout"),
+  reauth: (password: string, code: string) => post<Session>("/auth/reauth", { password, code }),
+  authEvents: (signal?: AbortSignal) => request<{ items: AuthEvent[] }>("/auth/events", { signal }),
+  listSessions: (signal?: AbortSignal) =>
+    request<{ items: SessionInfo[] }>("/sessions", { signal }),
+  revokeSession: (id: string) =>
+    request<{ status: string }>(`/sessions/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  revokeOtherSessions: () => post<{ revoked: number }>("/sessions/revoke-others"),
+  replaceTotpBegin: () => post<Enrollment>("/auth/totp/replace/begin"),
+  replaceTotpConfirm: (code: string) =>
+    post<{ recovery_codes: string[] }>("/auth/totp/replace/confirm", { code }),
+
+  // Cofre de conexões (o segredo só é enviado, nunca recebido).
+  listConnections: (signal?: AbortSignal) =>
+    request<{ items: Connection[] }>("/connections", { signal }),
+  createConnection: (input: NewConnection) => post<Connection>("/connections", input),
+  testConnection: (id: string) => post<Connection>(`/connections/${encodeURIComponent(id)}/test`),
+  rotateConnection: (id: string, secret: string, expected_version: number) =>
+    post<Connection>(`/connections/${encodeURIComponent(id)}/rotate`, { secret, expected_version }),
+  revokeConnection: (id: string) =>
+    post<Connection>(`/connections/${encodeURIComponent(id)}/revoke`),
 };

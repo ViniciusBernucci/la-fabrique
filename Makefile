@@ -8,7 +8,7 @@ export
 DB_ADMIN_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:$(POSTGRES_PORT)/postgres?sslmode=disable
 DB_APP_URL   ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=disable
 
-.PHONY: help bootstrap up down logs ps up-prod down-prod ps-prod logs-prod migrate migrate-status seed \
+.PHONY: help bootstrap up down logs ps up-prod down-prod ps-prod logs-prod migrate migrate-status seed create-admin \
         fmt lint test test-integration test-web build typecheck check-secrets db-backup db-restore sync-skills
 
 help: ## Lista os comandos
@@ -46,6 +46,9 @@ migrate-status: ## Mostra o estado das migrations
 	DATABASE_URL='$(DB_APP_URL)' go run ./cmd/migrate status
 seed: ## Carrega projetos fictícios de dev (somente APP_ENV=development)
 	DATABASE_URL='$(DB_APP_URL)' APP_ENV=development go run ./cmd/migrate seed-dev
+create-admin: ## Cria a conta única do administrador (pergunta usuário e senha; o 2FA é cadastrado no 1º login)
+	@read -p "Usuário: " u; read -s -p "Senha (mín. 12 caracteres): " p; echo; \
+	  ADMIN_USERNAME="$$u" ADMIN_PASSWORD="$$p" DATABASE_URL='$(DB_APP_URL)' go run ./cmd/migrate create-admin
 db-backup: ## Backup do banco (MODE=dev|prod)
 	scripts/db-backup.sh $(or $(MODE),dev)
 db-restore: ## Restaura em banco isolado. Ex.: make db-restore F=backups/db-XXXX.dump

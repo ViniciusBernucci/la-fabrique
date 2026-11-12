@@ -46,23 +46,3 @@ export function ErrorState({ error, onRetry }: { error: ApiError; onRetry?: () =
     </div>
   );
 }
-
-export function UnauthorizedState({ onSignInDev }: { onSignInDev?: () => void }) {
-  return (
-    <div className="state" role="alert">
-      <span className="page-label">Acesso restrito</span>
-      <h2>Sessão necessária</h2>
-      <p>
-        O servidor recusa o acesso sem uma sessão válida.{" "}
-        {onSignInDev
-          ? "Em desenvolvimento, use o acesso de dev abaixo."
-          : "O login com senha e 2FA será disponibilizado no ticket T04-01."}
-      </p>
-      {onSignInDev && (
-        <button type="button" onClick={onSignInDev}>
-          Entrar (somente dev)
-        </button>
-      )}
-    </div>
-  );
-}

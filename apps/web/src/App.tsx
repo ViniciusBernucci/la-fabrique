@@ -1,13 +1,16 @@
 import { Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
-import { ErrorState, LoadingState, UnauthorizedState } from "./components/States";
+import { ErrorState, LoadingState } from "./components/States";
 import { useSession } from "./lib/session";
+import { ConnectionsPage } from "./pages/ConnectionsPage";
 import { DecisionsPage } from "./pages/DecisionsPage";
 import { HomePage } from "./pages/HomePage";
 import { LibraryPage } from "./pages/LibraryPage";
+import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { ProjectDetailPage } from "./pages/ProjectDetailPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
+import { SecurityPage } from "./pages/SecurityPage";
 
 function Gate({ children }: { children: React.ReactNode }) {
   return (
@@ -17,9 +20,9 @@ function Gate({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Sem sessão válida nenhuma rota do painel é renderizada (o servidor também recusa). */
+/** Sem sessão válida só o login é renderizado (o servidor também recusa qualquer rota de dados). */
 export function App() {
-  const { state, retry, signInDev } = useSession();
+  const { state, retry } = useSession();
 
   if (state.status === "loading") {
     return (
@@ -36,13 +39,7 @@ export function App() {
     );
   }
   if (state.status === "unauthenticated") {
-    return (
-      <Gate>
-        <UnauthorizedState
-          onSignInDev={signInDev ? () => void signInDev().catch(retry) : undefined}
-        />
-      </Gate>
-    );
+    return <LoginPage />;
   }
 
   return (
@@ -53,6 +50,8 @@ export function App() {
         <Route path="projects/:id" element={<ProjectDetailPage />} />
         <Route path="library" element={<LibraryPage />} />
         <Route path="decisions" element={<DecisionsPage />} />
+        <Route path="connections" element={<ConnectionsPage />} />
+        <Route path="security" element={<SecurityPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

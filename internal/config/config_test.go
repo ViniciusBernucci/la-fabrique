@@ -12,10 +12,16 @@ func env(m map[string]string) Lookup {
 
 const goodDB = "postgres://u:s3cr3t-pass@db:5432/app"
 
+// 32 bytes em base64, só para testes.
+const goodKey = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+
 func TestLoadAPIDefaults(t *testing.T) {
-	cfg, err := LoadAPI(env(map[string]string{"DATABASE_URL": goodDB}))
+	cfg, err := LoadAPI(env(map[string]string{"DATABASE_URL": goodDB, "VAULT_KEY": goodKey}))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(cfg.VaultKey) != 32 || cfg.VaultKeyID != "k1" || cfg.RequireHTTPS {
+		t.Fatalf("chave/https inesperados: %+v", cfg)
 	}
 	if cfg.Addr != "127.0.0.1:8480" || cfg.Env != Development || cfg.SessionTTL != 12*time.Hour || cfg.SessionCookieSecure {
 		t.Fatalf("defaults inesperados: %+v", cfg)
@@ -50,18 +56,49 @@ func TestLoadAPIRequiresDatabaseURL(t *testing.T) {
 	}
 }
 
-func TestDevAuthForbiddenOutsideDevelopment(t *testing.T) {
+func TestDevAuthWasRemoved(t *testing.T) {
 	_, err := LoadAPI(env(map[string]string{
-		"DATABASE_URL": goodDB, "APP_ENV": "production", "DEV_AUTH_ENABLED": "true", "SESSION_COOKIE_SECURE": "true",
+		"DATABASE_URL": goodDB, "VAULT_KEY": goodKey, "DEV_AUTH_ENABLED": "true",
 	}))
 	if err == nil || !strings.Contains(err.Error(), "DEV_AUTH_ENABLED") {
-		t.Fatalf("produção deve recusar DEV_AUTH_ENABLED: %v", err)
+		t.Fatalf("DEV_AUTH_ENABLED=true deve ser recusada em qualquer ambiente: %v", err)
+	}
+	if _, err := LoadAPI(env(map[string]string{"DATABASE_URL": goodDB, "VAULT_KEY": goodKey, "DEV_AUTH_ENABLED": "false"})); err != nil {
+		t.Fatalf("DEV_AUTH_ENABLED=false é inofensiva: %v", err)
+	}
+}
+
+func TestVaultKeyValidation(t *testing.T) {
+	if _, err := LoadAPI(env(map[string]string{"DATABASE_URL": goodDB})); err == nil || !strings.Contains(err.Error(), "VAULT_KEY é obrigatória") {
+		t.Fatalf("chave ausente deve falhar: %v", err)
+	}
+	const shortKey = "c2VjcmV0LWN1cnRhLWRlbWFpcw==" // 17 bytes
+	_, err := LoadAPI(env(map[string]string{"DATABASE_URL": goodDB, "VAULT_KEY": shortKey}))
+	if err == nil || !strings.Contains(err.Error(), "32 bytes") {
+		t.Fatalf("chave curta deve falhar: %v", err)
+	}
+	if strings.Contains(err.Error(), shortKey) {
+		t.Fatal("mensagem vazou o valor da chave")
+	}
+}
+
+func TestProductionDefaultsToRequireHTTPS(t *testing.T) {
+	cfg, err := LoadAPI(env(map[string]string{
+		"DATABASE_URL": goodDB, "VAULT_KEY": goodKey, "APP_ENV": "production", "SESSION_COOKIE_SECURE": "true",
+	}))
+	if err != nil || !cfg.RequireHTTPS {
+		t.Fatalf("cfg=%+v err=%v", cfg, err)
+	}
+	if _, err := LoadAPI(env(map[string]string{
+		"DATABASE_URL": goodDB, "VAULT_KEY": goodKey, "APP_ENV": "production", "SESSION_COOKIE_SECURE": "true", "REQUIRE_HTTPS": "false",
+	})); err == nil || !strings.Contains(err.Error(), "REQUIRE_HTTPS") {
+		t.Fatalf("produção deve exigir HTTPS: %v", err)
 	}
 }
 
 func TestProductionRequiresSecureCookie(t *testing.T) {
 	_, err := LoadAPI(env(map[string]string{
-		"DATABASE_URL": goodDB, "APP_ENV": "production", "SESSION_COOKIE_SECURE": "false",
+		"DATABASE_URL": goodDB, "VAULT_KEY": goodKey, "APP_ENV": "production", "SESSION_COOKIE_SECURE": "false",
 	}))
 	if err == nil || !strings.Contains(err.Error(), "SESSION_COOKIE_SECURE") {
 		t.Fatalf("produção deve exigir cookie seguro: %v", err)

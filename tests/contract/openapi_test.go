@@ -37,6 +37,7 @@ func (stubStore) Query(context.Context, string, ...any) (pgx.Rows, error) {
 }
 func (stubStore) QueryRow(context.Context, string, ...any) pgx.Row { return errRow{} }
 func (stubStore) Ping(context.Context) error                       { return errors.New("sem banco") }
+func (stubStore) Begin(context.Context) (pgx.Tx, error)            { return nil, errors.New("sem banco") }
 
 var (
 	pathLine   = regexp.MustCompile(`^  (/[^:\s]*):\s*$`)
@@ -77,9 +78,13 @@ func declaredOperations(t *testing.T) []operation {
 func TestEveryDeclaredOperationIsRouted(t *testing.T) {
 	cfg := config.API{
 		Common: config.Common{Env: config.Development}, Addr: "127.0.0.1:0",
-		SessionTTL: time.Hour, SessionCookieName: "lf_session", DevAuthEnabled: true,
+		SessionTTL: time.Hour, SessionCookieName: "lf_session",
+		VaultKey: []byte("0123456789abcdef0123456789abcdef"), VaultKeyID: "k1",
 	}
-	h := httpapi.New(cfg, stubStore{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h, err := httpapi.New(cfg, stubStore{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, op := range declaredOperations(t) {
 		path := "/api" + strings.ReplaceAll(op.path, "{id}", "00000000-0000-4000-8000-000000000000")
 		rec := httptest.NewRecorder()

@@ -169,6 +169,12 @@
   }
 }
 
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .gate {
   display: grid;
   min-height: 100dvh;
@@ -184,4 +190,131 @@
   justify-content: center;
   gap: 10px;
   margin-top: 6px;
+}
+
+/* Formulários, avisos e diálogo (E04) */
+.panel--pad {
+  padding: 20px;
+}
+.form {
+  display: grid;
+  gap: 14px;
+}
+.form h2,
+.form-title {
+  color: var(--hud-text-strong);
+  font-size: 18px;
+  font-weight: 600;
+}
+.form-error {
+  color: var(--hud-danger-text);
+  font-size: 13px;
+}
+.form--grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: end;
+}
+.form--grid > h2,
+.form--grid > .actions,
+.form--grid > .form-error {
+  grid-column: 1 / -1;
+}
+.form--inline {
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  padding-top: 12px;
+}
+.muted {
+  color: var(--hud-text-muted);
+  font-size: 13px;
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+}
+.check input {
+  width: auto;
+}
+.callout {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  color: var(--hud-text-muted);
+  border: 1px solid var(--hud-line-strong);
+  border-radius: var(--hud-radius);
+  background: var(--hud-surface-2);
+  font-size: 13px;
+}
+.callout--warn {
+  color: var(--hud-amber);
+  border-color: var(--hud-amber);
+}
+.codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+  padding: 14px;
+  list-style: none;
+  border: 1px dashed var(--hud-line-strong);
+  border-radius: var(--hud-radius);
+  font: 500 14px var(--hud-font-mono);
+  color: var(--hud-text-strong);
+  user-select: all;
+}
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 20px;
+}
+.row > span:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.row small {
+  color: var(--hud-text-dim);
+  overflow-wrap: anywhere;
+}
+.row--stack {
+  display: grid;
+  gap: 0;
+  padding: 0;
+}
+.row--stack > .row {
+  padding: 14px 20px;
+}
+.row--stack > .form {
+  padding: 0 20px 16px;
+}
+.test-ok {
+  color: var(--hud-teal);
+}
+.test-failed {
+  color: var(--hud-danger-text);
+}
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--hud-backdrop);
+}
+.dialog {
+  width: min(420px, 100%);
+  padding: 20px;
+}
+@media (max-width: 760px) {
+  .row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .form--inline {
+    grid-template-columns: 1fr;
+  }
 }

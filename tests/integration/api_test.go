@@ -16,21 +16,26 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
 )
 
-func apiConfig(devAuth bool) config.API {
+func apiConfig() config.API {
 	return config.API{
 		Common:            config.Common{Env: config.Development, LogLevel: "error"},
 		Addr:              "127.0.0.1:0",
 		SessionTTL:        time.Hour,
 		SessionCookieName: "lf_session",
-		DevAuthEnabled:    devAuth,
+		VaultKey:          []byte("0123456789abcdef0123456789abcdef"),
+		VaultKeyID:        "k1",
 	}
 }
 
-func newAPI(t *testing.T, devAuth bool) (*httptest.Server, testDB) {
+func newAPI(t *testing.T) (*httptest.Server, testDB) {
 	t.Helper()
 	db := newMigratedDB(t)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	srv := httptest.NewServer(httpapi.New(apiConfig(devAuth), db.Pool, log))
+	h, err := httpapi.New(apiConfig(), db.Pool, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	return srv, db
 }
@@ -74,7 +79,7 @@ func loginCookie(t *testing.T, db testDB) (token, sessionID string) {
 }
 
 func TestHealthEndpointsAreOpen(t *testing.T) {
-	srv, _ := newAPI(t, false)
+	srv, _ := newAPI(t)
 	for _, p := range []string{"/api/healthz", "/api/readyz"} {
 		if resp, body := do(t, srv, "GET", p, ""); resp.StatusCode != 200 {
 			t.Fatalf("%s: %d %s", p, resp.StatusCode, body)
@@ -83,7 +88,7 @@ func TestHealthEndpointsAreOpen(t *testing.T) {
 }
 
 func TestServerRefusesRequestsWithoutSession(t *testing.T) {
-	srv, _ := newAPI(t, false)
+	srv, _ := newAPI(t)
 	for _, p := range []string{"/api/session", "/api/projects", "/api/projects/00000000-0000-4000-8000-000000000000"} {
 		resp, body := do(t, srv, "GET", p, "")
 		if resp.StatusCode != 401 {
@@ -100,7 +105,7 @@ func TestServerRefusesRequestsWithoutSession(t *testing.T) {
 }
 
 func TestAuthenticatedFlow(t *testing.T) {
-	srv, db := newAPI(t, false)
+	srv, db := newAPI(t)
 	token, sessionID := loginCookie(t, db)
 	p := mustProject(t, db.Pool, "meu-projeto")
 
@@ -150,7 +155,7 @@ func TestAuthenticatedFlow(t *testing.T) {
 }
 
 func TestCorrelationIDIsPropagatedAndSanitized(t *testing.T) {
-	srv, _ := newAPI(t, false)
+	srv, _ := newAPI(t)
 	req, _ := http.NewRequest("GET", srv.URL+"/api/projects", nil)
 	req.Header.Set("X-Request-ID", "meu-id-12345")
 	resp, _ := srv.Client().Do(req)
@@ -164,37 +169,17 @@ func TestCorrelationIDIsPropagatedAndSanitized(t *testing.T) {
 	}
 }
 
-func TestDevSessionEndpoint(t *testing.T) {
-	off, _ := newAPI(t, false)
-	if resp, _ := do(t, off, "POST", "/api/dev/session", ""); resp.StatusCode != 404 {
-		t.Fatalf("endpoint de dev não deve existir quando desabilitado: %d", resp.StatusCode)
-	}
-
-	on, _ := newAPI(t, true)
-	resp, body := do(t, on, "POST", "/api/dev/session", "")
-	if resp.StatusCode != 201 {
-		t.Fatalf("dev session: %d %s", resp.StatusCode, body)
-	}
-	var cookie *http.Cookie
-	for _, c := range resp.Cookies() {
-		if c.Name == "lf_session" {
-			cookie = c
-		}
-	}
-	if cookie == nil || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode || cookie.Path != "/" {
-		t.Fatalf("cookie de sessão deve ser HttpOnly/Strict: %+v", cookie)
-	}
-	if resp, _ := do(t, on, "GET", "/api/session", cookie.Value); resp.StatusCode != 200 {
-		t.Fatalf("sessão de dev deveria autenticar: %d", resp.StatusCode)
-	}
-	// Segunda chamada reutiliza o mesmo admin (idempotente).
-	if resp, _ := do(t, on, "POST", "/api/dev/session", ""); resp.StatusCode != 201 {
-		t.Fatalf("segunda sessão de dev: %d", resp.StatusCode)
+// O acesso de dev provisório (ADR-0004) foi removido no T04-01: nenhuma rota
+// emite sessão sem senha + segundo fator.
+func TestDevSessionEndpointIsGone(t *testing.T) {
+	srv, _ := newAPI(t)
+	if resp, _ := do(t, srv, "POST", "/api/dev/session", ""); resp.StatusCode != 404 {
+		t.Fatalf("o endpoint de dev não pode existir: %d", resp.StatusCode)
 	}
 }
 
 func TestSecurityHeaders(t *testing.T) {
-	srv, _ := newAPI(t, false)
+	srv, _ := newAPI(t)
 	resp, _ := do(t, srv, "GET", "/api/healthz", "")
 	if resp.Header.Get("X-Content-Type-Options") != "nosniff" || resp.Header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("cabeçalhos de segurança ausentes: %v", resp.Header)

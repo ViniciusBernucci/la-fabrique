@@ -14,7 +14,7 @@ make up          # sobe postgres, api, worker e web (hot reload)
 make seed        # projetos fictícios (opcional)
 ```
 
-Abra <http://127.0.0.1:5180> e use **Entrar (somente dev)**. Portas (configuráveis no `.env`): web 5180 · API 8480 · Postgres 5442 — as padrão 5173/5432 estão ocupadas nesta máquina.
+Crie a conta única com `make create-admin` (usuário + senha de 12+ caracteres) e abra <http://127.0.0.1:5180>: no primeiro login você cadastra o app autenticador (TOTP) e guarda os códigos de recuperação. Não existe mais acesso sem senha. Portas (configuráveis no `.env`): web 5180 · API 8480 · Postgres 5442 — as padrão 5173/5432 estão ocupadas nesta máquina.
 
 ```sh
 make lint test            # qualidade (sem banco)

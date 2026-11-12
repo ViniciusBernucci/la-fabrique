@@ -23,7 +23,7 @@ Go (API `cmd/api`, worker `cmd/worker`, `cmd/migrate`) · React 19 + TypeScript 
 - **Verifique de verdade:** rode `make lint`, `make test` e, quando tocar o banco, `make test-integration`. Relate resultados reais (PASS/FAIL/NOT_RUN); exit code ou fala do modelo não provam sucesso.
 - **Código + docs + checklist no mesmo diff.** Contrato de API em `contracts/openapi.yaml` (há teste de contrato). Mudança de schema = nova migration em `db/migrations` (nunca editar uma já aplicada).
 - **Front:** siga o design estabelecido (`apps/web/src/styles/tokens.css`, componentes de `components/`); só tokens `--hud-*`, nunca cores fixas. O menu e o painel crescem com os épicos; não invente dados de demonstração.
-- **Acesso dev provisório** (`DEV_AUTH_ENABLED`, [ADR-0004](docs/adr/0004-sessao-no-servidor-e-acesso-dev-provisorio.md)) deve sumir com o T04-01.
+- **Acesso e credenciais** ([ADR-0005](docs/adr/0005-autenticacao-sessoes-e-cofre-de-conexoes.md)): login só com senha + TOTP (`make create-admin`); **não reintroduza acesso sem senha**. Segredo de conexão só no cofre (`security.Vault`), referenciado por `connection:<id>`; nunca o devolva pela API nem o logue (use `security.Secret`/`Redactor`). Rotas que alteram estado exigem CSRF; ações sensíveis, reautenticação.
 
 ## Skills
 

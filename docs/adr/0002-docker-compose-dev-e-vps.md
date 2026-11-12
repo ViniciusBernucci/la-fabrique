@@ -13,7 +13,7 @@ O responsável alterna entre a máquina local e a VPS. As portas padrão do fron
 - **Portas do host configuráveis** e fora das padrão: web `5180`, API `8480` (só dev), PostgreSQL `5442` (só dev). Em produção apenas `WEB_BIND:WEB_PORT` (padrão `127.0.0.1:8280`) é publicado.
 - **Redes:** `private` (`internal: true`, sem saída) para banco e tráfego interno; `edge` para o que publica porta; `egress` para api/worker alcançarem APIs externas futuras (GitHub, Jira, ClickUp, provedores). O Postgres só entra em `edge` no overlay de dev, porque o Docker não publica portas de containers em redes internas.
 - **Hardening padrão:** `cap_drop: ALL`, `no-new-privileges`, rootfs somente leitura, `tmpfs` para `/tmp`, usuário não-root (10001) em api/worker, `mem_limit`/`pids_limit`, healthchecks e `restart: unless-stopped`.
-- **Segredos** só no `.env` (ignorado pelo Git; modelos `.env.example` e `.env.production.example`). O backend recusa `DEV_AUTH_ENABLED=true` fora de `APP_ENV=development` e exige cookie `Secure` em produção.
+- **Segredos** só no `.env` (ignorado pelo Git; modelos `.env.example` e `.env.production.example`). O backend exige `VAULT_KEY` (chave do cofre/TOTP, fora do banco), cookie `Secure` e HTTPS (`REQUIRE_HTTPS`) em produção; o acesso dev sem senha foi removido ([ADR-0005](0005-autenticacao-sessoes-e-cofre-de-conexoes.md)).
 - **Homologação:** suportada por `COMPOSE_PROJECT_NAME` e arquivo de ambiente próprios (volumes e redes nascem com o prefixo do projeto), mas **não exercitada** neste ticket.
 - TLS fica no proxy do host (o `web` escuta HTTP interno em 8080); ver [ambientes-docker.md](../operacao/ambientes-docker.md).
 

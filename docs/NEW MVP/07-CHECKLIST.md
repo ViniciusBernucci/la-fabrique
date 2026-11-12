@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E04._
 
 ## Resumo
 
-**5 feitos · 4 parciais · 58 pendentes** de 67 tickets.
+**7 feitos · 5 parciais · 55 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -29,7 +29,7 @@ _Última atualização: 2026-11-12 (UTC-03:00)._
   - Compose dev/prod PASS (só web publicado, rootfs RO, healthchecks). Reboot, TLS e homologação NOT_RUN; limites não medidos.
 - [ ] **[T02-03](03-BACKLOG.md#t02-03)** — Automatizar CI e promoção por revisão · dep.: T01-03, T02-02, T03-01.
 - [~] **[T02-04](03-BACKLOG.md#t02-04)** — Documentar e ensaiar backup e restauração · dep.: T02-02, T03-02, T04-03, T12-01.
-  - Só o necessário p/ dev: backup/restore do banco PASS em dev. Volumes, chaves e restore de snapshot da VPS pendentes.
+  - Só o necessário p/ dev: backup/restore do banco PASS em dev. Chave do cofre (`VAULT_KEY`) documentada; decifrar com chave certa/errada PASS em integração. Restore ponta a ponta (dump + chave) em destino isolado, volumes e snapshot da VPS pendentes.
 
 ## E03 — Fundação web, API e dados
 
@@ -38,13 +38,16 @@ _Última atualização: 2026-11-12 (UTC-03:00)._
 - [x] **[T03-02](03-BACKLOG.md#t03-02)** — Implementar banco, migrations e transações · dep.: T03-01.
   - 12 testes com PostgreSQL real PASS (restart, duplicidade, escopo, migração, concorrência).
 - [x] **[T03-03](03-BACKLOG.md#t03-03)** — Criar navegação centrada em projetos · dep.: T03-01, T04-01.
-  - Navegação + 401 no servidor PASS. Depende de login real (T04-01); acesso dev provisório (ADR-0004).
+  - Navegação + 401 no servidor PASS. Login real entregue no T04-01; o acesso dev provisório foi removido (ADR-0004 superada pela ADR-0005).
 
 ## E04 — Acesso e credenciais
 
-- [ ] **[T04-01](03-BACKLOG.md#t04-01)** — Implementar login, TOTP e recuperação · dep.: T03-02.
-- [ ] **[T04-02](03-BACKLOG.md#t04-02)** — Endurecer sessões e ações sensíveis · dep.: T02-02, T04-01.
-- [ ] **[T04-03](03-BACKLOG.md#t04-03)** — Criar cofre, gestão e teste de conexões · dep.: T03-02, T04-02.
+- [x] **[T04-01](03-BACKLOG.md#t04-01)** — Implementar login, TOTP e recuperação · dep.: T03-02.
+  - PASS (PostgreSQL real): senha sozinha não abre sessão; recuperação funciona exatamente uma vez sob concorrência; TOTP anti-replay; argon2id; segredo TOTP cifrado; throttle; `make create-admin`; acesso dev removido. Revisão independente NOT_RUN. Entrega: [2026-11-12-E04](../entregas/2026-11-12-E04-acesso-e-credenciais.md).
+- [x] **[T04-02](03-BACKLOG.md#t04-02)** — Endurecer sessões e ações sensíveis · dep.: T02-02, T04-01.
+  - PASS: revogação (individual/outras/logout), reautenticação com janela de 5 min, CSRF (token + Origin/Sec-Fetch-Site), cookies HttpOnly/Strict/Secure, HTTPS obrigatório + HSTS (simulando o proxy), trilha sem segredos. TLS real e IP real atrás do proxy do host NOT_RUN (T02-02). Revisão independente NOT_RUN.
+- [~] **[T04-03](03-BACKLOG.md#t04-03)** — Criar cofre, gestão e teste de conexões · dep.: T03-02, T04-02.
+  - PASS: AES-256-GCM com chave externa; criar/listar/testar/rotacionar/revogar; rotação preserva o id e descarta o valor anterior; revogação vale no próximo uso; sentinela ausente de respostas, logs e tabelas; redatores e `Vault.Resolve`. **Parcial:** prova em *prompts* NOT_RUN (sem pipeline de prompts — E09/E10); teste remoto só GitHub/ClickUp/Jira e só contra servidores falsos (reais NOT_RUN); `cli`/`api`/`mcp` sem teste remoto; rotação da chave mestra não implementada.
 
 ## E05 — Cadastro de projeto
 

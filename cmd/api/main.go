@@ -35,12 +35,22 @@ func run() int {
 	}
 	defer pool.Close()
 
-	if cfg.DevAuthEnabled {
-		log.Warn("DEV_AUTH_ENABLED ativo: POST /api/dev/session emite sessão sem senha (somente desenvolvimento)")
+	api, err := httpapi.NewServer(cfg, pool, log)
+	if err != nil {
+		log.Error("falha ao montar a API", "error", err.Error())
+		return 2
+	}
+	// Sem carregar os segredos já gravados a redação de logs/respostas seria parcial.
+	primeCtx, cancelPrime := context.WithTimeout(ctx, 10*time.Second)
+	err = api.Prime(primeCtx)
+	cancelPrime()
+	if err != nil {
+		log.Error("falha ao carregar o cofre", "error", err.Error())
+		return 1
 	}
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.New(cfg, pool, log),
+		Handler:           api.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,

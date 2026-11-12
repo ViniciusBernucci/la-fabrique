@@ -54,9 +54,11 @@ func TestMigrationPathPreservesData(t *testing.T) {
 		t.Fatalf("tabelas da migration 2 deveriam existir: %v", err)
 	}
 
-	// Rollback e reaplicação (dev): a migration 2 sai e volta.
-	if _, err := m.Down(ctx); err != nil {
-		t.Fatalf("down: %v", err)
+	// Rollback e reaplicação (dev): as migrations 4, 3 e 2 saem e voltam.
+	for i := 0; i < 3; i++ {
+		if _, err := m.Down(ctx); err != nil {
+			t.Fatalf("down %d: %v", i+1, err)
+		}
 	}
 	if _, err := persistence.CreateFeature(ctx, pool, p.ID, "EXT-2", "x"); err == nil {
 		t.Fatal("features não deveria existir após o down")
@@ -328,14 +330,14 @@ func TestSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := security.Authenticate(ctx, db.Pool, token)
+	got, err := security.Authenticate(ctx, db.Pool, token, 5*time.Minute)
 	if err != nil || got.Username != "admin" || got.ID != sess.ID {
 		t.Fatalf("autenticar: %+v %v", got, err)
 	}
-	if _, err := security.Authenticate(ctx, db.Pool, token+"x"); !errors.Is(err, security.ErrNoSession) {
+	if _, err := security.Authenticate(ctx, db.Pool, token+"x", 5*time.Minute); !errors.Is(err, security.ErrNoSession) {
 		t.Fatalf("token alterado: %v", err)
 	}
-	if _, err := security.Authenticate(ctx, db.Pool, ""); !errors.Is(err, security.ErrNoSession) {
+	if _, err := security.Authenticate(ctx, db.Pool, "", 5*time.Minute); !errors.Is(err, security.ErrNoSession) {
 		t.Fatalf("token vazio: %v", err)
 	}
 	var plain int
@@ -346,7 +348,7 @@ func TestSessions(t *testing.T) {
 	if err := security.Revoke(ctx, db.Pool, sess.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := security.Authenticate(ctx, db.Pool, token); !errors.Is(err, security.ErrNoSession) {
+	if _, err := security.Authenticate(ctx, db.Pool, token, 5*time.Minute); !errors.Is(err, security.ErrNoSession) {
 		t.Fatalf("sessão revogada deveria falhar: %v", err)
 	}
 
@@ -357,7 +359,7 @@ func TestSessions(t *testing.T) {
 	if _, err := db.Pool.Exec(ctx, `UPDATE admin_sessions SET created_at = now() - interval '2 hours', expires_at = now() - interval '1 hour' WHERE token_hash = $1`, security.HashToken(expired)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := security.Authenticate(ctx, db.Pool, expired); !errors.Is(err, security.ErrNoSession) {
+	if _, err := security.Authenticate(ctx, db.Pool, expired, 5*time.Minute); !errors.Is(err, security.ErrNoSession) {
 		t.Fatalf("sessão expirada deveria falhar: %v", err)
 	}
 }
@@ -418,5 +420,49 @@ func TestWithTxRollsBack(t *testing.T) {
 	page, _ := projects.List(ctx, db.Pool, projects.ListParams{})
 	if len(page.Items) != 0 {
 		t.Fatalf("rollback deveria desfazer o projeto: %+v", page)
+	}
+}
+
+// A migration 3 apaga o admin do acesso de dev provisório (ADR-0004) e mantém uma conta real.
+func TestAuthMigrationRemovesDevAdminButKeepsRealAdmin(t *testing.T) {
+	for _, tc := range []struct {
+		name, hash string
+		kept       bool
+	}{
+		{"dev", "dev-auth-no-password", false},
+		{"real", "$argon2id$v=19$m=65536,t=3,p=2$c2FsdA$aGFzaA", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dbURL := newDatabase(t)
+			m, err := persistence.NewMigrator(dbURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer m.Close()
+			if _, err := m.UpTo(ctx, 2); err != nil {
+				t.Fatal(err)
+			}
+			pool := connect(t, dbURL)
+			var id string
+			if err := pool.QueryRow(ctx, `INSERT INTO admins (username, password_hash) VALUES ('dono', $1) RETURNING id`, tc.hash).Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := pool.Exec(ctx, `INSERT INTO admin_sessions (admin_id, token_hash, expires_at) VALUES ($1, $2, now() + interval '1 hour')`, id, security.HashToken("t")); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := m.Up(ctx); err != nil {
+				t.Fatalf("migrate up: %v", err)
+			}
+			var admins, sessions int
+			_ = pool.QueryRow(ctx, `SELECT count(*) FROM admins`).Scan(&admins)
+			_ = pool.QueryRow(ctx, `SELECT count(*) FROM admin_sessions`).Scan(&sessions)
+			want := 0
+			if tc.kept {
+				want = 1
+			}
+			if admins != want || sessions != want {
+				t.Fatalf("admins=%d sessões=%d, esperado %d", admins, sessions, want)
+			}
+		})
 	}
 }

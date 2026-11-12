@@ -59,8 +59,14 @@ services:
     environment:
       <<: *go-env
       API_ADDR: 0.0.0.0:8480
-      DEV_AUTH_ENABLED: ${DEV_AUTH_ENABLED:-false}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      # Chave AES-256 do cofre e do segredo TOTP: fora do banco, só no .env (openssl rand -base64 32).
+      VAULT_KEY: ${VAULT_KEY:?defina VAULT_KEY no .env (openssl rand -base64 32)}
+      VAULT_KEY_ID: ${VAULT_KEY_ID:-k1}
+      # A API só é alcançável pelo proxy do painel (nginx/Vite): confia no X-Forwarded-*.
+      TRUST_PROXY: "true"
+      # Vazio = padrão da API (ligado em produção).
+      REQUIRE_HTTPS: ${REQUIRE_HTTPS:-}
     depends_on:
       postgres: {condition: service_healthy}
       migrate: {condition: service_completed_successfully}

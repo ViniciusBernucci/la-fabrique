@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
+import { ReauthProvider } from "../lib/reauth";
 import { useCurrentSession } from "../lib/session";
 import { Icon, type IconName } from "./Icon";
 
@@ -12,6 +13,8 @@ export const navigation: { name: string; to: string; icon: IconName; end?: boole
   { name: "Projetos", to: "/projects", icon: "folder" },
   { name: "Biblioteca", to: "/library", icon: "library" },
   { name: "Decisões", to: "/decisions", icon: "decisions" },
+  { name: "Conexões", to: "/connections", icon: "key" },
+  { name: "Segurança", to: "/security", icon: "shield" },
 ];
 
 function readCollapsed(): boolean {
@@ -166,7 +169,9 @@ export function AppShell() {
         </nav>
       </aside>
       <main id="content" className="content" tabIndex={-1}>
-        <Outlet />
+        <ReauthProvider>
+          <Outlet />
+        </ReauthProvider>
       </main>
     </div>
   );
