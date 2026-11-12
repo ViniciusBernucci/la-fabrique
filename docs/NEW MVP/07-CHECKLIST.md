@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E07 (T07-03)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E07 (T07-04)._
 
 ## Resumo
 
-**18 feitos · 20 parciais · 29 pendentes** de 67 tickets.
+**19 feitos · 20 parciais · 28 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -79,7 +79,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E07 (T07-03)._
   - PASS (`-race`): ramos e convergência (`any`/`all`), loop limitado (limite e saída antecipada), espera durável retomada de estado JSON persistido, decisão humana, `fork` sequencial, rotas de erro, expressões, subfluxos expandidos em linha com recursão/profundidade bloqueadas, determinismo. **Limite:** executores reais (agente, skill, script, Git) NOT_RUN — são de E09/E11/E13/E15; sem persistência de execuções no banco. Revisão independente NOT_RUN. Entrega: [E07 motor](../entregas/2026-11-12-E07-motor-de-workflows.md).
 - [~] **[T07-03](03-BACKLOG.md#t07-03)** — Publicar e congelar configuração efetiva · dep.: T07-02, T08-01, T09-02.
   - PASS (PostgreSQL real): versão publicada imutável (gatilho), validação de agentes/contas/modelos/ferramentas/skills/subfluxos antes de publicar, snapshot sanitizado com hash, idempotência, rascunho não executa, execução presa à versão (nova publicação ou mudança no catálogo não a altera), subfluxos fixados por versão, revalidação em runtime respeitando conta revogada. **Parcial:** motor/worker ainda não consome `StartExecution` nem revalida a cada nó; sem tela. Revisão independente NOT_RUN. Entrega: [E07 publicação](../entregas/2026-11-12-E07-publicacao-e-congelamento.md).
-- [ ] **[T07-04](03-BACKLOG.md#t07-04)** — Selecionar fluxo e subfluxo por regras · dep.: T07-03.
+- [x] **[T07-04](03-BACKLOG.md#t07-04)** — Selecionar fluxo e subfluxo por regras · dep.: T07-03.
+  - PASS (PostgreSQL real): regras ordenadas com condições normalizadas, primeira que casa vence (as demais ficam no motivo), padrão explícito, falha explícita sem padrão, reordenação muda o vencedor, mesma entrada ×20 = mesma escolha, rastro persistido com o motivo, simulação sem gravar, configuração atômica, destino não publicado recusado. **Limite:** atributos reais da origem (Jira/ClickUp) NOT_RUN; sem tela. Revisão independente NOT_RUN. Entrega: [E07 seleção](../entregas/2026-11-12-E07-selecao-por-regras.md).
 
 ## E08 — Catálogos e MCP
 

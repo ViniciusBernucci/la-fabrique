@@ -495,6 +495,52 @@ paths:
           content: {application/json: {schema: {type: object, required: [ok, problems], properties: {ok: {type: boolean}, problems: {type: array, items: {$ref: "#/components/schemas/PublishProblem"}}}}}}
         "401": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/selection:
+    get:
+      tags: [selecao]
+      summary: Regras ordenadas e fluxo padrão de seleção do projeto
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Configuração, content: {application/json: {schema: {$ref: "#/components/schemas/SelectionConfig"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+    put:
+      tags: [selecao]
+      summary: Substitui, de forma atômica, as regras (na ordem recebida) e o padrão
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/SelectionConfig"}}}
+      responses:
+        "200": {description: Configuração gravada, content: {application/json: {schema: {$ref: "#/components/schemas/SelectionConfig"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /projects/{id}/selection/simulate:
+    post:
+      tags: [selecao]
+      summary: Simula a seleção (explica cada regra) sem gravar rastro
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [attributes], additionalProperties: false, properties: {attributes: {type: object}}}}}
+      responses:
+        "200": {description: Seleção explicada, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /projects/{id}/selection/traces:
+    get:
+      tags: [selecao]
+      summary: Rastros persistidos das seleções (mais recentes primeiro)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Rastros, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {type: object}}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
   /budgets:
     get:
       tags: [orcamento]
@@ -1632,6 +1678,36 @@ components:
         content_hash: {type: string}
         published_at: {type: string, format: date-time}
         unchanged: {type: boolean}
+    SelectionConfig:
+      type: object
+      required: [rules]
+      properties:
+        rules:
+          type: array
+          items:
+            type: object
+            required: [name, conditions, workflow_id, enabled]
+            properties:
+              id: {type: string}
+              position: {type: integer}
+              name: {type: string}
+              workflow_id: {type: string, format: uuid}
+              subflow_id: {type: string}
+              enabled: {type: boolean}
+              conditions:
+                type: array
+                items:
+                  type: object
+                  required: [field, op, values]
+                  properties:
+                    field: {type: string, enum: [platform, type, priority, title, labels, components]}
+                    op: {type: string, enum: [eq, in, prefix, contains, has_any, has_all]}
+                    values: {type: array, items: {type: string}}
+        default:
+          type: [object, "null"]
+          properties:
+            workflow_id: {type: string, format: uuid}
+            subflow_id: {type: string}
     Budget:
       type: object
       required: [id, scope, agent_id, period, limit_micros, state, version]

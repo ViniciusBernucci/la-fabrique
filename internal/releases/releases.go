@@ -169,7 +169,7 @@ func canonicalHash(v any) string {
 
 // snapshot resolve e valida a configuração efetiva de cada nó do grafo expandido.
 func snapshot(ctx context.Context, db persistence.DBTX, flat workflows.Graph) ([]NodeSnapshot, []Problem) {
-	var snaps []NodeSnapshot
+	snaps := []NodeSnapshot{}
 	var problems []Problem
 	reg := tools.NewRegistry(func(c context.Context, name string) (tools.Tool, error) { return tools.Get(c, db, name) })
 	for _, n := range flat.Nodes {

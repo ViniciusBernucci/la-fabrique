@@ -1,3 +1,6 @@
+## 2026-11-12 — E07: seleção de fluxo e subfluxo por regras (T07-04)
+Regras ordenadas com atributos normalizados, padrão explícito, simulação e rastro persistido com o motivo; corrige o snapshot de publicação sem agentes. [Entrega](entregas/2026-11-12-E07-selecao-por-regras.md) · [ADR-0028](adr/0028-selecao-de-fluxo-por-regras.md).
+
 ## 2026-11-12 — E07: publicar e congelar configuração efetiva (T07-03)
 Versões publicadas imutáveis com snapshot sanitizado e subfluxos fixados; rascunho não executa; execução presa à versão; revalidação em runtime respeita revogação. [Entrega](entregas/2026-11-12-E07-publicacao-e-congelamento.md) · [ADR-0027](adr/0027-publicacao-e-congelamento-de-workflows.md).
 

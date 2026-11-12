@@ -14,7 +14,9 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/models"
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
+	"github.com/ViniciusBernucci/le-fabrique/internal/releases"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
+	"github.com/ViniciusBernucci/le-fabrique/internal/selection"
 	"github.com/ViniciusBernucci/le-fabrique/internal/skills"
 	"github.com/ViniciusBernucci/le-fabrique/internal/tools"
 	"github.com/ViniciusBernucci/le-fabrique/internal/workflows"
@@ -60,6 +62,7 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 	var mcpField *mcp.FieldError
 	var mcpErr *mcp.Error
 	var modField *models.FieldError
+	var selField *selection.FieldError
 	var budField *budget.FieldError
 	var budExceeded *budget.ExceededError
 	switch {
@@ -73,6 +76,12 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 		writeError(w, r, http.StatusConflict, "no_budget", err.Error(), "Defina um orçamento global antes de usar contas de API.")
 	case errors.Is(err, budget.ErrNoPrice):
 		writeError(w, r, http.StatusConflict, "model_without_price", err.Error(), "Cadastre o preço do modelo (com a fonte).")
+	case errors.As(err, &selField):
+		writeError(w, r, http.StatusBadRequest, "invalid_request", selField.Message, "Corrija o campo \""+selField.Field+"\" e tente novamente.")
+	case errors.Is(err, selection.ErrNoSelection):
+		writeError(w, r, http.StatusConflict, "no_selection", err.Error(), "Defina um fluxo padrão para o projeto.")
+	case errors.Is(err, releases.ErrNotPublished):
+		writeError(w, r, http.StatusConflict, "not_published", err.Error(), "Publique o workflow antes de usá-lo.")
 	case errors.As(err, &modField):
 		writeError(w, r, http.StatusBadRequest, "invalid_request", modField.Message, "Corrija o campo \""+modField.Field+"\" e tente novamente.")
 	case errors.Is(err, models.ErrIncompatible):
