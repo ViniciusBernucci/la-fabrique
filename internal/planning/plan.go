@@ -60,6 +60,8 @@ type Task struct {
 	Indivisible     bool     `json:"indivisible,omitempty"`
 	ExclusiveBoth   bool     `json:"exclusive_both,omitempty"`
 	SharedResources []string `json:"shared_resources,omitempty"`
+	// Refs liga a tarefa de uma correção aos comentários da rodada que ela trata (comment:<id>, review:<id>…).
+	Refs []string `json:"refs,omitempty"`
 }
 
 // Plan é o plano de uma feature.
@@ -312,6 +314,10 @@ func normalizeTask(t Task) Task {
 	if t.SharedResources != nil {
 		t.SharedResources = append([]string{}, t.SharedResources...)
 		sort.Strings(t.SharedResources)
+	}
+	if t.Refs != nil {
+		t.Refs = append([]string{}, t.Refs...)
+		sort.Strings(t.Refs)
 	}
 	if t.Criteria == nil {
 		t.Criteria = []Criterion{}

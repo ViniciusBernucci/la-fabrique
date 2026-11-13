@@ -304,3 +304,29 @@ func (c *Consolidator) Candidate(ctx context.Context, featureID string) (head st
 	_ = json.Unmarshal(rj, &revalidate)
 	return head, revalidate, nil
 }
+
+// Descends informa se `head` contém `ancestor` na história (fast-forward possível).
+func (c *Consolidator) Descends(ctx context.Context, ancestor, head string) (bool, error) {
+	if !shaPat.MatchString(ancestor) || !shaPat.MatchString(head) {
+		return false, persistence.ErrInvalidInput
+	}
+	if _, err := run(ctx, c.Repo, "merge-base", "--is-ancestor", ancestor, head); err != nil {
+		if strings.Contains(err.Error(), "exit status 1") {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// Range lista os commits de `from` (exclusivo) até `to` (inclusivo), do mais antigo ao mais novo.
+func (c *Consolidator) Range(ctx context.Context, from, to string) ([]string, error) {
+	if !shaPat.MatchString(from) || !shaPat.MatchString(to) {
+		return nil, persistence.ErrInvalidInput
+	}
+	out, err := run(ctx, c.Repo, "rev-list", "--reverse", from+".."+to)
+	if err != nil {
+		return nil, err
+	}
+	return splitLines(out), nil
+}
