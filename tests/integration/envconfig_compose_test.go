@@ -78,7 +78,9 @@ func TestEnvConfigValidatesWithRealDockerCompose(t *testing.T) {
 			out, _ := exec.Command("docker", "ps", "--filter", "label=com.docker.compose.project="+project, "--format", "{{.Ports}}").Output()
 			published = strings.TrimSpace(string(out))
 		}}
-	t.Cleanup(func() { _ = exec.Command("docker", "compose", "-p", "lfenv-tcompose1", "down", "-v", "--remove-orphans", "--timeout", "2").Run() })
+	t.Cleanup(func() {
+		_ = exec.Command("docker", "compose", "-p", "lfenv-tcompose1", "down", "-v", "--remove-orphans", "--timeout", "2").Run()
+	})
 
 	v1, err := st.Save(ctx, p.ID, realEnvConfig(), sha)
 	if err != nil {
@@ -111,7 +113,9 @@ func TestEnvConfigValidatesWithRealDockerCompose(t *testing.T) {
 	runner2.Checkout = envconfig.GitCheckout(repo2, t.TempDir())
 	runner2.Timeout = 15 * time.Second
 	runner2.ExecutionID = "tcompose2"
-	t.Cleanup(func() { _ = exec.Command("docker", "compose", "-p", "lfenv-tcompose2", "down", "-v", "--remove-orphans", "--timeout", "2").Run() })
+	t.Cleanup(func() {
+		_ = exec.Command("docker", "compose", "-p", "lfenv-tcompose2", "down", "-v", "--remove-orphans", "--timeout", "2").Run()
+	})
 	c2 := realEnvConfig()
 	c2.Start = "docker compose up -d --build"
 	v2, err := st.Save(ctx, p.ID, c2, sha2)
