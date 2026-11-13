@@ -1,3 +1,6 @@
+## 2026-11-12 — E17: matriz de evidências e ficha de aceite (T17-01)
+Matriz de evidências gerada dos casos P01–P18, critérios dos tickets e checklist (com teste de rastreabilidade e de deriva) e ficha de preparação pré-preenchida com as pendências do responsável. Projeto, feature e acessos reais NOT_RUN. [Entrega](entregas/2026-11-12-E17-matriz-e-ficha-de-aceite.md) · [ADR-0041](adr/0041-matriz-de-evidencias-derivada.md).
+
 ## 2026-11-12 — E14: checks no baseline e classificação de falhas (T14-01)
 Execução dos checks no baseline e na revisão candidata (sandbox real), evidência com assinatura da falha, regressão bloqueia, falha anterior comprovada é registrada e origem desconhecida fica em investigação sem virar baseline. Preparo do baseline e tela NOT_RUN. [Entrega](entregas/2026-11-12-E14-checks-e-baseline.md) · [ADR-0040](adr/0040-checks-baseline-e-classificacao-de-falhas.md).
 

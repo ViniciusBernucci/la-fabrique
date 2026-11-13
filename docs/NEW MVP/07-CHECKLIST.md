@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E14 (T14-01)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E17 (T17-01)._
 
 ## Resumo
 
-**19 feitos · 31 parciais · 17 pendentes** de 67 tickets.
+**19 feitos · 32 parciais · 16 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -175,7 +175,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E14 (T14-01)._
 
 ## E17 — Piloto e aceite
 
-- [ ] **[T17-01](03-BACKLOG.md#t17-01)** — Preparar projeto real e matriz de evidências · dep.: T01-04, T02-03, T05-03.
+- [~] **[T17-01](03-BACKLOG.md#t17-01)** — Preparar projeto real e matriz de evidências · dep.: T01-04, T02-03, T05-03.
+  - PASS (testes sem banco): matriz de evidências **gerada** (`make matriz`) dos 18 casos P01–P18, dos critérios de cada ticket e do checklist, com a coluna "projeto real" pendente; rastreabilidade verificada (checklist × backlog × casos × épicos × matriz de decisões), deriva da matriz e cobertura dos 12 campos da ficha testadas; ficha de preparação pré-preenchida com o que o repositório prova. **Parcial:** o contrato NÃO está completo — projeto e feature reais, VPS, origem, GitHub, contas e política (F01–F12) dependem do responsável e de credenciais. Revisão independente NOT_RUN. Entrega: [E17 matriz e ficha](../entregas/2026-11-12-E17-matriz-e-ficha-de-aceite.md).
 - [ ] **[T17-02](03-BACKLOG.md#t17-02)** — Executar cadastro do zero e feature ponta a ponta · dep.: T17-01, T15-05, T16-02, T16-03.
 - [ ] **[T17-03](03-BACKLOG.md#t17-03)** — Executar ensaios de falha, segurança e integração · dep.: T17-01, T02-04, T06-05, T09-04, T12-04, T13-05, T15-04, T16-04.
 - [ ] **[T17-04](03-BACKLOG.md#t17-04)** — Fechar aceite integral do MVP · dep.: T17-02, T17-03.

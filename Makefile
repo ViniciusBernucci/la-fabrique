@@ -9,7 +9,7 @@ DB_ADMIN_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:$(POS
 DB_APP_URL   ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=disable
 
 .PHONY: help bootstrap up down logs ps up-prod down-prod ps-prod logs-prod migrate migrate-status seed create-admin \
-        fmt lint test test-integration test-web build typecheck check-secrets db-backup db-restore restore-drill sync-skills
+        fmt lint test test-integration test-web build typecheck check-secrets db-backup db-restore restore-drill matriz sync-skills
 
 help: ## Lista os comandos
 	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-18s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
@@ -53,6 +53,8 @@ db-backup: ## Backup do banco (MODE=dev|prod)
 	scripts/db-backup.sh $(or $(MODE),dev)
 db-restore: ## Restaura em banco isolado. Ex.: make db-restore F=backups/db-XXXX.dump
 	scripts/db-restore.sh $(F) $(or $(MODE),dev)
+matriz: ## Gera docs/aceite/02-matriz-de-evidencias.md a partir do checklist (rode depois de alterar o checklist)
+	go run ./cmd/matriz
 restore-drill: ## Ensaio: backup, restore isolado e verificação de chaves/hashes (MODE=dev|prod, F=dump opcional)
 	scripts/restore-drill.sh $(or $(MODE),dev) $(F)
 

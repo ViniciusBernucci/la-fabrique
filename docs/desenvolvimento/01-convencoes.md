@@ -28,3 +28,7 @@ Código, docs e [checklist](../NEW%20MVP/07-CHECKLIST.md) mudam juntos. Estados:
 
 ## Front
 Tokens em `apps/web/src/styles/tokens.css`; componentes de estado (`LoadingState`, `EmptyState`, `ErrorState`, `UnauthorizedState`) para carregamento, vazio, erro e acesso. Novas áreas entram em `navigation` (`components/AppShell.tsx`) + rota em `App.tsx`.
+
+## Matriz de evidências do aceite
+
+`docs/aceite/02-matriz-de-evidencias.md` é **gerada** a partir do checklist, do backlog e dos casos de aceite. Depois de alterar `07-CHECKLIST.md`, rode `make matriz` e inclua o arquivo no commit; `make test` falha se ele estiver desatualizado ([ADR-0041](../adr/0041-matriz-de-evidencias-derivada.md)).
