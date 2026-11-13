@@ -48,7 +48,7 @@ type Syncer struct {
 	// PRD, quando definido, é chamado para Issue em PRD-DOC (nova ou com revisão nova): lê o PRD da origem e
 	// roda o gate. Pendências do PRD não são erro de sync: ficam registradas e a Issue permanece em PRD-DOC.
 	PRD func(ctx context.Context, projectID string, it integrations.Item) error
-	Now      func() time.Time
+	Now func() time.Time
 }
 
 func (s *Syncer) now() time.Time {
