@@ -9,7 +9,7 @@ DB_ADMIN_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:$(POS
 DB_APP_URL   ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=disable
 
 .PHONY: help bootstrap up down logs ps up-prod down-prod ps-prod logs-prod migrate migrate-status seed create-admin \
-        fmt lint test test-integration test-web build typecheck check-secrets db-backup db-restore restore-drill matriz sync-skills
+        fmt lint test test-integration ensaios test-web build typecheck check-secrets db-backup db-restore restore-drill matriz sync-skills
 
 help: ## Lista os comandos
 	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-18s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
@@ -76,6 +76,9 @@ test-web: ## Somente testes do front
 test-integration: ## Testes com PostgreSQL real (exige `make up` rodando)
 	@test -n "$(POSTGRES_PASSWORD)" || (echo "defina POSTGRES_* no .env (make bootstrap)"; exit 1)
 	TEST_DATABASE_URL='$(DB_ADMIN_URL)' go test -count=1 ./tests/integration/...
+ensaios: ## Roda os ensaios de falha/segurança/integração e gera docs/aceite/03-ensaios-de-falha-e-seguranca.md (exige `make up`)
+	@test -n "$(POSTGRES_PASSWORD)" || (echo "defina POSTGRES_* no .env (make bootstrap)"; exit 1)
+	TEST_DATABASE_URL='$(DB_ADMIN_URL)' go run ./cmd/ensaios
 build: ## Compila binários Go (./bin) e o front (apps/web/dist)
 	mkdir -p bin && go build -trimpath -o bin/ ./cmd/...
 	cd apps/web && npm run build

@@ -31,4 +31,4 @@ Tokens em `apps/web/src/styles/tokens.css`; componentes de estado (`LoadingState
 
 ## Matriz de evidências do aceite
 
-`docs/aceite/02-matriz-de-evidencias.md` é **gerada** a partir do checklist, do backlog e dos casos de aceite. Depois de alterar `07-CHECKLIST.md`, rode `make matriz` e inclua o arquivo no commit; `make test` falha se ele estiver desatualizado ([ADR-0041](../adr/0041-matriz-de-evidencias-derivada.md)).
+`docs/aceite/02-matriz-de-evidencias.md` é **gerada** a partir do checklist, do backlog e dos casos de aceite. Depois de alterar `07-CHECKLIST.md`, rode `make matriz` e inclua o arquivo no commit; o mesmo comando gera `docs/aceite/04-relatorio-de-aceite.md`; `make test` falha se algum estiver desatualizado ([ADR-0041](../adr/0041-matriz-de-evidencias-derivada.md), [ADR-0055](../adr/0055-ensaios-e-relatorio-de-aceite.md)). `make ensaios` roda os cenários de falha e segurança contra o PostgreSQL real e regenera `docs/aceite/03-ensaios-de-falha-e-seguranca.md`.

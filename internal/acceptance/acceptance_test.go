@@ -82,3 +82,51 @@ func TestRenderIsDeterministic(t *testing.T) {
 		t.Fatal("matriz não determinística ou incompleta")
 	}
 }
+
+func TestRehearsalCatalogMatchesTheCode(t *testing.T) {
+	if problems := CheckCatalog(filepath.Join("..", "..")); len(problems) > 0 {
+		t.Fatal(strings.Join(problems, "\n"))
+	}
+}
+
+// T17-04 — o relatório de aceite é derivado e nunca declara o aceite sozinho.
+func TestTheCommittedAcceptanceReportIsTheGeneratedOne(t *testing.T) {
+	want, err := RenderReport(sources(t), filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := repo(t, "docs/aceite/04-relatorio-de-aceite.md"); got != want {
+		t.Fatal("docs/aceite/04-relatorio-de-aceite.md está desatualizado: rode `make matriz` e inclua o arquivo no commit")
+	}
+}
+
+func TestTheReportListsEveryOpenTicketAndLeavesTheDecisionBlank(t *testing.T) {
+	s := sources(t)
+	rep, err := RenderReport(s, filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, tickets, _, _ := Parse(s)
+	open := 0
+	for _, tk := range tickets {
+		if tk.State != "x" {
+			open++
+			if !strings.Contains(rep, "**"+tk.ID+"**") {
+				t.Errorf("ticket aberto fora do relatório: %s", tk.ID)
+			}
+		}
+	}
+	if open > 0 && !strings.Contains(rep, "NÃO FECHADO") {
+		t.Fatal("com tickets abertos o aceite não pode parecer fechado")
+	}
+	if !strings.Contains(rep, "| Decisão | **A PREENCHER**") {
+		t.Fatal("a decisão é do responsável e fica em branco")
+	}
+	// Um checklist todo feito ainda não decide: a decisão e o projeto real continuam do responsável.
+	all := s
+	all.Checklist = strings.ReplaceAll(strings.ReplaceAll(all.Checklist, "- [~] **[T", "- [x] **[T"), "- [ ] **[T", "- [x] **[T")
+	rep2, _ := RenderReport(all, filepath.Join("..", ".."))
+	if strings.Contains(rep2, "NÃO FECHADO") || !strings.Contains(rep2, "| Decisão | **A PREENCHER**") {
+		t.Fatal("o relatório não decide por conta própria")
+	}
+}

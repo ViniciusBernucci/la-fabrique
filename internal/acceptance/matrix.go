@@ -24,6 +24,7 @@ type Ticket struct {
 	State      string // x | ~ | space
 	Acceptance string
 	Evidence   []string // links de entrega (texto markdown)
+	Note       string   // nota do checklist (linhas recuadas), em uma linha
 }
 
 // Case é um caso de verificação P01–P18.
@@ -73,6 +74,7 @@ func Parse(s Sources) (epics []Epic, tickets []Ticket, cases []Case, err error) 
 			continue
 		}
 		if last != nil && strings.HasPrefix(l, "  ") {
+			last.Note = strings.TrimSpace(last.Note + " " + strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(l), "- ")))
 			for _, d := range deliveryRe.FindAllStringSubmatch(l, -1) {
 				last.Evidence = append(last.Evidence, fmt.Sprintf("[%s](%s)", d[1], strings.TrimPrefix(d[2], "../")))
 			}

@@ -1,3 +1,6 @@
+## 2026-11-12 — E17: ensaios e relatório de aceite (T17-02, T17-03, T17-04)
+Ensaio da feature da Draft PR ao pós-merge nos dobles, catálogo de 15 cenários de falha, segurança e integração com esperado e observado gerados por `make ensaios`, e relatório de aceite derivado do checklist que nunca declara o aceite. Ambiente, projeto e conectores reais, e a decisão do responsável, seguem NOT_RUN: o aceite integral não está fechado. [Entrega](entregas/2026-11-12-E17-ensaios-e-relatorio-de-aceite.md) · [ADR-0055](adr/0055-ensaios-e-relatorio-de-aceite.md).
+
 ## 2026-11-12 — E16: Central e auditoria operacional (T16-02)
 Recusar pedido, listar autorizações com validade e uso, revogar (ação sensível, idempotente) e ver a sequência do incidente e da retomada pelo painel, com evento, estado e auditoria no servidor e sem notificação externa. Navegador real e parada segura real NOT_RUN. [Entrega](entregas/2026-11-12-E16-central-e-auditoria.md) · [ADR-0054](adr/0054-central-e-auditoria-operacional.md).
 

@@ -1,4 +1,4 @@
-// Comando matriz: gera docs/aceite/02-matriz-de-evidencias.md a partir dos
+// Comando matriz: gera docs/aceite/02-matriz-de-evidencias.md e 04-relatorio-de-aceite.md a partir dos
 // documentos do backlog. Uso: go run ./cmd/matriz   (na raiz do repositório)
 package main
 
@@ -46,4 +46,14 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("docs/aceite/02-matriz-de-evidencias.md gerado")
+	rep, err := acceptance.RenderReport(src, ".")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "matriz: "+err.Error())
+		os.Exit(1)
+	}
+	if err := os.WriteFile(filepath.Join("docs", "aceite", "04-relatorio-de-aceite.md"), []byte(rep), 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, "matriz: "+err.Error())
+		os.Exit(1)
+	}
+	fmt.Println("docs/aceite/04-relatorio-de-aceite.md gerado")
 }

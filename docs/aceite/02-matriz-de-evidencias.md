@@ -4,7 +4,7 @@
 
 A coluna **Evidência no projeto real** fica *pendente* até alguém registrá-la ([ficha de preparação](01-ficha-de-preparacao.md)). Evidência de software (testes e entregas) **não** substitui a do piloto: o aceite exige o projeto real (D95).
 
-**Situação dos tickets:** 19 feito(s), 45 parcial(is), 3 pendente(s), de 67.
+**Situação dos tickets:** 19 feito(s), 48 parcial(is), 0 pendente(s), de 67.
 
 ## A. Casos de verificação (P01–P18)
 
@@ -27,7 +27,7 @@ A coluna **Evidência no projeto real** fica *pendente* até alguém registrá-l
 | **P15** · GitHub, docs e memória | E06, E10, E13, E15 | PR/commits, link na origem, revisão, decisões, docs, estado de memória e fila. | E06: 1 feito(s), 4 parcial(is), 0 pendente(s) (abertos: T06-01, T06-02, T06-04, T06-05)<br>E10: 0 feito(s), 4 parcial(is), 0 pendente(s) (abertos: T10-01, T10-02, T10-03, T10-04)<br>E13: 4 feito(s), 1 parcial(is), 0 pendente(s) (abertos: T13-05)<br>E15: 0 feito(s), 5 parcial(is), 0 pendente(s) (abertos: T15-01, T15-02, T15-03, T15-04, T15-05) | pendente |
 | **P16** · D89 e mudanças externas | E06, E10, E12, E15, E16 | Contagem de chamadas por gatilho, snapshots/diffs, histórico de fila e trilha de decisão. | E06: 1 feito(s), 4 parcial(is), 0 pendente(s) (abertos: T06-01, T06-02, T06-04, T06-05)<br>E10: 0 feito(s), 4 parcial(is), 0 pendente(s) (abertos: T10-01, T10-02, T10-03, T10-04)<br>E12: 0 feito(s), 4 parcial(is), 0 pendente(s) (abertos: T12-01, T12-02, T12-03, T12-04)<br>E15: 0 feito(s), 5 parcial(is), 0 pendente(s) (abertos: T15-01, T15-02, T15-03, T15-04, T15-05)<br>E16: 0 feito(s), 4 parcial(is), 0 pendente(s) (abertos: T16-01, T16-02, T16-03, T16-04) | pendente |
 | **P17** · Painel e retenção | E03, E09, E12, E16 | Eventos, estado de UI, dados retidos, limpeza e restauração de checkpoint protegido. | E03: 3 feito(s), 0 parcial(is), 0 pendente(s)<br>E09: 0 feito(s), 4 parcial(is), 0 pendente(s) (abertos: T09-01, T09-02, T09-03, T09-04)<br>E12: 0 feito(s), 4 parcial(is), 0 pendente(s) (abertos: T12-01, T12-02, T12-03, T12-04)<br>E16: 0 feito(s), 4 parcial(is), 0 pendente(s) (abertos: T16-01, T16-02, T16-03, T16-04) | pendente |
-| **P18** · Aceite | E17 | Relatório assinado pelo responsável ou decisão registrada, matriz e links da revisão. | E17: 0 feito(s), 1 parcial(is), 3 pendente(s) (abertos: T17-01, T17-02, T17-03, T17-04) | pendente |
+| **P18** · Aceite | E17 | Relatório assinado pelo responsável ou decisão registrada, matriz e links da revisão. | E17: 0 feito(s), 4 parcial(is), 0 pendente(s) (abertos: T17-01, T17-02, T17-03, T17-04) | pendente |
 
 ## B. Critérios por épico e ticket
 
@@ -208,12 +208,12 @@ A coluna **Evidência no projeto real** fica *pendente* até alguém registrá-l
 
 ### E17 — Piloto e aceite
 
-0 feito(s), 1 parcial(is), 3 pendente(s).
+0 feito(s), 4 parcial(is), 0 pendente(s).
 
 | Ticket | Estado | Critério de aceite do ticket | Evidência registrada | Evidência no projeto real |
 |---|---|---|---|---|
 | **T17-01** · Preparar projeto real e matriz de evidências | parcial | Contrato preenchido e revisável, com ambiente, projeto, usuários, conexões e critérios rastreáveis. | [E17 matriz e ficha](entregas/2026-11-12-E17-matriz-e-ficha-de-aceite.md) | pendente |
-| **T17-02** · Executar cadastro do zero e feature ponta a ponta | pendente | A PR, commits, checks, subtarefas, memória e dependência são verificáveis no ambiente real e ligados à revisão. | — | pendente |
-| **T17-03** · Executar ensaios de falha, segurança e integração | pendente | Cada cenário tem esperado, observado, evidência e revisão. Falha obrigatória volta ao ticket e é retestada. | — | pendente |
-| **T17-04** · Fechar aceite integral do MVP | pendente | Todos os épicos possuem evidência e aceite. Não há requisito obrigatório omitido ou pendente no lançamento. | — | pendente |
+| **T17-02** · Executar cadastro do zero e feature ponta a ponta | parcial | A PR, commits, checks, subtarefas, memória e dependência são verificáveis no ambiente real e ligados à revisão. | [E17 ensaios](entregas/2026-11-12-E17-ensaios-e-relatorio-de-aceite.md) | pendente |
+| **T17-03** · Executar ensaios de falha, segurança e integração | parcial | Cada cenário tem esperado, observado, evidência e revisão. Falha obrigatória volta ao ticket e é retestada. | [E17 ensaios](entregas/2026-11-12-E17-ensaios-e-relatorio-de-aceite.md) | pendente |
+| **T17-04** · Fechar aceite integral do MVP | parcial | Todos os épicos possuem evidência e aceite. Não há requisito obrigatório omitido ou pendente no lançamento. | [E17 ensaios](entregas/2026-11-12-E17-ensaios-e-relatorio-de-aceite.md) | pendente |
 
