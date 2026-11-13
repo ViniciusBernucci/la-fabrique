@@ -1,3 +1,6 @@
+## 2026-11-12 — E16: status, controles e logs em tempo real (T16-01)
+Resumo do projeto com controles persistidos e a causa de cada bloqueio, histórico de eventos pesquisável e fluxo SSE com reconexão pelo cursor (sem perder nem repetir), com painel de execução no detalhe do projeto. Executores gravando eventos e navegador real NOT_RUN. [Entrega](entregas/2026-11-12-E16-execucao-ao-vivo.md) · [ADR-0048](adr/0048-painel-de-execucao-ao-vivo.md).
+
 ## 2026-11-12 — E14: revisão independente e correções (T14-03)
 Revisor por projeto com fallback e primeira rodada independente (garantida no banco), achados com severidade (crítico e relevante bloqueiam, baixo fica registrado), correção só com checks aprovados e rodada de revalidação, limite padrão de duas rodadas e esgotamento que suspende a tarefa com checkpoint seguro e abre decisão. Agente revisor real e tela NOT_RUN. [Entrega](entregas/2026-11-12-E14-revisao-independente.md) · [ADR-0047](adr/0047-revisao-independente-e-correcoes.md).
 

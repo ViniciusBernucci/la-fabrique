@@ -20,6 +20,7 @@ import (
 )
 
 type qEnv struct {
+	cl    *client
 	e     *authEnv
 	q     *queue.Queue
 	plans *planning.Store
@@ -28,9 +29,9 @@ type qEnv struct {
 
 func newQEnv(t *testing.T) *qEnv {
 	t.Helper()
-	e, _, _ := newProjectEnv(t)
+	e, cl, _ := newProjectEnv(t)
 	cps := &checkpoints.Store{DB: e.db.Pool}
-	return &qEnv{e: e, cps: cps, plans: &planning.Store{DB: e.db.Pool}, q: &queue.Queue{DB: e.db.Pool, Checkpoints: cps, Gates: map[string]queue.Gate{}}}
+	return &qEnv{cl: cl, e: e, cps: cps, plans: &planning.Store{DB: e.db.Pool}, q: &queue.Queue{DB: e.db.Pool, Checkpoints: cps, Gates: map[string]queue.Gate{}}}
 }
 
 type qProj struct {
@@ -55,6 +56,23 @@ func (e *qEnv) project(t *testing.T, slug string, plan planning.Plan) qProj {
 		t.Fatal(err)
 	}
 	return qProj{qEnv: e, proj: p.ID, feature: f.ID}
+}
+
+func (e *qEnv) apiClient(t *testing.T) *client { t.Helper(); return e.cl }
+
+// planOf cria um plano em cadeia: cada tarefa depende da anterior.
+func planOf(keys ...string) planning.Plan {
+	var ts []planning.Task
+	prev := ""
+	for _, k := range keys {
+		if prev == "" {
+			ts = append(ts, plTask(k))
+		} else {
+			ts = append(ts, plTask(k, prev))
+		}
+		prev = k
+	}
+	return planning.Plan{Summary: "cadeia", Tasks: ts}
 }
 
 func independent(keys ...string) planning.Plan {

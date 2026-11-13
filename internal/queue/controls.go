@@ -70,6 +70,24 @@ func (q *Queue) modeOf(ctx context.Context, db persistence.DBTX, s Scope) (strin
 	return mode, persistence.MapError(err)
 }
 
+// ControlOf devolve o controle do escopo com a justificativa (modo active se nunca foi alterado).
+func (q *Queue) ControlOf(ctx context.Context, s Scope) (Control, error) {
+	if err := s.valid(); err != nil {
+		return Control{}, err
+	}
+	c := Control{Scope: s.name(), ProjectID: s.ProjectID, Mode: ModeActive}
+	var err error
+	if s.Global {
+		err = q.DB.QueryRow(ctx, `SELECT mode, reason, version FROM controls WHERE scope = 'global'`).Scan(&c.Mode, &c.Reason, &c.Version)
+	} else {
+		err = q.DB.QueryRow(ctx, `SELECT mode, reason, version FROM controls WHERE scope = 'project' AND project_id = $1`, s.ProjectID).Scan(&c.Mode, &c.Reason, &c.Version)
+	}
+	if errors.Is(persistence.MapError(err), persistence.ErrNotFound) {
+		return c, nil
+	}
+	return c, persistence.MapError(err)
+}
+
 // Controls lista os controles que não estão ativos (os que alteram o comportamento).
 func (q *Queue) Controls(ctx context.Context) ([]Control, error) {
 	rows, err := q.DB.Query(ctx, `SELECT scope, COALESCE(project_id::text, ''), mode, reason, version FROM controls WHERE mode <> 'active' ORDER BY scope DESC, project_id`)

@@ -7,6 +7,7 @@ import { type ApiError, api, type Connection, type Project, type ProjectChange }
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
 import { StateBadge } from "./ProjectsPage";
+import { RunPanel } from "./RunPanel";
 
 const dateTime = new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" });
 
@@ -139,6 +140,7 @@ function ProjectDetail({ project, reload }: { project: Project; reload: () => vo
         actions={actions}
       />
       <FormError error={error} />
+      {project.state !== "draft" && <RunPanel projectId={project.id} />}
       <section className="panel" aria-label="Resumo do projeto">
         <dl className="facts">
           <div>

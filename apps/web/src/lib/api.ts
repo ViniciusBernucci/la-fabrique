@@ -467,6 +467,64 @@ export interface ProviderView {
   } | null;
 }
 
+// Operação ao vivo (T16-01).
+export type ControlMode = "active" | "draining" | "suspended";
+
+export interface ControlState {
+  scope: "global" | "project";
+  project_id?: string;
+  mode: ControlMode;
+  reason: string;
+  version: number;
+}
+
+export interface QueueItemView {
+  id: string;
+  feature_id: string;
+  task_key: string;
+  kind: "task" | "pr_fix";
+  priority: number;
+  state: "queued" | "running" | "waiting" | "done" | "cancelled";
+  wait_reason?: string;
+  wait_ref?: string;
+  blocked?: string;
+  execution_id?: string;
+  enqueued_at: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  seconds: number;
+}
+
+export interface ProjectOverview {
+  project: Project;
+  controls: { global: ControlState; project: ControlState };
+  counts: Record<string, number>;
+  items: QueueItemView[];
+  executions: {
+    id: string;
+    feature_id: string;
+    state: string;
+    attempt: number;
+    last_seq: number;
+  }[];
+  last_sync: {
+    outcome: "ok" | "failed";
+    finished_at: string;
+    new: number;
+    changed: number;
+    gone: number;
+    conflicts: number;
+    error?: string;
+  } | null;
+}
+
+export interface ExecutionEvent {
+  seq: number;
+  type: string;
+  payload: unknown;
+  created_at: string;
+}
+
 export interface DecisionRequest {
   id: string;
   project_id: string;
@@ -603,6 +661,15 @@ export const api = {
   ) => put<Workflow>(`/workflows/${encodeURIComponent(id)}`, input),
   validateWorkflowGraph: (graph: WorkflowGraph, signal?: AbortSignal) =>
     post<{ issues: WorkflowIssue[] }>("/workflows/validate", { graph }, signal),
+
+  // Operação ao vivo.
+  projectOverview: (id: string, signal?: AbortSignal) =>
+    request<ProjectOverview>(`/projects/${encodeURIComponent(id)}/overview`, { signal }),
+  executionEvents: (projectId: string, executionId: string, q: string, signal?: AbortSignal) =>
+    request<{ items: ExecutionEvent[]; next_cursor: number }>(
+      `/projects/${encodeURIComponent(projectId)}/executions/${encodeURIComponent(executionId)}/events?limit=200${q ? `&q=${encodeURIComponent(q)}` : ""}`,
+      { signal },
+    ),
 
   // Consumo, orçamento e provedores.
   listBudgets: (signal?: AbortSignal) => request<{ items: BudgetStatus[] }>("/budgets", { signal }),

@@ -54,6 +54,16 @@ func (s *statusRecorder) WriteHeader(code int) {
 	s.ResponseWriter.WriteHeader(code)
 }
 
+// Flush e Unwrap deixam respostas em fluxo (SSE) e o controle de prazos por requisição
+// atravessarem os invólucros do middleware.
+func (s *statusRecorder) Flush() {
+	if f, ok := s.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
+
 func isSafeMethod(m string) bool {
 	return m == http.MethodGet || m == http.MethodHead || m == http.MethodOptions
 }
@@ -157,6 +167,9 @@ func (w *redactWriter) Flush() {
 		f.Flush()
 	}
 }
+
+// Unwrap expõe o ResponseWriter de baixo (http.ResponseController).
+func (w *redactWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 func (w *redactWriter) finish() {
 	if !w.decided || !w.isJSON {

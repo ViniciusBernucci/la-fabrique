@@ -1,0 +1,15 @@
+# ADR-0048 — Painel de execução ao vivo: resumo, causa do bloqueio e fluxo SSE com cursor
+
+- **Estado:** ACEITA · **Ticket:** [T16-01](../NEW%20MVP/03-BACKLOG.md#t16-01) · **Épico:** E16 · **Relacionadas:** [ADR-0039](0039-fila-local-por-projeto.md), [ADR-0044](0044-controles-operacionais-pausa-e-suspensao.md), [ADR-0045](0045-recuperacao-de-tentativas-interrompidas.md)
+
+## Decisão
+1. **Resumo do projeto** (`GET /api/projects/{id}/overview`): estado, **controles persistidos** (global e do projeto, com modo, motivo e versão), contagem por estado da fila, as **tarefas** com estado, tempo e a **causa do bloqueio** em linguagem do painel — para o que espera (merge, provedor, decisão, recursos, suspensão) e para o que está na fila e não inicia (pré-requisito, projeto suspenso, pausa, vaga ocupada… via `Queue.Explain`) —, as execuções com o cursor do último evento e a última sincronização.
+2. **Histórico pesquisável** (`GET …/executions/{executionId}/events?after&q&limit`): eventos após um cursor, com busca por texto no tipo e no conteúdo; devolve `next_cursor`. A execução tem que ser do projeto da rota (senão 404).
+3. **Fluxo ao vivo por SSE** (`GET …/executions/{executionId}/stream`): cada evento leva `id: <seq>` e o tipo dentro do JSON (evento padrão `message`, que o `EventSource` do navegador entrega). A **reconexão recupera pelo cursor** (`Last-Event-ID` ou `?after=`): só chegam eventos posteriores, nada se perde e nada se repete. Há `retry`, heartbeat (`: ping`), poll curto do banco, e a conexão é encerrada após 5 minutos com `event: reconnect` para o cliente reabrir com o cursor (recursos limitados). O conteúdo passa pela redação de segredos. O prazo de escrita padrão do servidor é suspenso só nesta resposta (`http.ResponseController`), e os invólucros do middleware passaram a repassar `Flush` e `Unwrap`.
+4. **Painel** (`Execução` no detalhe do projeto, fora do rascunho): mostra os controles persistidos (pausa após a feature atual, suspensão, com o motivo), contadores, as tarefas com a causa do bloqueio e o tempo, e os **logs ao vivo** com estado da conexão ("Ao vivo", "Reconectando pelo cursor…"). O hook `useEventStream` guarda o cursor, **reabre com `?after=<cursor>`** ao cair (com recuo) ou ao receber `reconnect`, e ignora eventos já vistos. A busca no histórico troca o fluxo pelo resultado e volta ao vivo. O resumo se atualiza a cada 10 s.
+
+## Limites
+- Nenhum executor grava `execution_events` ainda (`AppendEvent` existe e é o contrato): sem eventos reais o painel mostra "Nenhum evento ainda". A visão é por execução (o cursor é por execução); não há fluxo único do projeto.
+- O painel **mostra** os controles, mas não os altera (não há rotas de ativar/pausar/suspender; os controles são o T10-04, só domínio). Não mostra o agente da tarefa (a fila não guarda o agente) nem tentativas, checkpoints e artefatos.
+- Sem verificação em navegador real com a API ao vivo: os testes cobrem o servidor (SSE real em HTTP) e o painel (EventSource simulado).
+- Retenção e limpeza de logs (30 dias) são do T16-04.

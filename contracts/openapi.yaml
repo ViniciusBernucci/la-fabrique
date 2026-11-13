@@ -526,6 +526,52 @@ paths:
         "200": {description: Plano, content: {application/json: {schema: {$ref: "#/components/schemas/PlanView"}}}}
         "401": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/overview:
+    get:
+      tags: [operacao-ao-vivo]
+      summary: Resumo do projeto para o painel (controles persistidos, tarefas da fila com a causa do bloqueio, execuções com cursor)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Resumo, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectOverview"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+
+  /projects/{id}/executions/{executionId}/events:
+    get:
+      tags: [operacao-ao-vivo]
+      summary: Histórico pesquisável de eventos de uma execução, após um cursor
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: executionId, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: after, in: query, required: false, schema: {type: integer, minimum: 0}}
+        - {name: q, in: query, required: false, schema: {type: string, maxLength: 100}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 500}}
+      responses:
+        "200": {description: Eventos, content: {application/json: {schema: {$ref: "#/components/schemas/ExecutionEvents"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+
+  /projects/{id}/executions/{executionId}/stream:
+    get:
+      tags: [operacao-ao-vivo]
+      summary: Eventos da execução ao vivo (SSE) com reconexão pelo cursor
+      description: >
+        Cada evento tem `id: <seq>`. Ao reconectar, envie `Last-Event-ID` (ou `?after=`) e só chegam eventos
+        posteriores: nada se perde e nada se repete. Há heartbeat (`: ping`) e a conexão é encerrada após 5 minutos
+        com `event: reconnect`. O conteúdo passa pela redação de segredos.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: executionId, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: after, in: query, required: false, schema: {type: integer, minimum: 0}}
+        - {name: Last-Event-ID, in: header, required: false, schema: {type: integer, minimum: 0}}
+      responses:
+        "200": {description: Fluxo text/event-stream, content: {text/event-stream: {schema: {type: string}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+
   /projects/{id}/profile/discover:
     post:
       tags: [recursos]
@@ -1452,6 +1498,54 @@ components:
         mapped_priority: {type: [integer, "null"], minimum: 0, maximum: 4}
         subtask: {type: boolean}
         url: {type: string}
+    ProjectOverview:
+      type: object
+      required: [project, controls, counts, items, executions]
+      properties:
+        project: {type: object, additionalProperties: true}
+        controls:
+          type: object
+          required: [global, project]
+          properties:
+            global: {$ref: "#/components/schemas/ControlState"}
+            project: {$ref: "#/components/schemas/ControlState"}
+        counts: {type: object, additionalProperties: {type: integer}}
+        items: {type: array, items: {$ref: "#/components/schemas/QueueItemView"}}
+        executions: {type: array, items: {type: object, required: [id, feature_id, state, attempt, last_seq], properties: {id: {type: string}, feature_id: {type: string}, state: {type: string}, attempt: {type: integer}, last_seq: {type: integer}}}}
+        last_sync: {oneOf: [{$ref: "#/components/schemas/SyncResult"}, {type: "null"}]}
+    ControlState:
+      type: object
+      required: [scope, mode, reason, version]
+      properties:
+        scope: {type: string, enum: [global, project]}
+        project_id: {type: string}
+        mode: {type: string, enum: [active, draining, suspended]}
+        reason: {type: string}
+        version: {type: integer}
+    QueueItemView:
+      type: object
+      required: [id, feature_id, task_key, kind, priority, state, enqueued_at, seconds]
+      properties:
+        id: {type: string}
+        feature_id: {type: string}
+        task_key: {type: string}
+        kind: {type: string, enum: [task, pr_fix]}
+        priority: {type: integer}
+        state: {type: string, enum: [queued, running, waiting, done, cancelled]}
+        wait_reason: {type: string}
+        wait_ref: {type: string}
+        blocked: {type: string, description: "causa do bloqueio em linguagem do painel"}
+        execution_id: {type: string}
+        enqueued_at: {type: string, format: date-time}
+        started_at: {type: [string, "null"], format: date-time}
+        finished_at: {type: [string, "null"], format: date-time}
+        seconds: {type: integer}
+    ExecutionEvents:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {type: object, required: [seq, type, payload, created_at], properties: {seq: {type: integer}, type: {type: string}, payload: {}, created_at: {type: string, format: date-time}}}}
+        next_cursor: {type: integer}
     PlanCriterion:
       type: object
       required: [text, check]

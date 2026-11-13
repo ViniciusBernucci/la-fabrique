@@ -497,3 +497,25 @@
   display: grid;
   gap: 4px;
 }
+
+/* Logs ao vivo */
+.log {
+  max-height: 320px;
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  overflow: auto;
+  border: 1px solid var(--hud-line);
+  border-radius: var(--hud-radius-md, 8px);
+  background: var(--hud-bg, transparent);
+  color: var(--hud-text);
+  font: 400 12px / 1.6 var(--hud-font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
