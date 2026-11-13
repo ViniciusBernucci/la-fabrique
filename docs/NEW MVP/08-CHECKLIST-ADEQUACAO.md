@@ -1,9 +1,9 @@
 # Checklist do backlog de adequação (LF-AJ)
 Acompanhamento dos 35 tickets de [Le-Fabrique-Adequacao.md](Le-Fabrique-Adequacao.md). **Fonte de verdade do estado da adequação**: atualize ao concluir ou alterar um ticket (marcar `[x]` só com evidência real). Fica separado do [07-CHECKLIST.md](07-CHECKLIST.md) porque a matriz de aceite do MVP é derivada dele.
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
-_Última atualização: 2026-11-13 — AJ03-02._
+_Última atualização: 2026-11-13 — AJ04-01, AJ04-02._
 ## Resumo
-**4 feitos · 0 parciais · 31 pendentes** de 35 tickets.
+**6 feitos · 0 parciais · 29 pendentes** de 35 tickets.
 
 ## LF-AJ-01 — Sincronização e gerenciamento de Issues
 - [ ] **AJ01-01** — Leitura Jira/ClickUp: descobrir Issues elegíveis e atualizar conhecidas por ID · dep.: AJ02-01 · aceite: CT01.
@@ -28,8 +28,10 @@ _Última atualização: 2026-11-13 — AJ03-02._
 - [ ] **AJ03-05** — Migração aditiva, ativação por workflow publicado e reversão operacional · dep.: AJ03-03, AJ05-03 · aceite: CT16.
 
 ## LF-AJ-04 — Contratos determinísticos de execução
-- [ ] **AJ04-01** — Schema, proveniência, invariantes e snapshot validado pela Sentinela · dep.: AJ02-01, E12, E13 · aceite: CT04.
-- [ ] **AJ04-02** — Gate PRD e contrato inicial antes de liberar o planejamento · dep.: AJ04-01, AJ01-01, AJ03-02 · aceite: CT03.
+- [x] **AJ04-01** — Schema, proveniência, invariantes e snapshot validado pela Sentinela · dep.: AJ02-01, E12, E13 · aceite: CT04.
+  - `internal/contract`: proposta do Tech Lead decodificada com campos proibidos (permissões, IDs, worktree) rejeitados; caminhos fora do worktree e ciclos recusados; piso de risco e proveniência por campo; snapshots versionados com hash, encadeados e imutáveis no banco (trigger). Migration 00045. PASS: `go test ./internal/contract` e integração `TestContractSnapshotsAreVersionedHashedAndImmutable`.
+- [x] **AJ04-02** — Gate PRD e contrato inicial antes de liberar o planejamento · dep.: AJ04-01, AJ01-01, AJ03-02 · aceite: CT03.
+  - `internal/prdgate`: campos obrigatórios do projeto, conteúdo acessível, consistência e referências; pendências persistidas e Issue em PRD-DOC; válido publica exatamente um contrato inicial por revisão antes da transição a PRD-DOC-CONCLUIDO; evento forjado de agente é recusado. Migration 00046. PASS: integração `TestPRDGateBlocksUntilCompleteThenPublishesOneInitialContract` (CT03). Dependência AJ01-01 (leitura do PRD na origem) ainda pendente: o gate recebe o PRD já normalizado.
 - [ ] **AJ04-03** — Contrato imutável no cabeçalho de cada despacho e revisão dos insumos · dep.: AJ04-01, AJ07-01 · aceite: CT04, CT07.
 
 ## LF-AJ-05 — Workflow padrão, planejamento técnico e subtarefas
