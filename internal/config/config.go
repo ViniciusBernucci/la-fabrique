@@ -75,8 +75,13 @@ type Worker struct {
 	// PRSync liga a consulta das PRs gerenciadas (SENTINEL_PR_SYNC=true), com agenda própria (PR_POLL_INTERVAL).
 	PRSync         bool
 	PRPollInterval time.Duration
-	VaultKey       []byte
-	VaultKeyID     string
+	// Admission liga o laço de admissão da Sentinela (SENTINEL_ADMISSION=true). Sem executor ligado ele roda em
+	// observação (dry-run): decide e audita, não reserva nem altera estado.
+	Admission         bool
+	AdmissionInterval time.Duration
+	PlanningSlots     int
+	VaultKey          []byte
+	VaultKeyID        string
 }
 
 // Migrate é a configuração do cmd/migrate.
@@ -265,6 +270,15 @@ func LoadWorker(lookup Lookup) (Worker, error) {
 	cfg.RetentionInterval = l.duration("RETENTION_INTERVAL", 24*time.Hour, time.Minute)
 	cfg.RetentionApply = l.boolean("RETENTION_APPLY", false)
 	cfg.IssueSync = l.boolean("SENTINEL_ISSUE_SYNC", false)
+	cfg.Admission = l.boolean("SENTINEL_ADMISSION", false)
+	if cfg.Admission {
+		cfg.AdmissionInterval = l.duration("ADMISSION_INTERVAL", 15*time.Second, 5*time.Second)
+		n, err := strconv.Atoi(l.str("PLANNING_SLOTS", "1"))
+		if err != nil || n < 1 || n > 8 {
+			l.fail("PLANNING_SLOTS deve ser de 1 a 8")
+		}
+		cfg.PlanningSlots = n
+	}
 	cfg.PRSync = l.boolean("SENTINEL_PR_SYNC", false)
 	if cfg.PRSync {
 		cfg.PRPollInterval = l.duration("PR_POLL_INTERVAL", 3*time.Minute, 30*time.Second)

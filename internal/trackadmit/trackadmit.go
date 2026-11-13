@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ViniciusBernucci/le-fabrique/internal/flow"
@@ -19,6 +20,7 @@ import (
 const (
 	StageImplementation = "implementation"
 	StageReview         = "review"
+	StagePlanning       = "planning" // planejamento (Tech Lead) de uma Issue: TaskKey é a chave da Issue
 )
 
 // DB é o que o admissor precisa do PostgreSQL.
@@ -31,6 +33,24 @@ type DB interface {
 type Service struct {
 	DB  DB
 	Now func() time.Time
+	// DryRun decide e audita, mas não reserva nem altera estado (modo de observação antes de ligar a execução).
+	DryRun bool
+}
+
+// Audit é uma decisão de admissão registrada na ordem da fila vigente.
+type Audit struct {
+	Candidate string `json:"candidate"`
+	Stage     string `json:"stage"`
+	Position  int    `json:"position"`
+	Admitted  bool   `json:"admitted"`
+	Wait      string `json:"wait,omitempty"`
+}
+
+// Result é o desfecho de uma avaliação.
+type Result struct {
+	Started []Started `json:"started"`
+	Waiting []Waiting `json:"waiting"`
+	Audit   []Audit   `json:"audit"`
 }
 
 // Started é um trabalho admitido com as reservas que o protegem.
@@ -89,12 +109,65 @@ func (s *Service) load(ctx context.Context, projectID string) ([]row, error) {
 	return out, rows.Err()
 }
 
-// Tick avalia o projeto e admite o que couber. A política decide; a reserva atômica confirma (uma
-// corrida perdida volta a esperar). Nada em execução é interrompido.
+type planRow struct {
+	key        string
+	correction bool
+	priority   int
+	at         time.Time
+}
+
+// loadPlanning lista as Issues prontas para planejar (PRD concluído ou correção liberada) e quantas
+// vagas de planejamento estão ocupadas.
+func (s *Service) loadPlanning(ctx context.Context, projectID string) (cands []planRow, held map[string]bool, busy int, err error) {
+	held = map[string]bool{}
+	rows, err := s.DB.Query(ctx, `SELECT holder FROM track_reservations WHERE project_id = $1 AND slot LIKE 'PLANNING:%'`, projectID)
+	if err != nil {
+		return nil, nil, 0, persistence.MapError(err)
+	}
+	for rows.Next() {
+		var h string
+		if err := rows.Scan(&h); err != nil {
+			rows.Close()
+			return nil, nil, 0, err
+		}
+		held[strings.TrimSuffix(strings.TrimPrefix(h, "plan/"), "#planning")] = true
+		busy++
+	}
+	rows.Close()
+	cr, err := s.DB.Query(ctx, `SELECT i.external_key, c.code = 'CORRECAO_PR', COALESCE(i.priority, 1000000), i.updated_at
+		FROM flow_issues i JOIN status_catalog c ON c.id = i.status_id
+		WHERE i.project_id = $1 AND c.code IN ('PRD-DOC-CONCLUIDO', 'CORRECAO_PR') ORDER BY i.updated_at, i.external_key`, projectID)
+	if err != nil {
+		return nil, nil, 0, persistence.MapError(err)
+	}
+	defer cr.Close()
+	for cr.Next() {
+		var r planRow
+		if err := cr.Scan(&r.key, &r.correction, &r.priority, &r.at); err != nil {
+			return nil, nil, 0, err
+		}
+		cands = append(cands, r)
+	}
+	return cands, held, busy, cr.Err()
+}
+
+// Tick avalia o projeto e admite o que couber (compatível com chamadas antigas; use Evaluate para a auditoria).
 func (s *Service) Tick(ctx context.Context, projectID string, lim sentinel.Limits) ([]Started, []Waiting, error) {
+	r, err := s.Evaluate(ctx, projectID, lim)
+	return r.Started, r.Waiting, err
+}
+
+// Evaluate avalia o projeto e admite o que couber. A política decide; a reserva atômica confirma (uma
+// corrida perdida volta a esperar). Nada em execução é interrompido. Planejamento concorre sob o limite próprio.
+func (s *Service) Evaluate(ctx context.Context, projectID string, lim sentinel.Limits) (Result, error) {
+	var out Result
 	rs, err := s.load(ctx, projectID)
 	if err != nil {
-		return nil, nil, err
+		return out, err
+	}
+	planCands, planHeld, planBusy, err := s.loadPlanning(ctx, projectID)
+	if err != nil {
+		return out, err
 	}
 	done := map[string]bool{}
 	var cands []sentinel.Candidate
@@ -129,15 +202,59 @@ func (s *Service) Tick(ctx context.Context, projectID string, lim sentinel.Limit
 			byID[id], stageOf[id] = r, StageReview
 		}
 	}
+	planKey := map[string]string{}
+	for _, pr := range planCands {
+		if planHeld[pr.key] {
+			continue
+		}
+		id := "plan/" + pr.key
+		cands = append(cands, sentinel.Candidate{ID: id, Work: sentinel.WorkPlanning, Correction: pr.correction, Priority: pr.priority, EnqueuedAt: pr.at,
+			WorkflowPublished: true, BudgetOK: true, Authorized: true})
+		planKey[id], stageOf[id] = pr.key, StagePlanning
+	}
+	for i := 0; i < planBusy; i++ {
+		running = append(running, sentinel.Running{ID: fmt.Sprintf("planning-%d", i), Work: sentinel.WorkPlanning})
+	}
 	decisions := sentinel.Admit(cands, running, done, lim)
 	res := &sentinel.Reserver{DB: s.DB}
 	var started []Started
 	var waiting []Waiting
 	for _, d := range decisions {
-		r := byID[d.ID]
 		stage := stageOf[d.ID]
+		out.Audit = append(out.Audit, Audit{Candidate: d.ID, Stage: stage, Position: d.Position, Admitted: d.Admitted, Wait: d.Wait})
+		if stage == StagePlanning {
+			key := planKey[d.ID]
+			if !d.Admitted {
+				waiting = append(waiting, Waiting{TaskKey: key, Stage: stage, Reason: d.Wait})
+				continue
+			}
+			holder := "plan/" + key + "#planning"
+			if s.DryRun {
+				started = append(started, Started{TaskKey: key, Stage: stage, Holder: holder})
+				continue
+			}
+			var got []sentinel.Reservation
+			var aerr error
+			for slot := 1; slot <= max(lim.PlanningSlots, 1); slot++ {
+				got, aerr = res.Acquire(ctx, projectID, holder, fmt.Sprintf("PLANNING:%d", slot))
+				if aerr == nil {
+					break
+				}
+			}
+			if aerr != nil {
+				waiting = append(waiting, Waiting{TaskKey: key, Stage: stage, Reason: sentinel.WaitPlanning})
+				continue
+			}
+			started = append(started, Started{TaskKey: key, Stage: stage, Holder: holder, Reservations: got})
+			continue
+		}
+		r := byID[d.ID]
 		if !d.Admitted {
 			waiting = append(waiting, Waiting{FeatureID: r.feature, TaskKey: r.key, Stage: stage, Reason: d.Wait})
+			continue
+		}
+		if s.DryRun {
+			started = append(started, Started{FeatureID: r.feature, TaskKey: r.key, Stage: stage, Track: r.track, Holder: Holder(r.feature, r.key, stage)})
 			continue
 		}
 		holder := Holder(r.feature, r.key, stage)
@@ -156,7 +273,8 @@ func (s *Service) Tick(ctx context.Context, projectID string, lim sentinel.Limit
 			continue
 		}
 		if err != nil {
-			return started, waiting, err
+			out.Started, out.Waiting = started, waiting
+			return out, err
 		}
 		col := "impl_state"
 		if stage == StageReview {
@@ -164,11 +282,42 @@ func (s *Service) Tick(ctx context.Context, projectID string, lim sentinel.Limit
 		}
 		if _, err := s.DB.Exec(ctx, `UPDATE subtasks SET `+col+` = 'running' WHERE feature_id::text = $1 AND task_key = $2 AND plan_version = (SELECT MAX(plan_version) FROM subtasks WHERE feature_id::text = $1)`, r.feature, r.key); err != nil {
 			_, _ = res.ReleaseHolder(ctx, projectID, holder)
-			return started, waiting, persistence.MapError(err)
+			out.Started, out.Waiting = started, waiting
+			return out, persistence.MapError(err)
 		}
 		started = append(started, Started{FeatureID: r.feature, TaskKey: r.key, Stage: stage, Track: r.track, Holder: holder, Reservations: got})
 	}
-	return started, waiting, nil
+	out.Started, out.Waiting = started, waiting
+	return out, nil
+}
+
+// Revert desfaz uma admissão que não pôde começar (ex.: o executor recusou): libera as reservas e devolve a
+// etapa a pendente para a próxima avaliação.
+func (s *Service) Revert(ctx context.Context, projectID string, st Started) error {
+	if _, err := (&sentinel.Reserver{DB: s.DB}).ReleaseHolder(ctx, projectID, st.Holder); err != nil {
+		return err
+	}
+	var col string
+	switch st.Stage {
+	case StageImplementation:
+		col = "impl_state"
+	case StageReview:
+		col = "review_state"
+	default:
+		return nil // planejamento só guarda a reserva
+	}
+	_, err := s.DB.Exec(ctx, `UPDATE subtasks SET `+col+` = 'pending' WHERE feature_id::text = $1 AND task_key = $2 AND `+col+` = 'running'
+		AND plan_version = (SELECT MAX(plan_version) FROM subtasks WHERE feature_id::text = $1)`, st.FeatureID, st.TaskKey)
+	return persistence.MapError(err)
+}
+
+// CompletePlanning encerra o planejamento da Issue e libera a vaga própria.
+func (s *Service) CompletePlanning(ctx context.Context, projectID, issueKey string) error {
+	n, err := (&sentinel.Reserver{DB: s.DB}).ReleaseHolder(ctx, projectID, "plan/"+issueKey+"#planning")
+	if err == nil && n == 0 {
+		return persistence.ErrNotFound
+	}
+	return err
 }
 
 // Complete encerra uma etapa e libera vaga e recursos do titular. Para review sem exigência use SkipReview.

@@ -21,7 +21,7 @@
 ## Limites
 - As capacidades dos CLIs (flags de sessão/retomada, formato de `session_id`, interação) **não** foram verificadas contra os clientes reais (NOT_RUN).
 - Os adaptadores Jira/ClickUp são exercitados pela suíte de contrato existente e por rastreadores de teste; o ciclo contra Jira/ClickUp/GitHub reais segue NOT_RUN.
-- O laço de execução (agente dentro da worktree, orquestração contínua pelo worker) não está ligado de ponta a ponta: a admissão por trilhas (`trackadmit`), a ativação e a recusa da fila legada existem e são testadas, mas o worker ainda não roda `trackadmit.Tick` nem `correction.Dispatcher`. Os testes simulam o agente por commits.
+- O laço de admissão roda no worker (`SENTINEL_ADMISSION`), mas sem `Starter`: em observação (dry-run) ele decide e audita, sem reservar. Falta o consumidor que provisiona a worktree e dispara o agente da trilha (`correction.Dispatcher` e o executor); os testes simulam o agente por commits.
 - GitHub, Jira/ClickUp e os CLIs reais seguem NOT_RUN: as interfaces (`Reader`, `Pusher`, `PRs`, `Driver`, `Runner`, `Deliverer`) têm fakes nos testes; o Docker real foi exercitado para isolamento e limpeza e, com a imagem oficial `mcr.microsoft.com/playwright/mcp`, para o Chromium com MCP (AJ08-02) e, com Docker Compose, para a validação do ambiente (AJ08-04).
 - Sem tela dedicada para as PRs gerenciadas (há API e a visão por Issue na página Issues). O terminal/subagentes e o chat de orientações têm tela no painel de execução, mas o laço que inicia o executor ainda precisa registrar-se (`guidance.Registry`/`Inbox`).
 - Comando `/fabrique fix` enviado antes da revisão formal sobre os mesmos comentários gera rodadas distintas (só revisão → comando é a mesma rodada).
