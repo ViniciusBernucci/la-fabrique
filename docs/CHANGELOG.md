@@ -1,3 +1,6 @@
+## 2026-11-12 — E10: plano versionado da feature (T10-01)
+Contrato do plano com critérios verificáveis, risco e DAG; validador que recusa ciclo, referência ausente e critério inverificável; versões que preservam a anterior em caso de conflito; publicação das subtarefas na origem sem duplicar no retry. Agente planejador, scheduler e tela NOT_RUN. [Entrega](entregas/2026-11-12-E10-planejamento.md) · [ADR-0035](adr/0035-plano-versionado-da-feature.md).
+
 ## 2026-11-12 — E05: perfil técnico e recursos do projeto (T05-03)
 Descoberta segura de manifestos (sugere com origem, nunca lê `.env`), perfil com segredo só por referência, associação explícita de recursos globais com sobrescrita local, validação que bloqueia workflow em rascunho e conta incompatível, e aptidão para executar. Repositório real e tela NOT_RUN. [Entrega](entregas/2026-11-12-E05-perfil-e-recursos.md) · [ADR-0034](adr/0034-perfil-tecnico-e-recursos-do-projeto.md).
 

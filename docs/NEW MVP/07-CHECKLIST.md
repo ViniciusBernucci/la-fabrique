@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E05 (T05-03)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E10 (T10-01)._
 
 ## Resumo
 
-**19 feitos · 25 parciais · 23 pendentes** de 67 tickets.
+**19 feitos · 26 parciais · 22 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -108,7 +108,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E05 (T05-03)._
 
 ## E10 — Planejamento, fila e controles
 
-- [ ] **[T10-01](03-BACKLOG.md#t10-01)** — Planejar e versionar decomposição da feature · dep.: T06-03, T07-04, T12-02.
+- [~] **[T10-01](03-BACKLOG.md#t10-01)** — Planejar e versionar decomposição da feature · dep.: T06-03, T07-04, T12-02.
+  - PASS (unitário + PostgreSQL real, `-race`): contrato do plano com critérios verificáveis (comando, teste, arquivo, revisão com evidência), risco e DAG; recusa de ciclo (mostrado), referência ausente, tarefa sem critério e critério inverificável; versão vigente preservada em plano inválido ou conflitante (tarefa já em execução não é alterada nem removida; rejeições ficam registradas); mesmo conteúdo sem versão nova, também sob concorrência; identidade estável da tarefa entre versões; publicação de uma subtarefa por tarefa e uma relação por dependência pelo ledger sem duplicar após resposta perdida nem no retry; API de proposta/leitura. **Parcial:** o agente planejador (produtor do plano) e a leitura de código/contexto não existem; `Publish` sem rota nem ligação ao scheduler (T10-02); Jira/ClickUp reais NOT_RUN; sem tela. Revisão independente NOT_RUN. Entrega: [E10 planejamento](../entregas/2026-11-12-E10-planejamento.md).
 - [ ] **[T10-02](03-BACKLOG.md#t10-02)** — Implementar fila local por projeto · dep.: T10-01, T03-02.
 - [ ] **[T10-03](03-BACKLOG.md#t10-03)** — Aplicar limite global, leases e justiça · dep.: T10-02, T11-03.
 - [ ] **[T10-04](03-BACKLOG.md#t10-04)** — Implementar ativação, pausa e retomada operacional · dep.: T10-03, T12-01.

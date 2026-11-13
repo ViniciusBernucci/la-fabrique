@@ -495,6 +495,37 @@ paths:
           content: {application/json: {schema: {type: object, required: [ok, problems], properties: {ok: {type: boolean}, problems: {type: array, items: {$ref: "#/components/schemas/PublishProblem"}}}}}}
         "401": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/features/{featureId}/plan:
+    put:
+      tags: [planejamento]
+      summary: Propõe o plano de decomposição da feature (valida, versiona; inválido ou conflitante preserva a versão anterior)
+      description: >
+        Recusa ciclo, referência ausente, tarefa sem critério e critério que não possa ser verificado. Uma tarefa que já saiu
+        de "pendente" não pode ser alterada nem removida. O mesmo conteúdo não gera versão nova (`unchanged`).
+        Plano rejeitado volta com 422 e a lista de `problems`; fica registrado como versão rejeitada.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: featureId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/Plan"}}}
+      responses:
+        "200": {description: Plano aceito (ou inalterado), content: {application/json: {schema: {$ref: "#/components/schemas/PlanOutcome"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "422": {description: Plano rejeitado, content: {application/json: {schema: {$ref: "#/components/schemas/PlanRejected"}}}}
+    get:
+      tags: [planejamento]
+      summary: Versão vigente do plano, tarefas (identidade estável) e histórico de versões
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: featureId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Plano, content: {application/json: {schema: {$ref: "#/components/schemas/PlanView"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
   /projects/{id}/profile/discover:
     post:
       tags: [recursos]
@@ -1411,6 +1442,71 @@ components:
         mapped_priority: {type: [integer, "null"], minimum: 0, maximum: 4}
         subtask: {type: boolean}
         url: {type: string}
+    PlanCriterion:
+      type: object
+      required: [text, check]
+      properties:
+        text: {type: string}
+        check: {type: string, enum: [command, test, file, review]}
+        command: {type: string}
+        target: {type: string}
+        path: {type: string}
+        evidence: {type: string}
+    PlanTask:
+      type: object
+      required: [key, title, criteria, risk, depends_on]
+      properties:
+        key: {type: string, pattern: "^[a-z0-9][a-z0-9_-]{0,39}$"}
+        title: {type: string}
+        description: {type: string}
+        criteria: {type: array, items: {$ref: "#/components/schemas/PlanCriterion"}}
+        risk: {type: string, enum: [low, medium, high]}
+        depends_on: {type: array, items: {type: string}}
+        order: {type: integer, minimum: 0}
+        paths: {type: array, items: {type: string}}
+    Plan:
+      type: object
+      required: [tasks]
+      properties:
+        summary: {type: string}
+        tasks: {type: array, items: {$ref: "#/components/schemas/PlanTask"}}
+    PlanProblem:
+      type: object
+      required: [field, message]
+      properties: {task: {type: string}, field: {type: string}, message: {type: string}}
+    PlanStored:
+      type: object
+      required: [id, version, status, content_hash, plan, problems, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        version: {type: integer}
+        status: {type: string, enum: [current, superseded, rejected]}
+        content_hash: {type: string}
+        plan: {$ref: "#/components/schemas/Plan"}
+        problems: {type: array, items: {$ref: "#/components/schemas/PlanProblem"}}
+        created_at: {type: string, format: date-time}
+    PlanOutcome:
+      type: object
+      required: [accepted, unchanged, stored, problems]
+      properties:
+        accepted: {type: boolean}
+        unchanged: {type: boolean}
+        stored: {$ref: "#/components/schemas/PlanStored"}
+        problems: {type: array, items: {$ref: "#/components/schemas/PlanProblem"}}
+    PlanRejected:
+      type: object
+      required: [error, problems, version]
+      properties:
+        error: {type: object, additionalProperties: true}
+        problems: {type: array, items: {$ref: "#/components/schemas/PlanProblem"}}
+        version: {type: integer}
+    PlanView:
+      type: object
+      required: [current, tasks, versions]
+      properties:
+        current: {oneOf: [{$ref: "#/components/schemas/PlanStored"}, {type: "null"}]}
+        tasks: {type: array, items: {type: object, additionalProperties: true}}
+        versions: {type: array, items: {$ref: "#/components/schemas/PlanStored"}}
     ProjectDiscovery:
       type: object
       required: [stack, commands, services, secret_names, inspected, skipped]

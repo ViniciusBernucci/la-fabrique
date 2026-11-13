@@ -194,6 +194,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/projects/{id}/validation", s.protected(s.validateProject))
 	mux.HandleFunc("GET /api/projects/{id}/changes", s.protected(s.listProjectChanges))
 	mux.HandleFunc("POST /api/projects/{id}/source/check", s.protected(s.checkProjectSource))
+	mux.HandleFunc("PUT /api/projects/{id}/features/{featureId}/plan", s.protected(s.proposePlan))
+	mux.HandleFunc("GET /api/projects/{id}/features/{featureId}/plan", s.protected(s.getPlan))
 	mux.HandleFunc("POST /api/projects/{id}/profile/discover", s.protected(s.discoverProfile))
 	mux.HandleFunc("GET /api/projects/{id}/profile", s.protected(s.getProfile))
 	mux.HandleFunc("PUT /api/projects/{id}/profile", s.protected(s.putProfile))
