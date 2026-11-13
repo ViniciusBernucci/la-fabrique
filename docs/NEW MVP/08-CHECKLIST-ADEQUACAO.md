@@ -1,9 +1,9 @@
 # Checklist do backlog de adequação (LF-AJ)
 Acompanhamento dos 35 tickets de [Le-Fabrique-Adequacao.md](Le-Fabrique-Adequacao.md). **Fonte de verdade do estado da adequação**: atualize ao concluir ou alterar um ticket (marcar `[x]` só com evidência real). Fica separado do [07-CHECKLIST.md](07-CHECKLIST.md) porque a matriz de aceite do MVP é derivada dele.
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
-_Última atualização: 2026-11-13 — AJ06-01, AJ06-02._
+_Última atualização: 2026-11-13 — AJ06-03, AJ08-01, AJ08-02, AJ08-03, AJ08-04, AJ08-05._
 ## Resumo
-**17 feitos · 4 parciais · 14 pendentes** de 35 tickets.
+**21 feitos · 6 parciais · 8 pendentes** de 35 tickets.
 
 ## LF-AJ-01 — Sincronização e gerenciamento de Issues
 - [x] **AJ01-01** — Leitura Jira/ClickUp: descobrir Issues elegíveis e atualizar conhecidas por ID · dep.: AJ02-01 · aceite: CT01.
@@ -54,7 +54,8 @@ _Última atualização: 2026-11-13 — AJ06-01, AJ06-02._
   - `internal/worktrees` + migration 00054: `git worktree` e branch temporária (`lf-tmp/<feature>/<trilha>-<tipo>-<n>`) por tentativa, SHA de partida fixa e validada, escopo por caminhos (`Violations`), checkpoint em ref própria sem tocar índice/branch (inclui arquivo não rastreado; não repete sem mudança), limpeza só da própria tentativa (checkpoint + ref de arquivo antes de remover; recusa com escritor ativo), recriação após queda a partir da branch. PASS (git real): `TestWorktreesAreIsolatedPerAttemptAndPreserveWork`. **Limite:** provisiona worktree e branch; o container/ambiente de execução da tentativa segue o sandbox existente e não foi acoplado aqui.
 - [x] **AJ06-02** — Dependências e reservas de recursos compartilhados na admissão das trilhas · dep.: AJ03-03, AJ05-02, AJ06-01 · aceite: CT05, CT06.
   - `internal/trackadmit` + migration 00055 (etapas por subtarefa): a política pura da Sentinela (`Admit`) decide sobre dependências verificáveis, recursos compartilhados e vagas por trilha e a admissão vira reserva atômica (vaga + `RES:<recurso>`) com geração; review começa cedo na vaga da própria trilha; `Complete` libera por titular; `Progress` deriva o status agregado pela etapa mais atrasada. PASS: `TestTrackAdmissionUsesDependenciesResourcesAndSlots`, `TestTrackAdmissionBlocksSharedResourceAndSurvivesConcurrentTicks` (4 passagens simultâneas admitem a vaga uma vez). A fila viva ainda é a `queue.Claim` (AJ03-05).
-- [ ] **AJ06-03** — Consolidar commits e registrar a cabeça candidata · dep.: AJ06-02, AJ08-01 · aceite: CT06, CT07.
+- [x] **AJ06-03** — Consolidar commits e registrar a cabeça candidata · dep.: AJ06-02, AJ08-01 · aceite: CT06, CT07.
+  - `internal/consolidate` + migration 00056: consolidação serializada por feature (uma execução ativa, lease para queda), integra as tentativas em ordem de dependência por cherry-pick numa worktree temporária e só então grava a ref com `update-ref` condicionado à cabeça esperada (corrida ⇒ `ErrStale`, alteração humana preservada); fast-forward mantém a SHA, as demais registram equivalência original→integrada e marcam a trilha para revalidação; conflito aborta, preserva as duas branches, registra os arquivos e bloqueia (sem cabeça candidata); repetição, inclusive sem as linhas do banco, não duplica commits (prova pelo trailer `cherry picked from`). PASS (git real): `TestConsolidation…` (3 testes).
 - [ ] **AJ06-04** — Consolidação, checks integrados e adaptador de publicação GitHub (Draft PR) · dep.: AJ06-03, AJ08-05 · aceite: CT06, CT12.
 
 ## LF-AJ-07 — Monitoramento de agentes, terminais e interação humana
@@ -64,11 +65,16 @@ _Última atualização: 2026-11-13 — AJ06-01, AJ06-02._
 - [ ] **AJ07-03** — Orientações ao agente com confirmação técnica e histórico na retomada · dep.: AJ07-02, AJ04-03 · aceite: CT07, CT10.
 
 ## LF-AJ-08 — Revisão automatizada, testes e ambiente visual
-- [ ] **AJ08-01** — Política de testes, risco e review por trilha no pipeline · dep.: AJ03-03, AJ05-02, E14 · aceite: CT17.
-- [ ] **AJ08-02** — Chrome/Chromium isolado e ferramentas MCP de navegação, evidência e limpeza · dep.: AJ06-01, AJ03-01, E08, E11, E13 · aceite: CT08, CT09.
-- [ ] **AJ08-03** — Descoberta do ambiente de teste pelo repositório e proposta editável (Decisão 29) · dep.: AJ06-01, E04 · aceite: CT08.
-- [ ] **AJ08-04** — Validar, versionar, persistir e reutilizar a configuração de ambiente por projeto · dep.: AJ08-02, AJ08-03 · aceite: CT08, CT09.
-- [ ] **AJ08-05** — Evidência visual, resultados por trilha e gate de testes integrados antes da PR · dep.: AJ08-01, AJ08-04, AJ06-03 · aceite: CT06, CT17.
+- [x] **AJ08-01** — Política de testes, risco e review por trilha no pipeline · dep.: AJ03-03, AJ05-02, E14 · aceite: CT17.
+  - `internal/qualitypolicy`: Front sempre exige review visual (qualquer risco); Back baixo/médio roda os checks aplicáveis sem review de IA; Back alto, após reclassificar o risco sobre o diff real (`risk.Assess`, só eleva), exige review independente por IA; todas as tarefas exigem testes reais com comandos; check previsto sem comando exige justificativa; evidência vale só para a revisão a que se refere (`Verify`) e `Affected` lista o que a correção obriga a repetir. PASS: `go test ./internal/qualitypolicy` (CT17). Ligação ao pipeline de publicação em AJ08-05.
+- [~] **AJ08-02** — Chrome/Chromium isolado e ferramentas MCP de navegação, evidência e limpeza · dep.: AJ06-01, AJ03-01, E08, E11, E13 · aceite: CT08, CT09.
+  - `internal/browserenv`: um container por execução em rede `--internal` própria, sem montagens do host, `--cap-drop ALL`, somente leitura, quotas; ferramentas de navegação só aceitam origens autorizadas (nome do serviço na rede interna; bloqueia produção, localhost, IP, metadados da nuvem, outras execuções); evidência sanitizada; `RunReview` recolhe sempre os recursos e qualquer falha de provisionamento/prontidão/MCP deixa o gate pendente; `CollectOrphans` recolhe execuções mortas por rótulo. PASS: unitários com runtime falso e **Docker real** (`TestRealDockerIsolationAndCleanup`: sem internet, sem montagens, execuções isoladas entre si, limpeza repetível sem tocar na outra). **Pendente (NOT_RUN):** imagem real do Chromium com servidor MCP e o `Driver` real (CDP/MCP); testado com driver falso. A imagem é decisão de implantação.
+- [x] **AJ08-03** — Descoberta do ambiente de teste pelo repositório e proposta editável (Decisão 29) · dep.: AJ06-01, E04 · aceite: CT08.
+  - `internal/envdiscover`: leitura estática do repositório (compose, package.json, Makefile, `.env.example`; reaproveita `projectres.Inspect`) gera proposta com serviços (tipo, portas, prontidão declarada, dependências), comandos, preparo/limpeza de dados, credenciais só por referência `env:NOME` (valor nunca entra), alvo do navegador, origem por campo, lacunas e ambiguidades; não executa nada. PASS: `go test ./internal/envdiscover` (fixture frontend+API+banco e fixture ambígua).
+- [~] **AJ08-04** — Validar, versionar, persistir e reutilizar a configuração de ambiente por projeto · dep.: AJ08-02, AJ08-03 · aceite: CT08, CT09.
+  - `internal/envconfig` + migration 00057: versões persistidas (proposta → validando → validada | inválida | requer revalidação), checagem estática de schema/política (segredo só por referência, comandos fora da política, destino de produção, alvo do navegador = serviço declarado), validação isolada por `Runner` (readiness, acesso do navegador, limpeza e SHA da evidência; qualquer falha impede promover), aprovação promove a versão que as execuções fixam, mudança relevante gera `needs_revalidation` sem derrubar a aprovada, não material herda a validação, preflight por revisão, painel distingue ativa e candidata, reaparece após reinício. PASS: `TestEnvConfigVersioningValidationAndReuse`. **Pendente (NOT_RUN):** `Runner` real (subir a composição isolada + navegador); o teste usa runner falso.
+- [x] **AJ08-05** — Evidência visual, resultados por trilha e gate de testes integrados antes da PR · dep.: AJ08-01, AJ08-04, AJ06-03 · aceite: CT06, CT17.
+  - `internal/trackgates` + migration 00058: resultados por trilha (requisito + evidência + artefatos visuais por hash) e testes integrados por cabeça; `Gate` bloqueia a publicação sem resultado de qualquer trilha obrigatória, sem testes integrados na cabeça publicada (cabeça nova exige reexecução), com testes falhos, com review visual pendente, e exige a evidência da própria cabeça nas trilhas que a consolidação alterou; Front pode concluir cedo. PASS: `TestPublishGateNeedsEveryTrackIntegratedTestsAndTheRightHead`.
 
 ## LF-AJ-09 — Draft PR, revisão humana e ciclo de correções
 - [x] **AJ09-01** — Consultar PRs vinculadas com agenda própria e ação manual · dep.: AJ03-01, E15 · aceite: CT11, CT13, CT15.
