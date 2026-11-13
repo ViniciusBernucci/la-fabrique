@@ -283,6 +283,26 @@ func TestAnAptProjectCanStartAnExecutionOnlyFromAPublishedDefaultWorkflow(t *tes
 	}
 	w := r.workflow(t, "fluxo-padrao", true)
 	r.c.expect(r.c.do("PUT", "/api/projects/"+r.p.ID+"/selection", map[string]any{"rules": []any{}, "default": map[string]any{"workflow_id": w.ID}}, nil), 200)
+	// O workflow estrutural do projeto (AJ05) nasce em rascunho e também precisa estar publicado.
+	r.c.expect(r.c.get("/api/projects/"+r.p.ID+"/readiness"), 200).JSON(&rd)
+	if rd.Ready || !strings.Contains(strings.Join(rd.Problems, "|"), "workflow do projeto não está publicado") {
+		t.Fatalf("workflow do projeto deveria bloquear: %+v", rd)
+	}
+	var pw projWorkflow
+	r.c.expect(r.c.get("/api/projects/"+r.p.ID+"/workflow"), 200).JSON(&pw)
+	var sw wfResp
+	r.c.expect(r.c.get("/api/workflows/"+pw.WorkflowID), 200).JSON(&sw)
+	g := sw.Graph
+	for i := range g.Nodes {
+		switch g.Nodes[i].Type {
+		case "agent":
+			g.Nodes[i].Props["agent"] = "dev"
+		case "checks":
+			g.Nodes[i].Props["commands"] = "make test"
+		}
+	}
+	r.c.expect(saveWorkflow(r.c, sw, sw.Name, g), 200).JSON(&sw)
+	r.c.expect(r.c.post("/api/workflows/"+sw.ID+"/publish", map[string]any{"expected_version": sw.Version}), 201)
 	r.c.expect(r.c.get("/api/projects/"+r.p.ID+"/readiness"), 200).JSON(&rd)
 	if rd.Ready || len(rd.Problems) != 1 || !strings.Contains(rd.Problems[0], "ativo") {
 		t.Fatalf("falta ativar: %+v", rd)
