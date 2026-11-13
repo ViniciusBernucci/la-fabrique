@@ -1,3 +1,6 @@
+## 2026-11-12 — E10: limite global, leases e justiça (T10-03)
+Reclamação de vaga em transação serializada com limite global persistente, lease com heartbeat e geração, envelhecimento determinístico e prioridade de projeto; escritor obsoleto não conclui, não bloqueia e não grava checkpoint. Worker real e controles NOT_RUN. [Entrega](entregas/2026-11-12-E10-scheduler.md) · [ADR-0042](adr/0042-scheduler-limite-global-leases-e-justica.md).
+
 ## 2026-11-12 — E17: matriz de evidências e ficha de aceite (T17-01)
 Matriz de evidências gerada dos casos P01–P18, critérios dos tickets e checklist (com teste de rastreabilidade e de deriva) e ficha de preparação pré-preenchida com as pendências do responsável. Projeto, feature e acessos reais NOT_RUN. [Entrega](entregas/2026-11-12-E17-matriz-e-ficha-de-aceite.md) · [ADR-0041](adr/0041-matriz-de-evidencias-derivada.md).
 

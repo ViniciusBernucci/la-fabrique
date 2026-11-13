@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E17 (T17-01)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E10 (T10-03)._
 
 ## Resumo
 
-**19 feitos · 32 parciais · 16 pendentes** de 67 tickets.
+**19 feitos · 33 parciais · 15 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -113,7 +113,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E17 (T17-01)._
   - PASS (unitário + PostgreSQL real, `-race`): contrato do plano com critérios verificáveis (comando, teste, arquivo, revisão com evidência), risco e DAG; recusa de ciclo (mostrado), referência ausente, tarefa sem critério e critério inverificável; versão vigente preservada em plano inválido ou conflitante (tarefa já em execução não é alterada nem removida; rejeições ficam registradas); mesmo conteúdo sem versão nova, também sob concorrência; identidade estável da tarefa entre versões; publicação de uma subtarefa por tarefa e uma relação por dependência pelo ledger sem duplicar após resposta perdida nem no retry; API de proposta/leitura. **Parcial:** o agente planejador (produtor do plano) e a leitura de código/contexto não existem; `Publish` sem rota nem ligação ao scheduler (T10-02); Jira/ClickUp reais NOT_RUN; sem tela. Revisão independente NOT_RUN. Entrega: [E10 planejamento](../entregas/2026-11-12-E10-planejamento.md).
 - [~] **[T10-02](03-BACKLOG.md#t10-02)** — Implementar fila local por projeto · dep.: T10-01, T03-02.
   - PASS (PostgreSQL real, `-race`): enfileirar idempotente a partir do plano; só inicia o elegível (projeto ativo, pré-requisitos concluídos, requisito sem replanejamento/decisão pendente, vaga livre, primeiro da ordem) com os motivos de cada recusa; uma vaga por projeto garantida por índice único (9 disputas simultâneas iniciam uma) e paralelismo entre projetos; correção de PR ganha a próxima vaga elegível; espera por merge/provedor/decisão/recursos, com a vaga devolvida só com checkpoint íntegro, da execução e sandbox quieto (sem ele, espera segurando a vaga); retorno por portas (decisão, merge; sem porta, recusa). **Parcial:** sem scheduler, lease/heartbeat, limite global, envelhecimento nem controles (T10-03); portas de provedor/recursos não ligadas; sem rotas/tela. Revisão independente NOT_RUN. Entrega: [E10 fila](../entregas/2026-11-12-E10-fila-local.md).
-- [ ] **[T10-03](03-BACKLOG.md#t10-03)** — Aplicar limite global, leases e justiça · dep.: T10-02, T11-03.
+- [~] **[T10-03](03-BACKLOG.md#t10-03)** — Aplicar limite global, leases e justiça · dep.: T10-02, T11-03.
+  - PASS (PostgreSQL real, `-race`): reclamação de vaga em transação serializada (12 reclamações concorrentes em 5 projetos: 3 vagas, uma por projeto); limite global e envelhecimento persistentes, sem preempção ao baixar o limite; lease com heartbeat, vencimento devolve a vaga e a tarefa à fila; geração por reclamação: escritor obsoleto não renova, não conclui, não bloqueia e não grava checkpoint (guarda dentro da transação do Save), com trilha; item antigo elegível ganha vaga por envelhecimento; prioridade de projeto e mudança de prioridade só na próxima seleção. **Parcial:** nenhum worker chama `Claim`/`Heartbeat` ainda (mecanismo e prova, não a ligação); só itens reclamados pelo scheduler exigem o token; sem controles (T10-04) nem recuperação de tentativa interrompida (T12-03). Revisão independente NOT_RUN. Entrega: [E10 scheduler](../entregas/2026-11-12-E10-scheduler.md).
 - [ ] **[T10-04](03-BACKLOG.md#t10-04)** — Implementar ativação, pausa e retomada operacional · dep.: T10-03, T12-01.
 
 ## E11 — Sandbox e processos

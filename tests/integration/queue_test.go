@@ -83,6 +83,14 @@ func (p qProj) execution(t *testing.T) string {
 	return ex.ID
 }
 
+func (p qProj) snapshot(t *testing.T, body string) checkpoints.Snapshot {
+	t.Helper()
+	h := sha256.Sum256([]byte(body))
+	hash := hex.EncodeToString(h[:])
+	files := []checkpoints.FileEntry{{Path: "main.go", Kind: checkpoints.KindFile, Mode: 0o644, Size: int64(len(body)), SHA256: hash}}
+	return checkpoints.Snapshot{Manifest: checkpoints.Manifest{Version: 1, Files: files, TreeHash: checkpoints.TreeHash(files), TotalBytes: int64(len(body))}, Objects: map[string][]byte{hash: []byte(body)}}
+}
+
 func (p qProj) checkpoint(t *testing.T, execID string) string {
 	t.Helper()
 	body := "package main"

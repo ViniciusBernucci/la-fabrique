@@ -24,6 +24,10 @@ type Store struct {
 	// Hook é uma emenda de teste para injetar falha no meio da gravação
 	// (estágios "object" e "checkpoint"). Em produção fica nil.
 	Hook func(stage string, i int) error
+	// Guard (opcional) roda DENTRO da transação de Save, antes de gravar. Serve para
+	// recusar um escritor obsoleto (lease vencida, vaga dada a outro): a checagem e a
+	// gravação são atômicas.
+	Guard func(ctx context.Context, tx pgx.Tx, in Input) error
 }
 
 // Input é o que o motor entrega junto ao conteúdo do workspace.
@@ -82,6 +86,11 @@ func (s *Store) Save(ctx context.Context, snap Snapshot, in Input) (Checkpoint, 
 	err := persistence.WithTx(ctx, s.DB, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 12))`, in.ExecutionID); err != nil {
 			return persistence.MapError(err)
+		}
+		if s.Guard != nil {
+			if err := s.Guard(ctx, tx, in); err != nil {
+				return err
+			}
 		}
 		i := 0
 		for hash, data := range snap.Objects {

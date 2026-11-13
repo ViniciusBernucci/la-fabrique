@@ -105,15 +105,18 @@ type Item struct {
 	EnqueuedAt   time.Time  `json:"enqueued_at"`
 	StartedAt    *time.Time `json:"started_at,omitempty"`
 	FinishedAt   *time.Time `json:"finished_at,omitempty"`
+	LeaseOwner   string     `json:"lease_owner,omitempty"`
+	LeaseExpires *time.Time `json:"lease_expires_at,omitempty"`
+	Generation   int64      `json:"generation"`
 }
 
 const cols = `id, seq, project_id, feature_id, task_key, kind, ref, priority, state, COALESCE(wait_reason, ''), wait_ref,
-	COALESCE(execution_id::text, ''), COALESCE(checkpoint_id::text, ''), slot_held, enqueued_at, started_at, finished_at`
+	COALESCE(execution_id::text, ''), COALESCE(checkpoint_id::text, ''), slot_held, enqueued_at, started_at, finished_at, COALESCE(lease_owner, ''), lease_expires_at, generation`
 
 func scanItem(row interface{ Scan(...any) error }) (Item, error) {
 	var it Item
 	err := row.Scan(&it.ID, &it.Seq, &it.ProjectID, &it.FeatureID, &it.TaskKey, &it.Kind, &it.Ref, &it.Priority, &it.State, &it.WaitReason, &it.WaitRef,
-		&it.ExecutionID, &it.CheckpointID, &it.SlotHeld, &it.EnqueuedAt, &it.StartedAt, &it.FinishedAt)
+		&it.ExecutionID, &it.CheckpointID, &it.SlotHeld, &it.EnqueuedAt, &it.StartedAt, &it.FinishedAt, &it.LeaseOwner, &it.LeaseExpires, &it.Generation)
 	return it, persistence.MapError(err)
 }
 
@@ -181,15 +184,61 @@ func (q *Queue) EnqueuePlan(ctx context.Context, projectID, featureID string, pr
 	return out, nil
 }
 
-// less é a ordem da fila: correção de PR, prioridade, chegada.
-func less(a, b Item) bool {
+// orderer define a ordem da fila: correção de PR; prioridade EFETIVA (a do item,
+// reduzida em 1 a cada período de espera, mínimo 0: envelhecimento determinístico);
+// prioridade do projeto; chegada.
+type orderer struct {
+	now      time.Time
+	aging    time.Duration
+	projPrio map[string]int
+}
+
+func (o orderer) effective(it Item) int {
+	e := it.Priority
+	if o.aging > 0 {
+		e -= int(o.now.Sub(it.EnqueuedAt) / o.aging)
+	}
+	if e < 0 {
+		e = 0
+	}
+	return e
+}
+
+func (o orderer) less(a, b Item) bool {
 	if (a.Kind == KindPRFix) != (b.Kind == KindPRFix) {
 		return a.Kind == KindPRFix
 	}
-	if a.Priority != b.Priority {
-		return a.Priority < b.Priority
+	if ea, eb := o.effective(a), o.effective(b); ea != eb {
+		return ea < eb
+	}
+	if pa, pb := o.projPrio[a.ProjectID], o.projPrio[b.ProjectID]; pa != pb {
+		return pa < pb
+	}
+	if !a.EnqueuedAt.Equal(b.EnqueuedAt) {
+		return a.EnqueuedAt.Before(b.EnqueuedAt)
 	}
 	return a.Seq < b.Seq
+}
+
+// orderer carrega o envelhecimento (configuração persistente) e as prioridades dos projetos.
+func (q *Queue) orderer(ctx context.Context, db persistence.DBTX, items []Item) (orderer, error) {
+	st, err := q.settings(ctx, db)
+	if err != nil {
+		return orderer{}, err
+	}
+	o := orderer{now: q.now(), aging: time.Duration(st.AgingMinutes) * time.Minute, projPrio: map[string]int{}}
+	ids := map[string]bool{}
+	for _, it := range items {
+		ids[it.ProjectID] = true
+	}
+	for id := range ids {
+		var p int
+		if err := db.QueryRow(ctx, `SELECT priority FROM projects WHERE id = $1`, id).Scan(&p); err != nil {
+			return orderer{}, persistence.MapError(err)
+		}
+		o.projPrio[id] = p
+	}
+	return o, nil
 }
 
 // reasons lista por que o item NÃO pode iniciar agora (vazio = elegível), sem considerar a ordem.
@@ -296,7 +345,11 @@ func (q *Queue) best(ctx context.Context, db persistence.DBTX, projectID string)
 		items = append(items, it)
 	}
 	rows.Close()
-	sort.Slice(items, func(i, j int) bool { return less(items[i], items[j]) })
+	ord, err := q.orderer(ctx, db, items)
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(items, func(i, j int) bool { return ord.less(items[i], items[j]) })
 	for _, it := range items {
 		rs, err := q.reasons(ctx, db, it)
 		if err != nil {
@@ -312,8 +365,10 @@ func (q *Queue) best(ctx context.Context, db persistence.DBTX, projectID string)
 
 // Candidates devolve no máximo UM item por projeto (o primeiro elegível), na ordem
 // global: correções de PR, prioridade e chegada. Projetos diferentes podem iniciar em paralelo.
-func (q *Queue) Candidates(ctx context.Context) ([]Item, error) {
-	rows, err := q.DB.Query(ctx, `SELECT DISTINCT project_id FROM queue_items WHERE state = 'queued'`)
+func (q *Queue) Candidates(ctx context.Context) ([]Item, error) { return q.candidatesIn(ctx, q.DB) }
+
+func (q *Queue) candidatesIn(ctx context.Context, db persistence.DBTX) ([]Item, error) {
+	rows, err := db.Query(ctx, `SELECT DISTINCT project_id FROM queue_items WHERE state = 'queued'`)
 	if err != nil {
 		return nil, persistence.MapError(err)
 	}
@@ -329,7 +384,7 @@ func (q *Queue) Candidates(ctx context.Context) ([]Item, error) {
 	rows.Close()
 	out := []Item{}
 	for _, id := range ids {
-		b, err := q.best(ctx, q.DB, id)
+		b, err := q.best(ctx, db, id)
 		if err != nil {
 			return nil, err
 		}
@@ -337,62 +392,82 @@ func (q *Queue) Candidates(ctx context.Context) ([]Item, error) {
 			out = append(out, *b)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return less(out[i], out[j]) })
+	ord, err := q.orderer(ctx, db, out)
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(out, func(i, j int) bool { return ord.less(out[i], out[j]) })
 	return out, nil
 }
 
 // Start inicia o item SE ele for elegível agora e for o primeiro da ordem do projeto,
 // reconferido sob o bloqueio do projeto. Ocupa a vaga e marca a tarefa como em execução.
+// Não aplica o limite global nem lease: quem reclama vagas em produção usa Claim.
 func (q *Queue) Start(ctx context.Context, itemID, executionID string) (Item, error) {
 	var out Item
 	err := persistence.WithTx(ctx, q.DB, func(tx pgx.Tx) error {
-		first, err := scanItem(tx.QueryRow(ctx, `SELECT `+cols+` FROM queue_items WHERE id = $1`, itemID))
-		if err != nil {
-			return err
-		}
-		if err := lockProject(ctx, tx, first.ProjectID); err != nil {
-			return err
-		}
-		it, err := scanItem(tx.QueryRow(ctx, `SELECT `+cols+` FROM queue_items WHERE id = $1 FOR UPDATE`, itemID))
-		if err != nil {
-			return err
-		}
-		if it.State != StateQueued {
-			return fmt.Errorf("%w: estado %s", ErrBadState, it.State)
-		}
-		rs, err := q.reasons(ctx, tx, it)
-		if err != nil {
-			return err
-		}
-		if len(rs) == 0 {
-			if best, err := q.best(ctx, tx, it.ProjectID); err != nil {
-				return err
-			} else if best != nil && best.ID != it.ID {
-				rs = append(rs, fmt.Sprintf("a vez é da tarefa %q (%s)", best.TaskKey, orderWhy(*best)))
-			}
-		}
-		if len(rs) > 0 {
-			return &NotEligibleError{Reasons: rs}
-		}
-		var exec any
-		if executionID != "" {
-			exec = executionID
-		}
-		it, err = scanItem(tx.QueryRow(ctx, `UPDATE queue_items SET state = 'running', slot_held = true, execution_id = $2, started_at = $3, version = version + 1
-			WHERE id = $1 RETURNING `+cols, itemID, exec, q.now()))
-		if err != nil {
-			return err
-		}
-		if it.Kind == KindTask {
-			if _, err := tx.Exec(ctx, `UPDATE plan_tasks SET state = 'running', updated_at = $4 WHERE project_id = $1 AND feature_id = $2 AND task_key = $3 AND state = 'pending'`,
-				it.ProjectID, it.FeatureID, it.TaskKey, q.now()); err != nil {
-				return persistence.MapError(err)
-			}
-		}
-		out = it
-		return nil
+		var err error
+		out, err = q.startTx(ctx, tx, itemID, executionID, "", 0)
+		return err
 	})
 	return out, err
+}
+
+// startTx inicia o item dentro da transação do chamador. Com `owner` informado,
+// grava a lease e sobe a geração.
+func (q *Queue) startTx(ctx context.Context, tx pgx.Tx, itemID, executionID, owner string, lease time.Duration) (Item, error) {
+	first, err := scanItem(tx.QueryRow(ctx, `SELECT `+cols+` FROM queue_items WHERE id = $1`, itemID))
+	if err != nil {
+		return Item{}, err
+	}
+	if err := lockProject(ctx, tx, first.ProjectID); err != nil {
+		return Item{}, err
+	}
+	it, err := scanItem(tx.QueryRow(ctx, `SELECT `+cols+` FROM queue_items WHERE id = $1 FOR UPDATE`, itemID))
+	if err != nil {
+		return Item{}, err
+	}
+	if it.State != StateQueued {
+		return Item{}, fmt.Errorf("%w: estado %s", ErrBadState, it.State)
+	}
+	rs, err := q.reasons(ctx, tx, it)
+	if err != nil {
+		return Item{}, err
+	}
+	if len(rs) == 0 {
+		if best, err := q.best(ctx, tx, it.ProjectID); err != nil {
+			return Item{}, err
+		} else if best != nil && best.ID != it.ID {
+			rs = append(rs, fmt.Sprintf("a vez é da tarefa %q (%s)", best.TaskKey, orderWhy(*best)))
+		}
+	}
+	if len(rs) > 0 {
+		return Item{}, &NotEligibleError{Reasons: rs}
+	}
+	var exec any
+	if executionID != "" {
+		exec = executionID
+	}
+	now := q.now()
+	var ownerArg, expArg any
+	gen := it.Generation
+	if owner != "" {
+		ownerArg, expArg = owner, now.Add(lease)
+		gen++
+	}
+	it, err = scanItem(tx.QueryRow(ctx, `UPDATE queue_items SET state = 'running', slot_held = true, execution_id = $2, started_at = $3, version = version + 1,
+		lease_owner = $4, lease_expires_at = $5, heartbeat_at = $3, generation = $6
+		WHERE id = $1 RETURNING `+cols, itemID, exec, now, ownerArg, expArg, gen))
+	if err != nil {
+		return Item{}, err
+	}
+	if it.Kind == KindTask {
+		if _, err := tx.Exec(ctx, `UPDATE plan_tasks SET state = 'running', updated_at = $4 WHERE project_id = $1 AND feature_id = $2 AND task_key = $3 AND state = 'pending'`,
+			it.ProjectID, it.FeatureID, it.TaskKey, now); err != nil {
+			return Item{}, persistence.MapError(err)
+		}
+	}
+	return it, nil
 }
 
 // safeCheckpoint confere que o checkpoint é íntegro e da execução do item.
@@ -436,6 +511,9 @@ func (q *Queue) Block(ctx context.Context, itemID, reason, ref, checkpointID str
 		if it.State != StateRunning {
 			return fmt.Errorf("%w: só um item em execução pode esperar (estado %s)", ErrBadState, it.State)
 		}
+		if err := q.checkFence(ctx, it); err != nil {
+			return err
+		}
 		safe, err := q.safeCheckpoint(ctx, it, checkpointID, quiescent)
 		if err != nil {
 			return err
@@ -444,7 +522,7 @@ func (q *Queue) Block(ctx context.Context, itemID, reason, ref, checkpointID str
 		if safe {
 			cp = checkpointID
 		}
-		it, err = scanItem(tx.QueryRow(ctx, `UPDATE queue_items SET state = 'waiting', wait_reason = $2, wait_ref = $3, checkpoint_id = $4, slot_held = $5, version = version + 1
+		it, err = scanItem(tx.QueryRow(ctx, `UPDATE queue_items SET state = 'waiting', wait_reason = $2, wait_ref = $3, checkpoint_id = $4, slot_held = $5, lease_owner = NULL, lease_expires_at = NULL, version = version + 1
 			WHERE id = $1 RETURNING `+cols, itemID, reason, ref, cp, !safe))
 		if err != nil {
 			return err
@@ -558,10 +636,15 @@ func (q *Queue) finish(ctx context.Context, itemID, to string) (Item, error) {
 		if to == StateDone && it.State != StateRunning {
 			return fmt.Errorf("%w: só um item em execução conclui (estado %s)", ErrBadState, it.State)
 		}
+		if to == StateDone {
+			if err := q.checkFence(ctx, it); err != nil {
+				return err
+			}
+		}
 		if it.State == StateDone || it.State == StateCancelled {
 			return fmt.Errorf("%w: o item já terminou", ErrBadState)
 		}
-		out, err = scanItem(tx.QueryRow(ctx, `UPDATE queue_items SET state = $2, slot_held = false, wait_reason = NULL, finished_at = $3, version = version + 1 WHERE id = $1 RETURNING `+cols, itemID, to, q.now()))
+		out, err = scanItem(tx.QueryRow(ctx, `UPDATE queue_items SET state = $2, slot_held = false, wait_reason = NULL, lease_owner = NULL, lease_expires_at = NULL, finished_at = $3, version = version + 1 WHERE id = $1 RETURNING `+cols, itemID, to, q.now()))
 		if err != nil {
 			return err
 		}
