@@ -10,6 +10,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/queue"
 	"github.com/ViniciusBernucci/le-fabrique/internal/recovery"
 	"github.com/ViniciusBernucci/le-fabrique/internal/retention"
+	"github.com/ViniciusBernucci/le-fabrique/internal/sentinel"
 )
 
 // Job é uma tarefa periódica do worker. Run devolve um resumo curto do que fez ("" = nada) ou erro.
@@ -160,5 +161,39 @@ func RetentionJob(r *retention.Retention, pol retention.Policy, apply bool, ever
 			return "", err
 		}
 		return fmt.Sprintf("apply=%v %+v", apply, rep), nil
+	}}
+}
+
+// SentinelEventsJob entrega os eventos internos pendentes ao coordenador da Sentinela (reavaliação
+// imediata após conclusão, falha, mudança de estado ou vaga liberada). Pendentes sobrevivem a reinício.
+func SentinelEventsJob(db persistence.DBTX, handle func(context.Context, sentinel.Event) error, every time.Duration) Job {
+	return Job{Name: "sentinela-eventos", Every: every, Run: func(ctx context.Context) (string, error) {
+		h, f, err := sentinel.Drain(ctx, db, 200, handle)
+		if err != nil || h+f == 0 {
+			return "", err
+		}
+		return fmt.Sprintf("%d tratado(s), %d pendente(s) por falha", h, f), nil
+	}}
+}
+
+// SentinelRoutinesJob executa as rotinas agendadas vencidas (sync, correções, PRs, manutenção),
+// cada uma com relógio e cursor próprios. scopes lista os projetos ("" = global).
+func SentinelRoutinesJob(s *sentinel.Scheduler, scopes func(context.Context) ([]string, error), every time.Duration) Job {
+	return Job{Name: "sentinela-rotinas", Every: every, Run: func(ctx context.Context) (string, error) {
+		sc, err := scopes(ctx)
+		if err != nil {
+			return "", err
+		}
+		res, err := s.Tick(ctx, sc)
+		if err != nil || len(res) == 0 {
+			return "", err
+		}
+		failed := 0
+		for _, r := range res {
+			if r.Err != nil {
+				failed++
+			}
+		}
+		return fmt.Sprintf("%d rotina(s) executada(s), %d com falha", len(res), failed), nil
 	}}
 }

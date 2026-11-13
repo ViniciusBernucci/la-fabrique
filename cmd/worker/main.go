@@ -21,6 +21,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/recovery"
 	"github.com/ViniciusBernucci/le-fabrique/internal/retention"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
+	"github.com/ViniciusBernucci/le-fabrique/internal/sentinel"
 	"github.com/ViniciusBernucci/le-fabrique/internal/worker"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -75,5 +76,9 @@ func registerJobs(w *worker.Worker, pool *pgxpool.Pool, cfg config.Worker) {
 		Inspector: recovery.DockerInspector{Docker: &execution.Docker{}}}
 	w.AddJob(worker.ReleaseDecisionsJob(pool, q, cfg.JobsInterval))
 	w.AddJob(worker.RecoverJob(rec, cfg.JobsInterval))
+	// Sentinela: rotinas com relógio/cursor próprios por projeto. As rotinas concretas (sync, correções,
+	// PRs, manutenção) são registradas pelos seus pacotes; sem registro o Tick não faz nada.
+	sch := &sentinel.Scheduler{DB: pool}
+	w.AddJob(worker.SentinelRoutinesJob(sch, func(ctx context.Context) ([]string, error) { return sentinel.ProjectScopes(ctx, pool) }, cfg.JobsInterval))
 	w.AddJob(worker.RetentionJob(&retention.Retention{DB: pool, Checkpoints: cps}, retention.Policy{}, cfg.RetentionApply, cfg.RetentionInterval))
 }
