@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E16 (T16-03)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E06 (T06-05)._
 
 ## Resumo
 
-**19 feitos · 28 parciais · 20 pendentes** de 67 tickets.
+**19 feitos · 29 parciais · 19 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -71,7 +71,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E16 (T16-03)._
   - PASS (PostgreSQL real, `-race`): escrita na origem pelo ledger com prova de existência por operação (marcador na subtarefa, dependência, link, estado); timeout após criar não duplica (prova confirma), ausência comprovada repete, sem prova bloqueia; estado revalida o alvo antes de repetir; Draft PR → aguardando merge e conclusão só com merge confirmado (PR aberta/sem SHA/fechada não concluem). **Limites:** Jira/ClickUp reais NOT_RUN (fixtures + destino em memória); verificador de merge do GitHub é T15-03. Revisão independente NOT_RUN. Entrega: [E06 adendo](../entregas/2026-11-12-E06-adaptadores-jira-clickup.md).
 - [~] **[T06-04](03-BACKLOG.md#t06-04)** — Implementar sincronização manual e preflight · dep.: T05-02, T06-01, T06-02, T13-04.
   - PASS (PostgreSQL real, `-race`): relógio ocioso de um mês sem nenhuma leitura; mudança detectada uma vez (sync e preflight não se repetem; concorrência registra uma); importação deduplicada e paginada; saída/retorno de itens; leitura que falha não altera item; elegibilidade e prioridade reavaliadas; edição humana de prioridade nunca sobrescrita (conflito, preflight bloqueia, resolução); API manual. **Parcial:** Jira/ClickUp reais NOT_RUN; GitHub (T15-03), ligação do preflight ao agendador (T10-02) e tela pendentes. Revisão independente NOT_RUN. Entrega: [E06 sync](../entregas/2026-11-12-E06-sincronizacao-manual-e-preflight.md).
-- [ ] **[T06-05](03-BACKLOG.md#t06-05)** — Tratar mudança de requisitos e troca de plataforma · dep.: T06-03, T06-04, T10-01, T12-04.
+- [~] **[T06-05](03-BACKLOG.md#t06-05)** — Tratar mudança de requisitos e troca de plataforma · dep.: T06-03, T06-04, T10-01, T12-04.
+  - PASS (unitário + PostgreSQL real, `-race`): revisões do requisito com histórico e uma só vigente; metadado aplicado, adiado até marco seguro (a mais recente vence); conteúdo sem trabalho iniciado → replanejar; conteúdo com trabalho iniciado → conflito sem alterar plano/requisito/tarefas, com decisão (`keep_work` ou `replan`) e sem decisão duplicada; troca de plataforma por mapeamento validado (projeto suspenso, tudo mapeado, sem repetição/colisão, itens existentes na nova origem), ativação atômica com histórico de identidades, uma só origem e nova verificação exigida; troca obsoleta recusada; publicação do plano após a troca cria os itens na nova origem. **Parcial:** Jira/ClickUp reais NOT_RUN; sem rotas/tela; o sync (T06-04) e o planejador não chamam essas funções sozinhos; itens da origem antiga permanecem lá. Revisão independente NOT_RUN. Entrega: [E06 mudança e troca](../entregas/2026-11-12-E06-mudanca-de-requisitos-e-troca-de-origem.md).
 
 ## E07 — Workflows visuais
 

@@ -263,6 +263,11 @@ func nonNil(p []Problem) []Problem {
 	return p
 }
 
+// TasksOf lê as tarefas com qualquer consulta (inclusive dentro de uma transação).
+func TasksOf(ctx context.Context, q persistence.DBTX, projectID, featureID string) ([]StoredTask, error) {
+	return (&Store{}).tasksQ(ctx, q, projectID, featureID)
+}
+
 func (s *Store) tasksQ(ctx context.Context, q persistence.DBTX, projectID, featureID string) ([]StoredTask, error) {
 	rows, err := q.Query(ctx, `SELECT task_key, title, state, removed, remote_id, remote_key, content_hash, plan_version FROM plan_tasks
 		WHERE project_id = $1 AND feature_id = $2 ORDER BY task_key`, projectID, featureID)
@@ -316,8 +321,13 @@ type PublishReport struct {
 	Failed       []string          `json:"failed"`
 }
 
-// BusinessKey é a chave estável da subtarefa de uma tarefa (a mesma em toda versão).
-func BusinessKey(featureID, taskKey string) string { return "plan:" + featureID + ":" + taskKey }
+// BusinessKey é a chave estável da subtarefa de uma tarefa: a mesma em toda versão
+// do plano e específica da identidade remota da feature, então depois de uma troca de
+// origem (nova identidade) a publicação cria os itens na nova origem em vez de dar o
+// efeito da antiga como feito.
+func BusinessKey(featureID, remoteID, taskKey string) string {
+	return "plan:" + featureID + "@" + remoteID + ":" + taskKey
+}
 
 // Publish cria, pelo ledger, UMA subtarefa por tarefa e UMA relação por
 // dependência na origem. Repetir (inclusive depois de timeout) não duplica.
@@ -327,6 +337,10 @@ func (s *Store) Publish(ctx context.Context, projectID, featureID, parentRemoteI
 	if err != nil {
 		return PublishReport{}, err
 	}
+	var remoteID string
+	if err := s.DB.QueryRow(ctx, `SELECT external_id FROM features WHERE project_id = $1 AND id = $2`, projectID, featureID).Scan(&remoteID); err != nil {
+		return PublishReport{}, persistence.MapError(err)
+	}
 	rep := PublishReport{Subtasks: map[string]string{}, Failed: []string{}}
 	by := map[string]Task{}
 	for _, t := range cur.Plan.Tasks {
@@ -334,7 +348,7 @@ func (s *Store) Publish(ctx context.Context, projectID, featureID, parentRemoteI
 	}
 	for _, key := range Order(cur.Plan) {
 		t := by[key]
-		bk := BusinessKey(featureID, key)
+		bk := BusinessKey(featureID, remoteID, key)
 		res, err := pub.CreateSubtask(ctx, projectID, bk, parentRemoteID, t.Title, describe(t))
 		if err != nil || (res.Outcome != effects.OutcomeApplied && res.Outcome != effects.OutcomeAlreadyConfirmed && res.Outcome != effects.OutcomeReconciled) {
 			rep.Failed = append(rep.Failed, key)
@@ -363,7 +377,7 @@ func (s *Store) Publish(ctx context.Context, projectID, featureID, parentRemoteI
 			if item == "" || dep == "" {
 				continue // a subtarefa ainda não existe: a próxima publicação completa
 			}
-			res, err := pub.AddDependency(ctx, projectID, BusinessKey(featureID, key), item, dep)
+			res, err := pub.AddDependency(ctx, projectID, BusinessKey(featureID, remoteID, key), item, dep)
 			if err != nil || (res.Outcome != effects.OutcomeApplied && res.Outcome != effects.OutcomeAlreadyConfirmed && res.Outcome != effects.OutcomeReconciled) {
 				rep.Failed = append(rep.Failed, key+">"+d)
 				continue

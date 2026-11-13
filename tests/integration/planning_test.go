@@ -304,3 +304,24 @@ func TestPlanThroughTheAPI(t *testing.T) {
 		t.Fatalf("%d", r.StatusCode)
 	}
 }
+
+// T06-05 (efeito): depois de uma troca de origem a feature tem outra identidade remota e a
+// publicação cria os itens na nova origem, em vez de dar o efeito da origem antiga como feito.
+func TestPublishingAfterAnOriginSwitchCreatesTheItemsInTheNewOrigin(t *testing.T) {
+	p := newPlEnv(t, "pl-switch")
+	ctx := context.Background()
+	p.propose(t, basePlan())
+	oldOrigin := newMem()
+	pub := publisher(p.e, oldOrigin, nil)
+	if rep, err := p.s.Publish(ctx, p.proj, p.feature, "P1", pub); err != nil || rep.Created != 3 {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	if _, err := p.e.db.Pool.Exec(ctx, `UPDATE features SET external_id = 'NOVA-1' WHERE id = $1`, p.feature); err != nil {
+		t.Fatal(err)
+	}
+	newOrigin := newMem()
+	rep, err := p.s.Publish(ctx, p.proj, p.feature, "P1", publisher(p.e, newOrigin, nil))
+	if err != nil || rep.Created != 3 || rep.AlreadyThere != 0 || newOrigin.count("P1") != 3 || oldOrigin.count("P1") != 3 {
+		t.Fatalf("%+v %v", rep, err)
+	}
+}

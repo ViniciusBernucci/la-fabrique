@@ -1,3 +1,6 @@
+## 2026-11-12 — E06: mudança de requisitos e troca de plataforma (T06-05)
+Revisões do requisito com histórico e impacto (metadado adiado até marco seguro, conteúdo sem trabalho iniciado pede novo plano, conteúdo com trabalho iniciado abre decisão sem alterar nada) e troca de origem por mapeamento validado, com histórico de identidades e uma única origem. Plataformas reais, rotas e tela NOT_RUN. [Entrega](entregas/2026-11-12-E06-mudanca-de-requisitos-e-troca-de-origem.md) · [ADR-0038](adr/0038-mudanca-de-requisitos-e-troca-de-origem.md).
+
 ## 2026-11-12 — E16: consumo, orçamento e provedores (T16-03)
 Tela de consumo com tetos e reservas, gasto em API por origem do valor, assinatura em unidades próprias, disponibilidade por conta e cota observada (ou "não observada"), e o bloqueio de novas chamadas visível. Navegador real e provedores reais NOT_RUN. [Entrega](entregas/2026-11-12-E16-consumo-e-provedores.md) · [ADR-0037](adr/0037-painel-de-consumo-e-provedores.md).
 

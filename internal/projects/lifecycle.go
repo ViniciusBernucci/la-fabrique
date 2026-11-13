@@ -204,3 +204,12 @@ func Changes(ctx context.Context, db persistence.DBTX, projectID string, limit i
 	}
 	return items, persistence.MapError(rows.Err())
 }
+
+// RecordChange registra uma alteração do projeto na trilha (uso de pacotes que
+// alteram a configuração dentro de uma transação própria, como a troca de origem).
+func RecordChange(ctx context.Context, tx persistence.DBTX, projectID, adminID, action string, detail map[string]any) error {
+	return record(ctx, tx, projectID, adminID, action, detail)
+}
+
+// SourceDetail resume a origem para a trilha (sem segredo).
+func SourceDetail(s Source) map[string]any { return sourceDetail(s) }
