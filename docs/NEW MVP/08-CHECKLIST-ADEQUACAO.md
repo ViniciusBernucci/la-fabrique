@@ -1,9 +1,9 @@
 # Checklist do backlog de adequação (LF-AJ)
 Acompanhamento dos 35 tickets de [Le-Fabrique-Adequacao.md](Le-Fabrique-Adequacao.md). **Fonte de verdade do estado da adequação**: atualize ao concluir ou alterar um ticket (marcar `[x]` só com evidência real). Fica separado do [07-CHECKLIST.md](07-CHECKLIST.md) porque a matriz de aceite do MVP é derivada dele.
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
-_Última atualização: 2026-11-13 — AJ09-01, AJ09-02, AJ09-04._
+_Última atualização: 2026-11-13 — AJ06-01, AJ06-02._
 ## Resumo
-**15 feitos · 4 parciais · 16 pendentes** de 35 tickets.
+**17 feitos · 4 parciais · 14 pendentes** de 35 tickets.
 
 ## LF-AJ-01 — Sincronização e gerenciamento de Issues
 - [x] **AJ01-01** — Leitura Jira/ClickUp: descobrir Issues elegíveis e atualizar conhecidas por ID · dep.: AJ02-01 · aceite: CT01.
@@ -50,8 +50,10 @@ _Última atualização: 2026-11-13 — AJ09-01, AJ09-02, AJ09-04._
 - [ ] **AJ05-04** — Plano focalizado de correção a partir da rodada e da cabeça da PR · dep.: AJ05-02, AJ09-02 · aceite: CT11, CT12.
 
 ## LF-AJ-06 — Execução paralela Frontend/Backend e consolidação Git
-- [ ] **AJ06-01** — Worktree e branch temporária por tentativa, com escopo e checkpoint · dep.: AJ04-01, E11, E12 · aceite: CT05, CT07.
-- [ ] **AJ06-02** — Dependências e reservas de recursos compartilhados na admissão das trilhas · dep.: AJ03-03, AJ05-02, AJ06-01 · aceite: CT05, CT06.
+- [x] **AJ06-01** — Worktree e branch temporária por tentativa, com escopo e checkpoint · dep.: AJ04-01, E11, E12 · aceite: CT05, CT07.
+  - `internal/worktrees` + migration 00054: `git worktree` e branch temporária (`lf-tmp/<feature>/<trilha>-<tipo>-<n>`) por tentativa, SHA de partida fixa e validada, escopo por caminhos (`Violations`), checkpoint em ref própria sem tocar índice/branch (inclui arquivo não rastreado; não repete sem mudança), limpeza só da própria tentativa (checkpoint + ref de arquivo antes de remover; recusa com escritor ativo), recriação após queda a partir da branch. PASS (git real): `TestWorktreesAreIsolatedPerAttemptAndPreserveWork`. **Limite:** provisiona worktree e branch; o container/ambiente de execução da tentativa segue o sandbox existente e não foi acoplado aqui.
+- [x] **AJ06-02** — Dependências e reservas de recursos compartilhados na admissão das trilhas · dep.: AJ03-03, AJ05-02, AJ06-01 · aceite: CT05, CT06.
+  - `internal/trackadmit` + migration 00055 (etapas por subtarefa): a política pura da Sentinela (`Admit`) decide sobre dependências verificáveis, recursos compartilhados e vagas por trilha e a admissão vira reserva atômica (vaga + `RES:<recurso>`) com geração; review começa cedo na vaga da própria trilha; `Complete` libera por titular; `Progress` deriva o status agregado pela etapa mais atrasada. PASS: `TestTrackAdmissionUsesDependenciesResourcesAndSlots`, `TestTrackAdmissionBlocksSharedResourceAndSurvivesConcurrentTicks` (4 passagens simultâneas admitem a vaga uma vez). A fila viva ainda é a `queue.Claim` (AJ03-05).
 - [ ] **AJ06-03** — Consolidar commits e registrar a cabeça candidata · dep.: AJ06-02, AJ08-01 · aceite: CT06, CT07.
 - [ ] **AJ06-04** — Consolidação, checks integrados e adaptador de publicação GitHub (Draft PR) · dep.: AJ06-03, AJ08-05 · aceite: CT06, CT12.
 

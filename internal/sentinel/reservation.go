@@ -78,3 +78,9 @@ func (r *Reserver) Takeover(ctx context.Context, projectID, slot, newHolder stri
 		RETURNING generation`, projectID, slot, newHolder).Scan(&gen)
 	return Reservation{slot, newHolder, gen}, err
 }
+
+// ReleaseHolder libera todas as reservas do titular (vaga da trilha e recursos compartilhados).
+func (r *Reserver) ReleaseHolder(ctx context.Context, projectID, holder string) (int64, error) {
+	tag, err := r.DB.Exec(ctx, `DELETE FROM track_reservations WHERE project_id=$1 AND holder=$2`, projectID, holder)
+	return tag.RowsAffected(), err
+}
