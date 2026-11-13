@@ -86,7 +86,7 @@ func TestDraftPRPublishesOnlyTheGatedHeadAndOpensOnce(t *testing.T) {
 	fr := qualitypolicy.Decide(qualitypolicy.Input{Track: statusflow.Frontend, Suggested: risk.Low, Policy: risk.DefaultPolicy(), Available: avail})
 	bk := qualitypolicy.Decide(qualitypolicy.Input{Track: statusflow.Backend, Suggested: risk.Low, Policy: risk.DefaultPolicy(), Available: avail})
 	_ = gates.RecordTrack(ctx, feature, statusflow.Frontend, "frontrev", fr, trackEvidence(fr, "frontrev"), nil) // o Front não mudou de SHA (fast-forward)
-	_ = gates.RecordTrack(ctx, feature, statusflow.Backend, head, bk, trackEvidence(bk, head), nil)             // o Back foi reescrito pela consolidação
+	_ = gates.RecordTrack(ctx, feature, statusflow.Backend, head, bk, trackEvidence(bk, head), nil)              // o Back foi reescrito pela consolidação
 	_ = gates.RecordIntegrated(ctx, feature, head, qualitypolicy.TestRun{Commands: []string{"make test"}, Passed: true})
 	if len(reval) != 1 || reval[0] != "back" {
 		t.Fatalf("%v", reval)
