@@ -327,3 +327,39 @@ func (m *Manager) Release(ctx context.Context, id string) error {
 	_, err = m.DB.Exec(ctx, `UPDATE worktree_attempts SET state = 'released', released_at = now() WHERE id::text = $1`, id)
 	return persistence.MapError(err)
 }
+
+// Commits lista os commits da tentativa desde a SHA de partida, do mais antigo ao mais novo.
+func (m *Manager) Commits(ctx context.Context, a Attempt) ([]string, error) {
+	out, err := git(ctx, a.Path, nil, "", "rev-list", "--reverse", a.BaseSHA+"..HEAD")
+	if err != nil {
+		return nil, err
+	}
+	var cs []string
+	for _, l := range strings.Split(out, "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			cs = append(cs, l)
+		}
+	}
+	return cs, nil
+}
+
+// Orphans lista as tentativas ativas sem executor vivo (`live` tem os IDs com escritor em andamento).
+// Não remove nada: a coleta preserva (Release faz checkpoint e arquivo antes de limpar).
+func (m *Manager) Orphans(ctx context.Context, projectID string, live map[string]bool) ([]Attempt, error) {
+	rows, err := m.DB.Query(ctx, `SELECT `+cols+` FROM worktree_attempts WHERE project_id = $1 AND state = 'active' ORDER BY created_at`, projectID)
+	if err != nil {
+		return nil, persistence.MapError(err)
+	}
+	defer rows.Close()
+	var out []Attempt
+	for rows.Next() {
+		a, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		if !live[a.ID] {
+			out = append(out, a)
+		}
+	}
+	return out, rows.Err()
+}

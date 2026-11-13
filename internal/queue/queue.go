@@ -380,7 +380,10 @@ func (q *Queue) best(ctx context.Context, db persistence.DBTX, projectID string)
 func (q *Queue) Candidates(ctx context.Context) ([]Item, error) { return q.candidatesIn(ctx, q.DB) }
 
 func (q *Queue) candidatesIn(ctx context.Context, db persistence.DBTX) ([]Item, error) {
-	rows, err := db.Query(ctx, `SELECT DISTINCT project_id FROM queue_items WHERE state = 'queued'`)
+	// Só projetos cujo despachante é o legado admitem por aqui: depois da ativação (ou durante a reversão)
+	// a fila legada não admite, para nenhum trabalho adquirir duas reservas (AJ03-05).
+	rows, err := db.Query(ctx, `SELECT DISTINCT q.project_id FROM queue_items q WHERE q.state = 'queued'
+		AND NOT EXISTS (SELECT 1 FROM flow_activation a WHERE a.project_id = q.project_id AND a.dispatcher <> 'legacy')`)
 	if err != nil {
 		return nil, persistence.MapError(err)
 	}
