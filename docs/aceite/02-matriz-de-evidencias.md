@@ -4,7 +4,7 @@
 
 A coluna **Evidência no projeto real** fica *pendente* até alguém registrá-la ([ficha de preparação](01-ficha-de-preparacao.md)). Evidência de software (testes e entregas) **não** substitui a do piloto: o aceite exige o projeto real (D95).
 
-**Situação dos tickets:** 19 feito(s), 33 parcial(is), 15 pendente(s), de 67.
+**Situação dos tickets:** 19 feito(s), 34 parcial(is), 14 pendente(s), de 67.
 
 ## A. Casos de verificação (P01–P18)
 
@@ -23,7 +23,7 @@ A coluna **Evidência no projeto real** fica *pendente* até alguém registrá-l
 | **P11** · Recuperação e sessões | E02, E10, E12, E13 | Hashes, manifesto, versão fixada, tentativas, retomada e decisão em falha. | E02: 0 feito(s), 4 parcial(is), 0 pendente(s) (abertos: T02-01, T02-02, T02-03, T02-04)<br>E10: 0 feito(s), 3 parcial(is), 1 pendente(s) (abertos: T10-01, T10-02, T10-03, T10-04)<br>E12: 0 feito(s), 3 parcial(is), 1 pendente(s) (abertos: T12-01, T12-02, T12-03, T12-04)<br>E13: 4 feito(s), 1 parcial(is), 0 pendente(s) (abertos: T13-05) | pendente |
 | **P12** · Aprovação e revogação | E04, E11, E12, E13, E16 | Escopo sanitizado, prazos, usos, evento de revogação e checkpoint. | E04: 2 feito(s), 1 parcial(is), 0 pendente(s) (abertos: T04-03)<br>E11: 1 feito(s), 2 parcial(is), 0 pendente(s) (abertos: T11-01, T11-02)<br>E12: 0 feito(s), 3 parcial(is), 1 pendente(s) (abertos: T12-01, T12-02, T12-03, T12-04)<br>E13: 4 feito(s), 1 parcial(is), 0 pendente(s) (abertos: T13-05)<br>E16: 0 feito(s), 1 parcial(is), 3 pendente(s) (abertos: T16-01, T16-02, T16-03, T16-04) | pendente |
 | **P13** · Efeitos e compensação | E06, E12, E13, E15 | IDs remotos únicos, ledger com provas, autorização e preservação de artefatos. | E06: 1 feito(s), 4 parcial(is), 0 pendente(s) (abertos: T06-01, T06-02, T06-04, T06-05)<br>E12: 0 feito(s), 3 parcial(is), 1 pendente(s) (abertos: T12-01, T12-02, T12-03, T12-04)<br>E13: 4 feito(s), 1 parcial(is), 0 pendente(s) (abertos: T13-05)<br>E15: 0 feito(s), 1 parcial(is), 4 pendente(s) (abertos: T15-01, T15-02, T15-03, T15-04, T15-05) | pendente |
-| **P14** · Qualidade | E14, E15 | Diffs, baseline, evidência dos checks por revisão, relatório de revisão e captura quando útil. | E14: 0 feito(s), 1 parcial(is), 3 pendente(s) (abertos: T14-01, T14-02, T14-03, T14-04)<br>E15: 0 feito(s), 1 parcial(is), 4 pendente(s) (abertos: T15-01, T15-02, T15-03, T15-04, T15-05) | pendente |
+| **P14** · Qualidade | E14, E15 | Diffs, baseline, evidência dos checks por revisão, relatório de revisão e captura quando útil. | E14: 0 feito(s), 2 parcial(is), 2 pendente(s) (abertos: T14-01, T14-02, T14-03, T14-04)<br>E15: 0 feito(s), 1 parcial(is), 4 pendente(s) (abertos: T15-01, T15-02, T15-03, T15-04, T15-05) | pendente |
 | **P15** · GitHub, docs e memória | E06, E10, E13, E15 | PR/commits, link na origem, revisão, decisões, docs, estado de memória e fila. | E06: 1 feito(s), 4 parcial(is), 0 pendente(s) (abertos: T06-01, T06-02, T06-04, T06-05)<br>E10: 0 feito(s), 3 parcial(is), 1 pendente(s) (abertos: T10-01, T10-02, T10-03, T10-04)<br>E13: 4 feito(s), 1 parcial(is), 0 pendente(s) (abertos: T13-05)<br>E15: 0 feito(s), 1 parcial(is), 4 pendente(s) (abertos: T15-01, T15-02, T15-03, T15-04, T15-05) | pendente |
 | **P16** · D89 e mudanças externas | E06, E10, E12, E15, E16 | Contagem de chamadas por gatilho, snapshots/diffs, histórico de fila e trilha de decisão. | E06: 1 feito(s), 4 parcial(is), 0 pendente(s) (abertos: T06-01, T06-02, T06-04, T06-05)<br>E10: 0 feito(s), 3 parcial(is), 1 pendente(s) (abertos: T10-01, T10-02, T10-03, T10-04)<br>E12: 0 feito(s), 3 parcial(is), 1 pendente(s) (abertos: T12-01, T12-02, T12-03, T12-04)<br>E15: 0 feito(s), 1 parcial(is), 4 pendente(s) (abertos: T15-01, T15-02, T15-03, T15-04, T15-05)<br>E16: 0 feito(s), 1 parcial(is), 3 pendente(s) (abertos: T16-01, T16-02, T16-03, T16-04) | pendente |
 | **P17** · Painel e retenção | E03, E09, E12, E16 | Eventos, estado de UI, dados retidos, limpeza e restauração de checkpoint protegido. | E03: 3 feito(s), 0 parcial(is), 0 pendente(s)<br>E09: 0 feito(s), 4 parcial(is), 0 pendente(s) (abertos: T09-01, T09-02, T09-03, T09-04)<br>E12: 0 feito(s), 3 parcial(is), 1 pendente(s) (abertos: T12-01, T12-02, T12-03, T12-04)<br>E16: 0 feito(s), 1 parcial(is), 3 pendente(s) (abertos: T16-01, T16-02, T16-03, T16-04) | pendente |
@@ -174,12 +174,12 @@ A coluna **Evidência no projeto real** fica *pendente* até alguém registrá-l
 
 ### E14 — Qualidade e revisão
 
-0 feito(s), 1 parcial(is), 3 pendente(s).
+0 feito(s), 2 parcial(is), 2 pendente(s).
 
 | Ticket | Estado | Critério de aceite do ticket | Evidência registrada | Evidência no projeto real |
 |---|---|---|---|---|
 | **T14-01** · Executar baseline, critérios e checks | parcial | Regressão bloqueia. Falha anterior comprovada é registrada. Origem desconhecida fica em investigação e não vira baseline por suposição. | [E14 checks](entregas/2026-11-12-E14-checks-e-baseline.md) | pendente |
-| **T14-02** · Classificar e reavaliar risco | pendente | Fixture de arquivo crítico eleva nível apesar de sugestão baixa. Três níveis escolhem verificações previstas. | — | pendente |
+| **T14-02** · Classificar e reavaliar risco | parcial | Fixture de arquivo crítico eleva nível apesar de sugestão baixa. Três níveis escolhem verificações previstas. | [E14 risco](entregas/2026-11-12-E14-risco.md) | pendente |
 | **T14-03** · Executar revisão independente e correções | pendente | Crítico/relevante bloqueiam. Baixa severidade fica registrada. Correção do revisor roda checks e esgotamento suspende com checkpoint. | — | pendente |
 | **T14-04** · Criar testes e rodar E2E por impacto | pendente | Jornada de alto risco testável tem E2E real. Caso inaplicável tem justificativa e evidência alternativa. | — | pendente |
 

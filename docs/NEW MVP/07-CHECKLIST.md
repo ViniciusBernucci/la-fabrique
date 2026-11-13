@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E10 (T10-03)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E14 (T14-02)._
 
 ## Resumo
 
-**19 feitos · 33 parciais · 15 pendentes** de 67 tickets.
+**19 feitos · 34 parciais · 14 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -153,7 +153,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E10 (T10-03)._
 
 - [~] **[T14-01](03-BACKLOG.md#t14-01)** — Executar baseline, critérios e checks · dep.: T05-03, T11-02.
   - PASS (unitário + PostgreSQL real + Docker real, `-race`): checks por revisão (baseline e candidata) com assinatura da falha, trecho redigido e truncado, hash e duração; regressão (passava, ou falha nova) bloqueia; falha anterior comprovada (mesma assinatura no baseline) registrada em `known_failures` e reconhecida depois, sem bloquear; origem desconhecida (sem baseline utilizável) fica em investigação, bloqueia e nunca vira baseline por suposição (resolução como anterior exige a prova de uma execução de baseline com a mesma assinatura); evidência vale só para a revisão exata; erro de infraestrutura/tempo limite é inconclusivo. **Parcial:** sem preparo automático do baseline (checkout da revisão anterior), sem montar os checks a partir do perfil do projeto, sem rotas/tela; assinatura é heurística textual. Revisão independente NOT_RUN. Entrega: [E14 checks](../entregas/2026-11-12-E14-checks-e-baseline.md).
-- [ ] **[T14-02](03-BACKLOG.md#t14-02)** — Classificar e reavaliar risco · dep.: T10-01, T14-01.
+- [~] **[T14-02](03-BACKLOG.md#t14-02)** — Classificar e reavaliar risco · dep.: T10-01, T14-01.
+  - PASS (unitário + PostgreSQL real, `-race`): nível final = máximo entre a sugestão da IA e pisos determinísticos por caminho (migrations, SQL, autenticação, segurança, segredos, CI, containers → alto; dependências e configuração → médio) e por tamanho do diff; só eleva (fixture de arquivo crítico eleva apesar de sugestão baixa; alta não é reduzida); sugestão inválida → alta; reavaliação com o diff real após implementação e correção (pode cair se o diff não tocou o previsto); razões e arquivos gravados com histórico; política por projeto validada; os três níveis escolhem verificações (básicas; + revisão; + segurança, revisão independente e E2E) e apontam as não aplicáveis. **Parcial:** sem geração do diff (git) nem ligação ao ciclo de execução, sem rotas/tela, checks de segurança só como nomes (execução em T14-01/T14-03). Revisão independente NOT_RUN. Entrega: [E14 risco](../entregas/2026-11-12-E14-risco.md).
 - [ ] **[T14-03](03-BACKLOG.md#t14-03)** — Executar revisão independente e correções · dep.: T07-03, T09-04, T14-02, T12-03.
 - [ ] **[T14-04](03-BACKLOG.md#t14-04)** — Criar testes e rodar E2E por impacto · dep.: T14-01, T14-02.
 

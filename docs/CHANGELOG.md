@@ -1,3 +1,6 @@
+## 2026-11-12 — E14: classificação e reavaliação de risco (T14-02)
+Nível de risco = máximo entre a estimativa da IA e pisos determinísticos (arquivos críticos e tamanho do diff, por projeto), reavaliado com o diff real e justificado; os três níveis escolhem as verificações previstas. Diff real, checks de segurança e tela NOT_RUN. [Entrega](entregas/2026-11-12-E14-risco.md) · [ADR-0043](adr/0043-classificacao-de-risco-por-pisos-deterministicos.md).
+
 ## 2026-11-12 — E10: limite global, leases e justiça (T10-03)
 Reclamação de vaga em transação serializada com limite global persistente, lease com heartbeat e geração, envelhecimento determinístico e prioridade de projeto; escritor obsoleto não conclui, não bloqueia e não grava checkpoint. Worker real e controles NOT_RUN. [Entrega](entregas/2026-11-12-E10-scheduler.md) · [ADR-0042](adr/0042-scheduler-limite-global-leases-e-justica.md).
 

@@ -167,8 +167,18 @@ func TestCheckpointRefusesToCaptureWhileProcessesAreAlive(t *testing.T) {
 	if err := run.Cancel(2 * time.Second); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.store.CaptureAndRelease(ctx, sb, c.input("parado"), checkpoints.Options{}); err != nil {
-		t.Fatalf("parado: %v", err)
+	// O encerramento da árvore leva um instante (mais sob carga): enquanto o sandbox ainda
+	// aparece com processo, o checkpoint é recusado (ErrNotQuiescent) e quem pede tenta de novo.
+	retryUntil := time.Now().Add(20 * time.Second)
+	for {
+		_, err := c.store.CaptureAndRelease(ctx, sb, c.input("parado"), checkpoints.Options{})
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, checkpoints.ErrNotQuiescent) || time.Now().After(retryUntil) {
+			t.Fatalf("parado: %v", err)
+		}
+		time.Sleep(200 * time.Millisecond)
 	}
 	if sb.Exists(ctx) || c.count(t) != 1 {
 		t.Fatal("depois do checkpoint o sandbox é liberado")
