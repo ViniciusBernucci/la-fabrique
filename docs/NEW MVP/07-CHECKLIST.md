@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E12 (T12-03)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E14 (T14-04)._
 
 ## Resumo
 
-**19 feitos · 36 parciais · 12 pendentes** de 67 tickets.
+**19 feitos · 37 parciais · 11 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -158,7 +158,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E12 (T12-03)._
 - [~] **[T14-02](03-BACKLOG.md#t14-02)** — Classificar e reavaliar risco · dep.: T10-01, T14-01.
   - PASS (unitário + PostgreSQL real, `-race`): nível final = máximo entre a sugestão da IA e pisos determinísticos por caminho (migrations, SQL, autenticação, segurança, segredos, CI, containers → alto; dependências e configuração → médio) e por tamanho do diff; só eleva (fixture de arquivo crítico eleva apesar de sugestão baixa; alta não é reduzida); sugestão inválida → alta; reavaliação com o diff real após implementação e correção (pode cair se o diff não tocou o previsto); razões e arquivos gravados com histórico; política por projeto validada; os três níveis escolhem verificações (básicas; + revisão; + segurança, revisão independente e E2E) e apontam as não aplicáveis. **Parcial:** sem geração do diff (git) nem ligação ao ciclo de execução, sem rotas/tela, checks de segurança só como nomes (execução em T14-01/T14-03). Revisão independente NOT_RUN. Entrega: [E14 risco](../entregas/2026-11-12-E14-risco.md).
 - [ ] **[T14-03](03-BACKLOG.md#t14-03)** — Executar revisão independente e correções · dep.: T07-03, T09-04, T14-02, T12-03.
-- [ ] **[T14-04](03-BACKLOG.md#t14-04)** — Criar testes e rodar E2E por impacto · dep.: T14-01, T14-02.
+- [~] **[T14-04](03-BACKLOG.md#t14-04)** — Criar testes e rodar E2E por impacto · dep.: T14-01, T14-02.
+  - PASS (unitário + PostgreSQL real + Docker real, `-race`): orientação de testes por arquivo alterado (Go/TS/Python; bloqueia em risco alto, orienta nos demais); E2E exigido por risco e impacto na UI; jornada só em ambiente isolado (recusa o não isolado antes de rodar), registrada pelos checks, com fixtures, navegador declarado e capturas com SHA-256 presas à revisão (evidência de outra revisão não vale; falha e ausência bloqueiam); caso inaplicável exige justificativa e evidência alternativa EXISTENTE na mesma revisão (check aprovado, captura ou revisão). **Parcial:** o navegador real (Playwright/Chromium) NOT_RUN — nenhuma imagem de sandbox traz navegador, e a execução real no Docker isolado foi provada com uma jornada simulada; heurística de testes por nome/diretório; sem comandos E2E do perfil, rotas ou tela. Revisão independente NOT_RUN. Entrega: [E14 testes e E2E](../entregas/2026-11-12-E14-testes-e-e2e.md).
 
 ## E15 — GitHub, documentação e memória
 
