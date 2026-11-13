@@ -12,6 +12,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/flow"
 	"github.com/ViniciusBernucci/le-fabrique/internal/integrations"
 	"github.com/ViniciusBernucci/le-fabrique/internal/issuesync"
+	"github.com/ViniciusBernucci/le-fabrique/internal/prcycle"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projection"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
@@ -21,6 +22,11 @@ import (
 // registerIssueSync registra o sync matinal das Issues (opt-in: SENTINEL_ISSUE_SYNC=true). O segredo da
 // conexão sai do cofre a cada execução e nunca é logado.
 func registerIssueSync(sch *sentinel.Scheduler, pool *pgxpool.Pool, cfg config.Worker) error {
+	if cfg.PRSync {
+		if err := registerPRSync(sch, pool, cfg); err != nil {
+			return err
+		}
+	}
 	if !cfg.IssueSync {
 		return nil
 	}
@@ -71,4 +77,18 @@ func registerIssueSync(sch *sentinel.Scheduler, pool *pgxpool.Pool, cfg config.W
 		src, tr, err := resolve(ctx, projectID)
 		return tr, src.Map, err
 	}, time.Minute))
+}
+
+// registerPRSync registra a consulta das PRs gerenciadas (opt-in: SENTINEL_PR_SYNC=true), com agenda
+// própria, independente das rotinas de Jira/ClickUp.
+func registerPRSync(sch *sentinel.Scheduler, pool *pgxpool.Pool, cfg config.Worker) error {
+	sealer, err := security.NewSealer(cfg.VaultKey, cfg.VaultKeyID)
+	if err != nil {
+		return fmt.Errorf("cofre do worker: %w", err)
+	}
+	vault := security.NewVault(pool, sealer, security.NewRedactor())
+	co := &sentinel.Coordinator{DB: pool}
+	res := &prcycle.Resolver{DB: pool, Vault: vault, Syncer: &issuesync.Syncer{DB: pool, Sentinel: co}}
+	svc := &prcycle.Service{DB: pool, Ledger: &effects.Ledger{DB: pool}, Sentinel: co}
+	return sch.Register(svc.Routine(res.Target, cfg.PRPollInterval))
 }

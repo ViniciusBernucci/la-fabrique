@@ -361,3 +361,37 @@ func (c *clickup) HasLink(ctx context.Context, itemID, linkURL string) (bool, er
 	}
 	return false, nil
 }
+
+// CreateItem cria uma tarefa de primeiro nível na lista (container) já no estado pedido.
+func (c *clickup) CreateItem(ctx context.Context, container string, in ItemInput) (Item, error) {
+	const op = "clickup: criar tarefa"
+	title := strings.TrimSpace(in.Title)
+	if title == "" || len(title) > 255 {
+		return Item{}, invalid(op)
+	}
+	if err := checkID(op, container); err != nil {
+		return Item{}, err
+	}
+	body := map[string]any{"name": title}
+	if d := strings.TrimSpace(in.Description); d != "" {
+		body["description"] = d
+	}
+	if s := strings.TrimSpace(in.Status); s != "" {
+		body["status"] = s
+	}
+	switch strings.ToLower(strings.TrimSpace(in.Priority)) {
+	case "urgent":
+		body["priority"] = 1
+	case "high":
+		body["priority"] = 2
+	case "normal":
+		body["priority"] = 3
+	case "low":
+		body["priority"] = 4
+	}
+	var created clickupTask
+	if e := c.api.do(ctx, op, "POST", "/list/"+container+"/task", nil, body, &created); e != nil {
+		return Item{}, e
+	}
+	return c.item(created), nil
+}

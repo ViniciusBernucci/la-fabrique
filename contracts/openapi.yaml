@@ -720,6 +720,33 @@ paths:
         "403": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
         "422": {$ref: "#/components/responses/Error"}
+  /projects/{id}/pull-requests:
+    get:
+      tags: [issues]
+      summary: PRs gerenciadas com rodadas de revisão e pendências
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: PRs, content: {application/json: {schema: {$ref: "#/components/schemas/PullRequestsView"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/pull-requests/sync:
+    post:
+      tags: [issues]
+      summary: Consulta manual das PRs gerenciadas (a mesma passagem da rotina)
+      description: >
+        Lê revisões, comentários e estado das PRs, fecha rodadas, cria a Issue REPROVADO_PR de cada rodada
+        e conclui após merge confirmado. Limite de requisições do GitHub volta como 429.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Resultado, content: {application/json: {schema: {$ref: "#/components/schemas/PullRequestSyncReport"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
   /projects/{id}/sync:
     post:
       tags: [sincronizacao]
@@ -2206,6 +2233,49 @@ components:
         detail: {type: string}
         attempts: {type: integer}
         updated_at: {type: string, format: date-time}
+    PullRequestSyncReport:
+      type: object
+      required: [polled, rounds, issues, merged]
+      properties:
+        polled: {type: integer}
+        rounds: {type: integer}
+        issues: {type: integer}
+        merged: {type: integer}
+        pending: {type: array, items: {type: string}}
+    PRRound:
+      type: object
+      required: [seq, key, status, closing_kind, closed_by, comments, incorporated]
+      properties:
+        seq: {type: integer}
+        key: {type: string}
+        status: {type: string, enum: [pending_issue, issue_created, ambiguous]}
+        detail: {type: string}
+        closing_kind: {type: string, enum: [review, command]}
+        closed_by: {type: string}
+        issue_key: {type: string}
+        comments: {type: integer}
+        published_head: {type: string}
+        incorporated: {type: boolean}
+    PullRequestWatch:
+      type: object
+      required: [pr_number, issue_key, state, draft, head_sha, needs_decision, rounds, pending]
+      properties:
+        pr_number: {type: integer}
+        issue_key: {type: string}
+        state: {type: string, enum: [open, merged, closed]}
+        draft: {type: boolean}
+        head_sha: {type: string}
+        merge_sha: {type: string}
+        needs_decision: {type: boolean}
+        last_error: {type: string}
+        last_polled_at: {type: string, format: date-time, nullable: true}
+        rounds: {type: array, items: {$ref: "#/components/schemas/PRRound"}}
+        pending: {type: array, items: {type: string}}
+    PullRequestsView:
+      type: object
+      required: [pull_requests]
+      properties:
+        pull_requests: {type: array, items: {$ref: "#/components/schemas/PullRequestWatch"}}
     IssuesView:
       type: object
       required: [issues, runs, pending]

@@ -72,8 +72,11 @@ type Worker struct {
 	IssueSyncTZ   string
 	// CorrectionsPollInterval é o intervalo da consulta direcionada das correções aguardando liberação.
 	CorrectionsPollInterval time.Duration
-	VaultKey                []byte
-	VaultKeyID              string
+	// PRSync liga a consulta das PRs gerenciadas (SENTINEL_PR_SYNC=true), com agenda própria (PR_POLL_INTERVAL).
+	PRSync         bool
+	PRPollInterval time.Duration
+	VaultKey       []byte
+	VaultKeyID     string
 }
 
 // Migrate é a configuração do cmd/migrate.
@@ -262,9 +265,15 @@ func LoadWorker(lookup Lookup) (Worker, error) {
 	cfg.RetentionInterval = l.duration("RETENTION_INTERVAL", 24*time.Hour, time.Minute)
 	cfg.RetentionApply = l.boolean("RETENTION_APPLY", false)
 	cfg.IssueSync = l.boolean("SENTINEL_ISSUE_SYNC", false)
-	if cfg.IssueSync {
+	cfg.PRSync = l.boolean("SENTINEL_PR_SYNC", false)
+	if cfg.PRSync {
+		cfg.PRPollInterval = l.duration("PR_POLL_INTERVAL", 3*time.Minute, 30*time.Second)
+	}
+	if cfg.IssueSync || cfg.PRSync {
 		cfg.VaultKeyID = l.str("VAULT_KEY_ID", "k1")
 		cfg.VaultKey = l.vaultKey()
+	}
+	if cfg.IssueSync {
 		cfg.IssueSyncTZ = l.str("ISSUE_SYNC_TZ", "America/Sao_Paulo")
 		if _, err := time.LoadLocation(cfg.IssueSyncTZ); err != nil {
 			l.fail("ISSUE_SYNC_TZ não é um fuso válido")

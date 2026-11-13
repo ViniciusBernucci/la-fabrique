@@ -325,3 +325,18 @@ func clipText(s string, n int) string {
 	}
 	return fmt.Sprintf("%s…", s[:n])
 }
+
+// ItemInput descreve uma Issue (não subtarefa) a criar na origem. Status é o nome bruto do estado
+// inicial desejado (REPROVADO_PR no mapa do projeto); o adaptador o aplica quando a origem permite.
+type ItemInput struct {
+	Title       string
+	Description string
+	Priority    string
+	Status      string
+}
+
+// ItemCreator é a capacidade de criar Issues de primeiro nível na origem (correções de PR, AJ09-02).
+// Fica separada de Tracker para que os adaptadores sem criação não precisem simulá-la.
+type ItemCreator interface {
+	CreateItem(ctx context.Context, container string, in ItemInput) (Item, error)
+}

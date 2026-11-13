@@ -1,9 +1,9 @@
 # Checklist do backlog de adequação (LF-AJ)
 Acompanhamento dos 35 tickets de [Le-Fabrique-Adequacao.md](Le-Fabrique-Adequacao.md). **Fonte de verdade do estado da adequação**: atualize ao concluir ou alterar um ticket (marcar `[x]` só com evidência real). Fica separado do [07-CHECKLIST.md](07-CHECKLIST.md) porque a matriz de aceite do MVP é derivada dele.
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
-_Última atualização: 2026-11-13 — AJ05-03._
+_Última atualização: 2026-11-13 — AJ09-01, AJ09-02, AJ09-04._
 ## Resumo
-**13 feitos · 3 parciais · 19 pendentes** de 35 tickets.
+**15 feitos · 4 parciais · 16 pendentes** de 35 tickets.
 
 ## LF-AJ-01 — Sincronização e gerenciamento de Issues
 - [x] **AJ01-01** — Leitura Jira/ClickUp: descobrir Issues elegíveis e atualizar conhecidas por ID · dep.: AJ02-01 · aceite: CT01.
@@ -69,7 +69,10 @@ _Última atualização: 2026-11-13 — AJ05-03._
 - [ ] **AJ08-05** — Evidência visual, resultados por trilha e gate de testes integrados antes da PR · dep.: AJ08-01, AJ08-04, AJ06-03 · aceite: CT06, CT17.
 
 ## LF-AJ-09 — Draft PR, revisão humana e ciclo de correções
-- [ ] **AJ09-01** — Consultar PRs vinculadas com agenda própria e ação manual · dep.: AJ03-01, E15 · aceite: CT11, CT13, CT15.
-- [ ] **AJ09-02** — Agrupar comentários da rodada e criar a Issue REPROVADO_PR · dep.: AJ09-01, AJ01-04 · aceite: CT11, CT15.
+- [x] **AJ09-01** — Consultar PRs vinculadas com agenda própria e ação manual · dep.: AJ03-01, E15 · aceite: CT11, CT13, CT15.
+  - `internal/prcycle` + `gitops/prread.go`: rotina `prs.poll` da Sentinela com agenda própria (`SENTINEL_PR_SYNC`, `PR_POLL_INTERVAL`, independente de Jira/ClickUp), leitura paginada com cursores por PR (revisões, conversa e linhas, gravados no banco: sobrevivem a reinício), limite de requisições (`ErrRateLimited`) preserva o cursor e dispara backoff, falha de uma PR não impede as demais; ação manual `POST /projects/{id}/pull-requests/sync` e `GET …/pull-requests` (OpenAPI). Migration 00053. PASS: integração `TestPRPollUsesCursorsAndSurvivesRateLimitAndRestart`. **Limite:** painel (tela) das PRs não foi feito; só API. GitHub real NOT_RUN (fake por interface `Reader`).
+- [x] **AJ09-02** — Agrupar comentários da rodada e criar a Issue REPROVADO_PR · dep.: AJ09-01, AJ01-04 · aceite: CT11, CT15.
+  - Rodadas (`pr_rounds`/`pr_events`): fecha por revisão formal `CHANGES_REQUESTED` ou comando `/fabrique fix` de autor com permissão write+ (verificada no GitHub); agrupa comentários acionáveis (conversa + linhas da revisão) numa chave estável do conjunto; cria a Issue `REPROVADO_PR` na origem (`ItemCreator` em Jira e ClickUp) pelo ledger com marcador `[lf-round:…]` (timeout após criar é reconciliado por leitura), registra a correção vinculada à original; snapshot do corpo preservado; fechamento sem achados fica `ambiguous` sem disparar correção. PASS: `TestPRRoundsGroupCommentsAndCreateOneIssuePerRound`, `…ReconciledAfterTimeout…`, `…ClosingWithoutFindingsIsExposedAsAmbiguous`. **Limite:** comando enviado ANTES da revisão sobre os mesmos comentários gera rodadas distintas (só revisão→comando é a mesma rodada).
 - [ ] **AJ09-03** — Despachar correção liberada, plano focalizado e atualizar a PR original · dep.: AJ01-03, AJ05-04, AJ06-04 · aceite: CT02, CT12.
-- [ ] **AJ09-04** — Encerrar só Issues incorporadas após merge e tratar fechamento sem merge · dep.: AJ09-01, AJ09-03, AJ03-02 · aceite: CT13, CT15.
+- [~] **AJ09-04** — Encerrar só Issues incorporadas após merge e tratar fechamento sem merge · dep.: AJ09-01, AJ09-03, AJ03-02 · aceite: CT13, CT15.
+  - `prcycle.conclude`: só merge com SHA de integração, número, base e repositório conferidos conclui; guarda SHA do merge, cabeça integrada e data; conclui a feature e as correções cuja cabeça publicada está contida na cabeça integrada (comparação do GitHub, vale para squash/rebase); pendentes ficam abertas e listadas; aprovação, Ready e fechamento sem merge não concluem (fechada vira `needs_decision`); repetição não duplica (chave de observação). PASS: `TestPRMergeConcludesOnlyConfirmedAndIncorporated`, `TestPRMergeWithoutProofDoesNotConclude`. **Pendente:** `published_head` é preenchido pelo despacho da correção (AJ09-03); no teste foi gravado direto.

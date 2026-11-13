@@ -231,6 +231,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/projects/{id}/status-map", s.protected(s.putStatusMap))
 	mux.HandleFunc("GET /api/projects/{id}/issues", s.protected(s.listIssues))
 	mux.HandleFunc("POST /api/projects/{id}/issues/sync", s.protected(s.runIssueSync))
+	mux.HandleFunc("GET /api/projects/{id}/pull-requests", s.protected(s.listPullRequests))
+	mux.HandleFunc("POST /api/projects/{id}/pull-requests/sync", s.protected(s.syncPullRequests))
 	mux.HandleFunc("POST /api/projects/{id}/sync", s.protected(s.runSync))
 	mux.HandleFunc("GET /api/projects/{id}/sync", s.protected(s.getSync))
 	mux.HandleFunc("PUT /api/projects/{id}/sync/items/{remoteId}/priority", s.protected(s.setSyncPriority))

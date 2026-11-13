@@ -483,3 +483,53 @@ func (j *jira) HasLink(ctx context.Context, itemID, linkURL string) (bool, error
 	}
 	return false, nil
 }
+
+// CreateItem cria uma Issue de primeiro nível (tipo Bug quando existir, senão o primeiro tipo comum)
+// e tenta levá-la ao estado inicial pedido por uma transição válida agora.
+func (j *jira) CreateItem(ctx context.Context, container string, in ItemInput) (Item, error) {
+	const op = "jira: criar issue"
+	title := strings.TrimSpace(in.Title)
+	if title == "" || len(title) > 255 || strings.TrimSpace(container) == "" {
+		return Item{}, invalid(op)
+	}
+	types, err := j.ItemTypes(ctx, container)
+	if err != nil {
+		return Item{}, err
+	}
+	typeID := ""
+	for _, t := range types {
+		if t.Subtask {
+			continue
+		}
+		if typeID == "" || strings.EqualFold(t.Name, "bug") {
+			typeID = t.ID
+		}
+	}
+	if typeID == "" {
+		return Item{}, invalid(op)
+	}
+	fields := map[string]any{"project": map[string]string{"key": container}, "issuetype": map[string]string{"id": typeID}, "summary": title}
+	if d := strings.TrimSpace(in.Description); d != "" {
+		fields["description"] = adfDoc(d)
+	}
+	if p := strings.TrimSpace(in.Priority); p != "" {
+		fields["priority"] = map[string]string{"name": p}
+	}
+	var created struct {
+		Key string `json:"key"`
+	}
+	if e := j.api.do(ctx, op, "POST", "/issue", nil, map[string]any{"fields": fields}, &created); e != nil {
+		return Item{}, e
+	}
+	if want := strings.TrimSpace(in.Status); want != "" {
+		if trs, e := j.Transitions(ctx, created.Key); e == nil {
+			for _, t := range trs {
+				if strings.EqualFold(t.ToStatus, want) || strings.EqualFold(t.Name, want) {
+					_ = j.Transition(ctx, created.Key, t.ID)
+					break
+				}
+			}
+		}
+	}
+	return j.GetItem(ctx, created.Key)
+}
