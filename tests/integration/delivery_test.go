@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -27,6 +28,8 @@ type fakeGH struct {
 	creates  int
 	loseNext bool
 	bodies   []string
+	gets     int
+	getFails bool
 }
 
 func newFakeGH(t *testing.T) *fakeGH {
@@ -49,6 +52,24 @@ func newFakeGH(t *testing.T) *fakeGH {
 				}
 			}
 			_ = json.NewEncoder(w).Encode(out)
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/repos/org/app/pulls/"):
+			g.gets++
+			if g.getFails {
+				w.WriteHeader(502)
+				return
+			}
+			n := r.URL.Path[len("/repos/org/app/pulls/"):]
+			for _, p := range g.prs {
+				if fmtNum(p["number"]) == n {
+					out := map[string]any{}
+					for k, v := range p {
+						out[k] = v
+					}
+					_ = json.NewEncoder(w).Encode(out)
+					return
+				}
+			}
+			w.WriteHeader(404)
 		case r.Method == http.MethodPost && r.URL.Path == "/repos/org/app/pulls":
 			var in struct {
 				Title, Head, Base, Body string
@@ -65,7 +86,7 @@ func newFakeGH(t *testing.T) *fakeGH {
 			g.creates++
 			n := 100 + g.creates
 			g.bodies = append(g.bodies, in.Body)
-			g.prs = append(g.prs, map[string]any{"number": n, "html_url": "https://github.com/org/app/pull/" + string(rune('0'+g.creates)), "draft": in.Draft, "state": "open", "merged": false,
+			g.prs = append(g.prs, map[string]any{"number": n, "html_url": "https://github.com/org/app/pull/" + strconv.Itoa(n), "draft": in.Draft, "state": "open", "merged": false,
 				"title": in.Title, "head": map[string]any{"ref": in.Head}, "base": map[string]any{"ref": in.Base}})
 			if g.loseNext {
 				g.loseNext = false
@@ -274,5 +295,26 @@ func TestOtherGatesAndTheBranchGuardAlsoBlock(t *testing.T) {
 	}
 	if _, err := x.d.Deliver(ctx, delivery.Request{ProjectID: x.p.proj, FeatureID: x.p.feature, Attempt: 1}); !errors.Is(err, persistence.ErrInvalidInput) {
 		t.Fatalf("%v", err)
+	}
+}
+
+func fmtNum(v any) string {
+	switch n := v.(type) {
+	case int:
+		return strconv.Itoa(n)
+	case float64:
+		return strconv.Itoa(int(n))
+	}
+	return ""
+}
+
+// setPR altera o estado de uma PR do GitHub de mentira (o humano fechou ou integrou).
+func (g *fakeGH) setPR(number int, state string, merged bool, sha string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for _, p := range g.prs {
+		if fmtNum(p["number"]) == strconv.Itoa(number) {
+			p["state"], p["merged"], p["merge_commit_sha"] = state, merged, sha
+		}
 	}
 }

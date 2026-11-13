@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E16 (T16-04)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E15 (T15-03)._
 
 ## Resumo
 
-**19 feitos · 41 parciais · 7 pendentes** de 67 tickets.
+**19 feitos · 42 parciais · 6 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -168,7 +168,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E16 (T16-04)._
   - PASS (`git` real contra repositório local + PostgreSQL, `-race`; API do GitHub de mentira): conexão validada por clone real, commit por tarefa com checks aprovados e trailers, montado por `git fast-import` sem extrair arquivo no host, push restrito à branch da feature (nunca a base), prova por ref (timeout após o efeito reconcilia sem duplicar; antes do efeito repete com segurança; divergência bloqueia com evidência; ref à frente confirma), `.github/` exige aprovação, credencial só por ambiente do processo e redigida. **Parcial:** GitHub real NOT_RUN (permissão de push, proteção do ramo base e recusa de push direto só numa conta real); imagem do worker sem `git`; sem rotas/tela, PR e merge (T15-02/T15-03). Revisão independente NOT_RUN. Entrega: [E15 GitHub](../entregas/2026-11-12-E15-github-branch-commit-push.md).
 - [~] **[T15-02](03-BACKLOG.md#t15-02)** — Gerar documentação viva e publicar Draft PR · dep.: T15-01, T14-03, T14-04.
   - PASS (unitário + PostgreSQL real, `-race`; API do GitHub de mentira em HTTP): gate de documentação por módulo no diff (pacote Go e área do painel) e histórico vivo da feature gerado do que está registrado (requisito, tarefas, commits por tarefa, checks, risco, revisão, E2E), bloqueando sem abrir PR e registrando a tentativa; gates de checks, revisão e E2E; Draft PR sempre rascunho, só da branch da feature, aberta pelo ledger — repetir devolve a mesma PR, resposta perdida e "já existe" são resolvidos pela prova por busca sem duplicar; origem recebe "Aguardando merge". **Parcial:** GitHub real NOT_RUN; o `git` real (commit/push, T15-01) não foi exercitado junto da PR; quem commita precisa chamar `RecordCommit`; a coerência semântica da documentação não é avaliada; sem rotas/tela (merge e correções externas são T15-03/T15-04). Revisão independente NOT_RUN. Entrega: [E15 docs e Draft PR](../entregas/2026-11-12-E15-documentacao-e-draft-pr.md).
-- [ ] **[T15-03](03-BACKLOG.md#t15-03)** — Confirmar merge e propagar conclusão · dep.: T15-02, T06-03, T06-04, T10-02.
+- [~] **[T15-03](03-BACKLOG.md#t15-03)** — Confirmar merge e propagar conclusão · dep.: T15-02, T06-03, T06-04, T10-02.
+  - PASS (PostgreSQL real, `-race`; API do GitHub de mentira em HTTP): consulta da PR só sob demanda (falha de consulta não altera nada e é auditada); aberta e fechada sem merge não liberam nem concluem; "integrada" sem SHA não libera; merge com SHA registra o SHA e o horário, conclui o item na origem pelo ledger e devolve à fila os itens que esperavam esse merge (porta `MergeGate`); falha ao projetar o status fica visível (`projection = failed`) e reconciliável sem concluir duas vezes; observação do merge auditada uma vez. **Parcial:** GitHub real NOT_RUN; nada aciona `Observe` a partir do worker/painel (ponto D89 ainda sem ligação), sem rotas/tela; dependência entre features e promoção de memória (T15-05) e as ações do fechamento sem merge (T15-04) pendentes. Revisão independente NOT_RUN. Entrega: [E15 merge](../entregas/2026-11-12-E15-merge.md).
 - [ ] **[T15-04](03-BACKLOG.md#t15-04)** — Corrigir revisão externa e tratar PR fechada · dep.: T15-03, T13-02, T10-02.
 - [ ] **[T15-05](03-BACKLOG.md#t15-05)** — Manter memória técnica pendente e oficial · dep.: T15-03, T12-02.
 

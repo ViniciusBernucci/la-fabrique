@@ -1,3 +1,6 @@
+## 2026-11-12 — E15: confirmar merge e propagar conclusão (T15-03)
+Consulta da PR sob demanda: aberta ou fechada sem merge não libera nada; merge com SHA conclui o item na origem pelo ledger e devolve à fila o que esperava; falha ao projetar o status fica visível e reconcilia sem duplicar. GitHub real e acionamento pelo worker NOT_RUN. [Entrega](entregas/2026-11-12-E15-merge.md) · [ADR-0051](adr/0051-observacao-do-merge-e-propagacao.md).
+
 ## 2026-11-12 — E16: retenção com integridade (T16-04)
 Logs detalhados removidos após 30 dias com resumo permanente e seq preservado; checkpoints de execuções concluídas removidos após carência, sem tocar em bloqueados nem em ligados a incidente, com conferência de integridade, simulação e auditoria por item. Agendamento e tela NOT_RUN. [Entrega](entregas/2026-11-12-E16-retencao.md) · [ADR-0050](adr/0050-retencao-com-integridade.md).
 

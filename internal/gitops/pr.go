@@ -216,3 +216,47 @@ func (a *prAdapter) Verify(ctx context.Context, op effects.Op) (effects.Verdict,
 	}
 	return effects.Verdict{Status: effects.VerdictConfirmed, Proof: map[string]any{"number": pr.Number, "url": pr.URL, "draft": pr.Draft}}, nil
 }
+
+// MergeInfo é o que se sabe do merge de uma PR.
+type MergeInfo struct {
+	PullRequest
+	MergeSHA string
+}
+
+// GetPR lê uma PR pelo número, com o SHA do commit de integração quando houver merge.
+func (a *GitHubAPI) GetPR(ctx context.Context, owner, name string, number int) (MergeInfo, error) {
+	if !ownerPattern.MatchString(owner) || !namePattern.MatchString(name) || number < 1 {
+		return MergeInfo{}, ErrInvalidRepo
+	}
+	var p struct {
+		ghPR
+		MergeCommitSHA string `json:"merge_commit_sha"`
+	}
+	if err := a.get(ctx, fmt.Sprintf("/repos/%s/%s/pulls/%d", owner, name, number), &p); err != nil {
+		return MergeInfo{}, err
+	}
+	return MergeInfo{PullRequest: p.toPR(), MergeSHA: p.MergeCommitSHA}, nil
+}
+
+// PRNumberFromURL extrai o número de uma URL de PR (.../pull/<n>).
+func PRNumberFromURL(u string) (int, bool) {
+	i := strings.LastIndex(u, "/pull/")
+	if i < 0 {
+		return 0, false
+	}
+	n := 0
+	rest := u[i+len("/pull/"):]
+	if rest == "" {
+		return 0, false
+	}
+	for _, c := range rest {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		n = n*10 + int(c-'0')
+		if n > 1<<30 {
+			return 0, false
+		}
+	}
+	return n, n > 0
+}
