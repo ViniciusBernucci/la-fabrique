@@ -1,9 +1,9 @@
 # Checklist do backlog de adequação (LF-AJ)
 Acompanhamento dos 35 tickets de [Le-Fabrique-Adequacao.md](Le-Fabrique-Adequacao.md). **Fonte de verdade do estado da adequação**: atualize ao concluir ou alterar um ticket (marcar `[x]` só com evidência real). Fica separado do [07-CHECKLIST.md](07-CHECKLIST.md) porque a matriz de aceite do MVP é derivada dele.
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
-_Última atualização: 2026-11-13 — AJ03-01._
+_Última atualização: 2026-11-13 — AJ03-02._
 ## Resumo
-**3 feitos · 0 parciais · 32 pendentes** de 35 tickets.
+**4 feitos · 0 parciais · 31 pendentes** de 35 tickets.
 
 ## LF-AJ-01 — Sincronização e gerenciamento de Issues
 - [ ] **AJ01-01** — Leitura Jira/ClickUp: descobrir Issues elegíveis e atualizar conhecidas por ID · dep.: AJ02-01 · aceite: CT01.
@@ -21,7 +21,8 @@ _Última atualização: 2026-11-13 — AJ03-01._
 ## LF-AJ-03 — Sentinela, escalonamento e recuperação
 - [x] **AJ03-01** — Eventos duráveis e rotinas agendadas no worker, com relógios e cursores por alvo · dep.: E10, E16 · aceite: CT02, CT15.
   - `internal/sentinel`: eventos duráveis (dedupe, falha não bloqueia os demais, pendentes recuperados após reinício) e rotinas com relógio, cursor, backoff e reserva atômica independentes por rotina/escopo (janela matinal por fuso); ligados ao worker (`sentinela-eventos`, `sentinela-rotinas`, visíveis em /jobs). Migration 00043. PASS: integração `TestSentinelRoutines…` e `TestTheWorkerRunsSentinel…`. Rotinas concretas (sync, correções, PRs, manutenção) são registradas pelos tickets AJ01-02/03, AJ09-01 e AJ03-04.
-- [ ] **AJ03-02** — Transição validada e efeitos de status centralizados na Sentinela · dep.: AJ03-01, AJ02-02 · aceite: CT02, CT03, CT15.
+- [x] **AJ03-02** — Transição validada e efeitos de status centralizados na Sentinela · dep.: AJ03-01, AJ02-02 · aceite: CT02, CT03, CT15.
+  - `sentinel.Coordinator.Transition`: só o ator `sentinel` efetiva (agente é recusado e auditado), guarda `flow.Check`, versão/observação obsoleta não avança, reentrega e corrida (4 goroutines) aplicam uma vez; estado, auditoria, outbox de projeção (`status-projection`) e evento saem da mesma transação. Migration 00044. PASS: integração `TestSentinelIsTheOnlyAuthorityForTransitions` (achou e corrigiu bug de lock com join).
 - [ ] **AJ03-03** — Admissão por categoria, prioridade, antiguidade e vagas Front/Back/planejamento · dep.: AJ03-02, AJ04-01 · aceite: CT05, CT12.
 - [ ] **AJ03-04** — Retomada nativa, fallback por checkpoint e coleta de órfãos · dep.: AJ03-03, AJ07-01, AJ06-01 · aceite: CT07, CT15.
 - [ ] **AJ03-05** — Migração aditiva, ativação por workflow publicado e reversão operacional · dep.: AJ03-03, AJ05-03 · aceite: CT16.
