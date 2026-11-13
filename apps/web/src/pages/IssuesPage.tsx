@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../components/States";
-import { ApiError, api, type IssueSyncRun } from "../lib/api";
+import { ApiError, api, type IssueProgress, type IssueSyncRun } from "../lib/api";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
 
@@ -69,6 +69,8 @@ export function IssuesPage() {
       setBusy(false);
     }
   }
+
+  const progressByKey = view.state.status === "ready" ? (view.state.data.progress ?? {}) : {};
 
   return (
     <div className="page">
@@ -147,6 +149,9 @@ export function IssuesPage() {
                         </span>
                         <span className="badge">{i.status_code || "sem mapa"}</span>
                       </div>
+                      {progressByKey[i.key] ? (
+                        <ProgressDetail progress={progressByKey[i.key] as IssueProgress} />
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -219,5 +224,44 @@ export function IssuesPage() {
         </>
       )}
     </div>
+  );
+}
+
+const stageLabel: Record<string, string> = {
+  none: "não iniciada",
+  implementing: "implementando",
+  implemented: "implementada",
+  reviewed: "revisada",
+};
+
+/** Avanço interno por trilha, o que segura o avanço, vínculos e a diferença para o que a origem mostra. */
+function ProgressDetail({ progress: p }: { progress: IssueProgress }) {
+  return (
+    <section className="issue-progress" aria-label={`Avanço de ${p.key}`}>
+      <small>
+        Estado interno <strong>{p.internal_status}</strong>
+        {p.aggregate_status ? ` · agregado ${p.aggregate_status}` : ""}
+        {p.projection.in_sync
+          ? " · origem em dia"
+          : ` · origem mostra ${p.projection.external || "—"} (projeção atrasada${p.projection.pending ? `: ${p.projection.pending}` : ""})`}
+      </small>
+      {p.tracks.length > 0 && (
+        <small>
+          {p.tracks.map((t) => `${t.track}: ${stageLabel[t.stage]}`).join(" · ")}
+          {p.held_by ? ` · segura o avanço: ${p.held_by}` : ""}
+        </small>
+      )}
+      {p.blocking.map((b) => (
+        <small key={b} className="state-meta">
+          Bloqueio: {b}
+        </small>
+      ))}
+      {(p.commits.length > 0 || p.evidence.length > 0 || p.publications.length > 0) && (
+        <small>
+          {p.commits.length} commit(s) · {p.evidence.length} evidência(s) · {p.publications.length}{" "}
+          publicação(ões)
+        </small>
+      )}
+    </section>
   );
 }

@@ -196,7 +196,12 @@ func (s *Service) Complete(ctx context.Context, projectID, featureID, taskKey, s
 // Progress resume o andamento da feature por trilha. O status agregado segue a etapa obrigatória mais
 // atrasada: um Front revisado não leva a feature a REVIEW enquanto o Back ainda implementa.
 func (s *Service) Progress(ctx context.Context, featureID string) (status string, behind flow.Track, tracks map[flow.Track]flow.Stage, err error) {
-	rows, err := s.DB.Query(ctx, `SELECT track, impl_state, review_state FROM subtasks
+	return ProgressOf(ctx, s.DB, featureID)
+}
+
+// ProgressOf é Progress sobre qualquer leitor do banco.
+func ProgressOf(ctx context.Context, q persistence.DBTX, featureID string) (status string, behind flow.Track, tracks map[flow.Track]flow.Stage, err error) {
+	rows, err := q.Query(ctx, `SELECT track, impl_state, review_state FROM subtasks
 		WHERE feature_id::text = $1 AND plan_version = (SELECT MAX(plan_version) FROM subtasks WHERE feature_id::text = $1)`, featureID)
 	if err != nil {
 		return "", "", nil, persistence.MapError(err)

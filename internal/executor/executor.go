@@ -179,6 +179,8 @@ type Event struct {
 	Subagent     string    `json:"subagent,omitempty"`
 	InputTokens  int       `json:"input_tokens,omitempty"`
 	OutputTokens int       `json:"output_tokens,omitempty"`
+	// Progress só existe quando o executor informa (0–100). Nunca é estimado pela fábrica.
+	Progress *int `json:"progress,omitempty"`
 }
 
 // Session é a sessão nativa do executor, quando existe.

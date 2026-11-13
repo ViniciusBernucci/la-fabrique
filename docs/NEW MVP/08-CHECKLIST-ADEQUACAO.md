@@ -1,9 +1,9 @@
 # Checklist do backlog de adequação (LF-AJ)
 Acompanhamento dos 35 tickets de [Le-Fabrique-Adequacao.md](Le-Fabrique-Adequacao.md). **Fonte de verdade do estado da adequação**: atualize ao concluir ou alterar um ticket (marcar `[x]` só com evidência real). Fica separado do [07-CHECKLIST.md](07-CHECKLIST.md) porque a matriz de aceite do MVP é derivada dele.
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
-_Última atualização: 2026-11-13 — AJ05-04, AJ06-04, AJ09-03, AJ09-04._
+_Última atualização: 2026-11-13 — AJ02-03, AJ07-02, AJ07-03._
 ## Resumo
-**25 feitos · 5 parciais · 5 pendentes** de 35 tickets.
+**26 feitos · 7 parciais · 2 pendentes** de 35 tickets.
 
 ## LF-AJ-01 — Sincronização e gerenciamento de Issues
 - [x] **AJ01-01** — Leitura Jira/ClickUp: descobrir Issues elegíveis e atualizar conhecidas por ID · dep.: AJ02-01 · aceite: CT01.
@@ -20,7 +20,8 @@ _Última atualização: 2026-11-13 — AJ05-04, AJ06-04, AJ09-03, AJ09-04._
   - Catálogo com IDs estáveis (`internal/flow`), alias `REPROVED_PR` → `REPROVADO_PR` com bruto preservado, migration 00042 aditiva e mapa por projeto validado com campo do erro. PASS: `go test ./internal/flow` e integração `TestStatusCatalogIsIdempotentAndMapsPerProject` (reaplicar mantém IDs, alias converge, versão do mapa).
 - [x] **AJ02-02** — Guardas para fluxo normal, correção e estado agregado · dep.: AJ02-01 · aceite: CT03, CT06, CT13.
   - Guardas puras `flow.Check` (fluxo normal, correção, PRD incompleto, sem liberação, sem merge, cabeça obsoleta) e `flow.Aggregate` (Front revisado + Back implementando mantém IMPLEMENTACAO). PASS: `go test ./internal/flow`.
-- [ ] **AJ02-03** — Visão na página Issues: estado, avanço por trilha, bloqueios e projeção pendente · dep.: AJ02-02, AJ01-04, AJ05-02 · aceite: CT06, CT15.
+- [x] **AJ02-03** — Visão na página Issues: estado, avanço por trilha, bloqueios e projeção pendente · dep.: AJ02-02, AJ01-04, AJ05-02 · aceite: CT06, CT15.
+  - `internal/issueview` + `listIssues`: por Issue, estado interno da Sentinela, status agregado, avanço por trilha (`trackadmit.ProgressOf`), a trilha que segura o avanço, motivos de bloqueio (última recusa da Sentinela e a trilha atrasada), commits integrados, evidências por trilha, publicações na PR e a diferença entre o estado interno e a projeção na origem (com o motivo da pendência); página Issues exibe tudo por Issue. PASS: integração `TestIssueViewShowsTrackProgressBlockingAndProjectionGap`, vitest `issues.test.tsx` (97 testes), biome e tsc, contrato OpenAPI.
 
 ## LF-AJ-03 — Sentinela, escalonamento e recuperação
 - [x] **AJ03-01** — Eventos duráveis e rotinas agendadas no worker, com relógios e cursores por alvo · dep.: E10, E16 · aceite: CT02, CT15.
@@ -63,8 +64,10 @@ _Última atualização: 2026-11-13 — AJ05-04, AJ06-04, AJ09-03, AJ09-04._
 ## LF-AJ-07 — Monitoramento de agentes, terminais e interação humana
 - [~] **AJ07-01** — Capacidades CLI/API no contrato dos adaptadores de execução e recuperação · dep.: E08, E09, E11, E12 · aceite: CT07, CT10, CT14.
   - `internal/executor`: contrato único `Adapter` com `Capabilities` declaradas (sessão nativa, retomada, interação imediata/próximo ponto/nenhuma, subagentes, `Verified`), `Task` igual para CLI e API (cabeçalho determinístico do contrato + skill + instruções) e `Event` com Seq e origem. CLI configurável por `Override`; sessão nativa opt-in no `providers` (`--resume` só para o Claude; Codex não declara). API emite eventos estruturados (`gateways.RunConfig.OnEvent`) sob os mesmos limites. PASS: `go test ./internal/executor ./internal/providers ./internal/gateways` com Runner e gateway de teste. **Pendente (NOT_RUN):** as flags de sessão/retomada e o formato de `session_id` não foram verificados contra os clientes reais; capacidades dos CLIs ficam `verified=false` até a verificação por um responsável.
-- [ ] **AJ07-02** — Terminal, eventos, cronômetro, progresso e subagentes observáveis · dep.: AJ07-01 · aceite: CT10.
-- [ ] **AJ07-03** — Orientações ao agente com confirmação técnica e histórico na retomada · dep.: AJ07-02, AJ04-03 · aceite: CT07, CT10.
+- [~] **AJ07-02** — Terminal, eventos, cronômetro, progresso e subagentes observáveis · dep.: AJ07-01 · aceite: CT10.
+  - `internal/monitor` + rota `GET /projects/{id}/executions/{executionId}/monitor`: eventos normalizados do executor (CLI e API na mesma forma) gravados em `execution_events` (`agent.*`) com sequência e cursor de reconexão (a mesma infraestrutura de histórico/SSE existente), saída visível antes do fim, cronômetro, ferramentas, subagentes identificados pelo executor, progresso só quando o executor informa (subagente sem telemetria fica sem progresso), lacunas explícitas sob pressão (gravados + descartados = emitidos) e sanitização de segredos. PASS: `TestMonitorShowsLiveOutputCursorSubagentsAndNeverInventsProgress`, `TestMonitorMakesBackpressureGapsExplicit`, contrato OpenAPI. **Pendente:** tela dedicada de terminal/subagentes (o painel de execução existente lê o mesmo histórico, mas não foi verificado que renderize os tipos `agent.*`); terminal de um CLI real NOT_RUN.
+- [~] **AJ07-03** — Orientações ao agente com confirmação técnica e histórico na retomada · dep.: AJ07-02, AJ04-03 · aceite: CT07, CT10.
+  - `internal/guidance` + migration 00060: orientação com autoria, entrega conforme a capacidade (imediata, próximo ponto seguro enfileirado, ou só registrada), estado só do que foi comprovado (`acknowledged` com confirmação do cliente; `sent` sem confirmação; `uncertain` quando cai depois do envio; `undeliverable` se a execução terminou antes), recusa de texto que imita o cabeçalho do contrato/comando da fábrica, envelope que declara que não altera contrato, permissões nem aprovações, e retomada que separa pendentes de confirmadas (confirmada não é reenviada). PASS: `TestGuidanceDeliveryFollowsCapabilityAndProvenState`. **Pendente:** rota HTTP/tela de chat e o `Deliverer` real ligado ao CLI/API em execução (hoje interface com fake); CLIs reais NOT_RUN.
 
 ## LF-AJ-08 — Revisão automatizada, testes e ambiente visual
 - [x] **AJ08-01** — Política de testes, risco e review por trilha no pipeline · dep.: AJ03-03, AJ05-02, E14 · aceite: CT17.

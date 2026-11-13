@@ -114,6 +114,47 @@ describe("página Issues", () => {
     expect(screen.getByText(/ABC-1 → PRD-DOC-CONCLUIDO/)).toBeTruthy();
   });
 
+  it("mostra o avanço por trilha, o que segura o avanço e a projeção atrasada", async () => {
+    stub({
+      ...base,
+      "GET /projects/p1/issues": () =>
+        json(
+          view({
+            progress: {
+              "ABC-1": {
+                key: "ABC-1",
+                internal_status: "IMPLEMENTACAO",
+                aggregate_status: "IMPLEMENTACAO",
+                held_by: "BACKEND",
+                tracks: [
+                  { track: "FRONTEND", stage: "reviewed" },
+                  { track: "BACKEND", stage: "implementing" },
+                ],
+                blocking: [
+                  "a trilha backend é a etapa obrigatória mais atrasada e segura o avanço",
+                ],
+                commits: ["abc123"],
+                evidence: [{ track: "FRONTEND", revision: "r1" }],
+                publications: [],
+                projection: {
+                  internal: "IMPLEMENTACAO",
+                  external: "PLANEJAMENTO",
+                  in_sync: false,
+                  pending: "write: falha de escrita",
+                },
+              },
+            },
+          }),
+        ),
+    });
+    renderIssues();
+    expect(await screen.findByText(/FRONTEND: revisada · BACKEND: implementando/)).toBeTruthy();
+    expect(screen.getByText(/segura o avanço: BACKEND/)).toBeTruthy();
+    expect(screen.getByText(/Bloqueio: a trilha backend/)).toBeTruthy();
+    expect(screen.getByText(/origem mostra PLANEJAMENTO \(projeção atrasada: write/)).toBeTruthy();
+    expect(screen.getByText(/1 commit\(s\) · 1 evidência\(s\)/)).toBeTruthy();
+  });
+
   it("sincroniza agora e recarrega a lista", async () => {
     let synced = false;
     stub({

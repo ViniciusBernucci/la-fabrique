@@ -9,6 +9,7 @@ import (
 
 	"github.com/ViniciusBernucci/le-fabrique/internal/flow"
 	"github.com/ViniciusBernucci/le-fabrique/internal/issuesync"
+	"github.com/ViniciusBernucci/le-fabrique/internal/issueview"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projection"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
 	"github.com/ViniciusBernucci/le-fabrique/internal/sentinel"
@@ -101,7 +102,12 @@ func (s *Server) listIssues(w http.ResponseWriter, r *http.Request) {
 	if runs == nil {
 		runs = []issuesync.Run{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"issues": issues, "runs": runs, "pending": pend})
+	progress, err := issueview.ForProject(r.Context(), s.db, id)
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"issues": issues, "runs": runs, "pending": pend, "progress": progress})
 }
 
 // runIssueSync é o sync geral manual: mesma rotina do horário matinal.

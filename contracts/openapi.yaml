@@ -720,6 +720,24 @@ paths:
         "403": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
         "422": {$ref: "#/components/responses/Error"}
+  /projects/{id}/executions/{executionId}/monitor:
+    get:
+      tags: [operacao-ao-vivo]
+      summary: Monitor do agente (CLI e API): eventos após o cursor e resumo da execução
+      description: >
+        Eventos normalizados do executor com sequência e cursor de reconexão (`after`), cronômetro, ferramentas,
+        subagentes identificados pelo executor e o progresso que o executor informou. O progresso nunca é estimado.
+        Lacunas por pressão aparecem em `summary.dropped`.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: executionId, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: after, in: query, required: false, schema: {type: integer, minimum: 0}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000}}
+      responses:
+        "200": {description: Monitor, content: {application/json: {schema: {$ref: "#/components/schemas/ExecutionMonitor"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
   /projects/{id}/pull-requests:
     get:
       tags: [issues]
@@ -2233,6 +2251,46 @@ components:
         detail: {type: string}
         attempts: {type: integer}
         updated_at: {type: string, format: date-time}
+    ExecutionMonitor:
+      type: object
+      required: [events, cursor, summary]
+      properties:
+        events:
+          type: array
+          items:
+            type: object
+            required: [seq, kind, at]
+            properties:
+              seq: {type: integer}
+              kind: {type: string}
+              at: {type: string, format: date-time}
+              text: {type: string}
+              tool: {type: string}
+              subagent: {type: string}
+              progress: {type: integer, nullable: true}
+        cursor: {type: integer}
+        summary:
+          type: object
+          required: [elapsed_seconds, done, tool_calls, errors, dropped, subagents]
+          properties:
+            started_at: {type: string, format: date-time, nullable: true}
+            last_event_at: {type: string, format: date-time, nullable: true}
+            elapsed_seconds: {type: integer}
+            done: {type: boolean}
+            tool_calls: {type: integer}
+            errors: {type: integer}
+            dropped: {type: integer}
+            progress: {type: integer, nullable: true}
+            subagents:
+              type: array
+              items:
+                type: object
+                required: [name, events, state]
+                properties:
+                  name: {type: string}
+                  events: {type: integer}
+                  state: {type: string, enum: [running, done]}
+                  progress: {type: integer, nullable: true}
     PullRequestSyncReport:
       type: object
       required: [polled, rounds, issues, merged]
@@ -2283,6 +2341,48 @@ components:
         issues: {type: array, items: {$ref: "#/components/schemas/IssueRecord"}}
         runs: {type: array, items: {$ref: "#/components/schemas/IssueSyncRun"}}
         pending: {type: array, items: {$ref: "#/components/schemas/ProjectionPending"}}
+        progress:
+          type: object
+          description: Avanço interno por Issue (chave → visão), com trilhas, bloqueios, vínculos e diferença para a projeção na origem.
+          additionalProperties: {$ref: "#/components/schemas/IssueProgress"}
+    IssueProgress:
+      type: object
+      required: [key, internal_status, tracks, blocking, commits, evidence, publications, projection]
+      properties:
+        key: {type: string}
+        internal_status: {type: string}
+        aggregate_status: {type: string}
+        held_by: {type: string, description: Trilha que segura o avanço (etapa obrigatória mais atrasada)}
+        tracks:
+          type: array
+          items:
+            type: object
+            required: [track, stage]
+            properties:
+              track: {type: string, enum: [FRONTEND, BACKEND]}
+              stage: {type: string, enum: [none, implementing, implemented, reviewed]}
+        blocking: {type: array, items: {type: string}}
+        commits: {type: array, items: {type: string}}
+        evidence:
+          type: array
+          items:
+            type: object
+            required: [track, revision]
+            properties: {track: {type: string}, revision: {type: string}}
+        publications:
+          type: array
+          items:
+            type: object
+            required: [kind, head, state]
+            properties: {kind: {type: string}, head: {type: string}, pr_url: {type: string}, state: {type: string}}
+        projection:
+          type: object
+          required: [internal, external, in_sync]
+          properties:
+            internal: {type: string}
+            external: {type: string}
+            in_sync: {type: boolean}
+            pending: {type: string}
     SyncView:
       type: object
       required: [last, items]

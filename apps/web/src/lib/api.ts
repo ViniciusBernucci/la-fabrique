@@ -175,10 +175,24 @@ export interface ProjectionPending {
   updated_at: string;
 }
 
+export interface IssueProgress {
+  key: string;
+  internal_status: string;
+  aggregate_status?: string;
+  held_by?: string;
+  tracks: { track: string; stage: "none" | "implementing" | "implemented" | "reviewed" }[];
+  blocking: string[];
+  commits: string[];
+  evidence: { track: string; revision: string }[];
+  publications: { kind: string; head: string; pr_url?: string; state: string }[];
+  projection: { internal: string; external: string; in_sync: boolean; pending?: string };
+}
+
 export interface IssuesView {
   issues: IssueRecord[];
   runs: IssueSyncRun[];
   pending: ProjectionPending[];
+  progress?: Record<string, IssueProgress>;
 }
 
 export interface ProjectPage {
