@@ -259,8 +259,33 @@ func TestNativeSessionIsOptInAndResumeIsClaudeOnly(t *testing.T) {
 	if _, err := BuildCommand(base); err == nil {
 		t.Fatal("sessão inválida deve ser recusada")
 	}
-	codex := Request{Account: Account{ID: acct.ID, Name: "x", CLI: Codex}, Prompt: "x", Mode: ModeReadOnly, ResumeSession: "sess-12345678"}
-	if _, err := BuildCommand(codex); err == nil {
-		t.Fatal("retomada nativa não é declarada para o Codex")
+	// Codex retoma por `exec resume` (verificado): sem --sandbox/-C, o modo vai por -c e nunca fica sem proteção.
+	codex := Request{Account: Account{ID: acct.ID, Name: "x", CLI: Codex}, Prompt: "x", Mode: ModeReadOnly, ResumeSession: "01a1d659-a8e7-7b50-bf89-4209d5c3403f"}
+	c, err = BuildCommand(codex)
+	if err != nil || !has(c.Args, "exec", "resume", "01a1d659-a8e7-7b50-bf89-4209d5c3403f") || has(c.Args, "--sandbox") || has(c.Args, "-C") || !has(c.Args, "-c", `sandbox_mode="read-only"`) || has(c.Args, "--ephemeral") {
+		t.Fatalf("%v %v", c.Args, err)
+	}
+	codex.Mode = ModeWorkspaceWrite
+	if c, _ = BuildCommand(codex); !has(c.Args, "-c", `sandbox_mode="workspace-write"`) {
+		t.Fatalf("%v", c.Args)
+	}
+	// Session id fixo e entrada em fluxo: só Claude.
+	fixed := Request{Account: acct, Prompt: "x", Mode: ModeReadOnly, Persist: true, NewSessionID: "d186f63f-9a10-4fbf-9cad-b2434ae0c40d"}
+	if c, err = BuildCommand(fixed); err != nil || !has(c.Args, "--session-id", fixed.NewSessionID) || has(c.Args, "--no-session-persistence") {
+		t.Fatalf("%v %v", c.Args, err)
+	}
+	for name, r := range map[string]Request{
+		"id não UUID":      {Account: acct, Prompt: "x", Mode: ModeReadOnly, NewSessionID: "abc"},
+		"id com retomada":  {Account: acct, Prompt: "x", Mode: ModeReadOnly, NewSessionID: fixed.NewSessionID, ResumeSession: "sess-12345678"},
+		"codex com id":     {Account: Account{ID: acct.ID, Name: "x", CLI: Codex}, Prompt: "x", Mode: ModeReadOnly, NewSessionID: fixed.NewSessionID},
+		"codex interativo": {Account: Account{ID: acct.ID, Name: "x", CLI: Codex}, Prompt: "x", Mode: ModeReadOnly, Interactive: true},
+	} {
+		if _, err := BuildCommand(r); err == nil {
+			t.Errorf("%s deveria ser recusado", name)
+		}
+	}
+	inter := Request{Account: acct, Prompt: "oi", Mode: ModeReadOnly, Interactive: true}
+	if c, err = BuildCommand(inter); err != nil || !has(c.Args, "--input-format", "stream-json") || !has(c.Args, "--replay-user-messages") || !strings.Contains(c.Stdin, `"type":"user"`) {
+		t.Fatalf("%v %q %v", c.Args, c.Stdin, err)
 	}
 }

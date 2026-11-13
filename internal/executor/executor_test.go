@@ -74,20 +74,27 @@ func TestTaskNeedsAContractAndHeaderIsTheSameForBothKinds(t *testing.T) {
 
 func TestCLICapabilitiesAreConservativeAndConfigurable(t *testing.T) {
 	c := CLICapabilities(providers.Claude, nil)
-	if !c.NativeSession || !c.NativeResume || c.Interaction != InteractionNextPoint || c.Verified || c.Kind != CLI {
+	if !c.NativeSession || !c.NativeResume || c.Interaction != InteractionNextPoint || !c.Verified || c.VerifiedWith != VerifiedClaude || c.Kind != CLI {
 		t.Fatalf("%+v", c)
 	}
+	// O Codex expõe o thread_id e retoma por `exec resume` (verificado), mas não tem entrada em fluxo.
 	x := CLICapabilities(providers.Codex, nil)
-	if x.NativeSession || x.NativeResume {
-		t.Fatalf("Codex não declara sessão nativa: %+v", x)
+	if !x.NativeSession || !x.NativeResume || !x.Verified || x.VerifiedWith != VerifiedCodex {
+		t.Fatalf("Codex: %+v", x)
+	}
+	if ic := CLIInteractiveCapabilities(providers.Claude, nil); ic.Interaction != InteractionImmediate {
+		t.Fatalf("Claude em fluxo: %+v", ic)
+	}
+	if ic := CLIInteractiveCapabilities(providers.Codex, nil); ic.Interaction != InteractionNextPoint {
+		t.Fatalf("Codex não tem entrada em fluxo: %+v", ic)
 	}
 	imm, yes, no := InteractionImmediate, true, false
 	c = CLICapabilities(providers.Claude, &Override{Interaction: &imm, Verified: &yes, NativeResume: &no, Subagents: &yes})
 	if c.Interaction != InteractionImmediate || !c.Verified || c.NativeResume || !c.Subagents {
 		t.Fatalf("%+v", c)
 	}
-	// Retomar sem sessão declarada não liga sozinho.
-	c = CLICapabilities(providers.Codex, &Override{NativeResume: &yes})
+	// A configuração pode desligar a retomada, mas nunca ligá-la sem sessão nativa.
+	c = CLICapabilities(providers.Codex, &Override{NativeSession: &no, NativeResume: &yes})
 	if c.NativeResume {
 		t.Fatalf("%+v", c)
 	}

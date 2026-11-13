@@ -46,7 +46,16 @@ type Capabilities struct {
 	Skill            bool        `json:"skill"`
 	Cancel           bool        `json:"cancel"`
 	Verified         bool        `json:"verified"`
+	// VerifiedWith registra contra qual versão do cliente a capacidade foi verificada (vazio se não foi).
+	VerifiedWith string `json:"verified_with,omitempty"`
 }
+
+// Versões dos clientes contra as quais as capacidades dos CLIs foram verificadas de verdade
+// (providers/live_test.go, LF_VERIFY_CLIS=1).
+const (
+	VerifiedClaude = "claude 2.1.323"
+	VerifiedCodex  = "codex-cli 0.164.0"
+)
 
 // Override ajusta as capacidades de um CLI configurável (ex.: depois de verificar o cliente).
 type Override struct {
@@ -58,12 +67,17 @@ type Override struct {
 }
 
 // CLICapabilities devolve as capacidades declaradas do cliente, com ajustes da configuração.
-// Os padrões são conservadores e NÃO verificados contra a execução real (NOT_RUN).
+// Sessão nativa e retomada (Claude e Codex) foram verificadas contra os clientes reais; o padrão de interação é
+// o próximo ponto seguro, porque o adaptador lança o cliente com o prompt único (veja CLIInteractiveCapabilities).
 func CLICapabilities(c providers.CLI, o *Override) Capabilities {
 	base := providers.CapabilitiesOf(c)
-	caps := Capabilities{Kind: CLI, Streaming: base.Streaming, StructuredEvents: true, Interaction: InteractionNextPoint, Skill: true, Cancel: base.Cancel}
-	if c == providers.Claude {
-		caps.NativeSession, caps.NativeResume = true, true
+	caps := Capabilities{Kind: CLI, Streaming: base.Streaming, StructuredEvents: true, Interaction: InteractionNextPoint, Skill: true, Cancel: base.Cancel,
+		NativeSession: base.NativeSession, NativeResume: base.NativeResume}
+	switch c {
+	case providers.Claude:
+		caps.Verified, caps.VerifiedWith = true, VerifiedClaude
+	case providers.Codex:
+		caps.Verified, caps.VerifiedWith = true, VerifiedCodex
 	}
 	if o != nil {
 		if o.NativeSession != nil {
@@ -81,6 +95,17 @@ func CLICapabilities(c providers.CLI, o *Override) Capabilities {
 		if o.Verified != nil {
 			caps.Verified = *o.Verified
 		}
+	}
+	return caps
+}
+
+// CLIInteractiveCapabilities são as capacidades do cliente lançado com entrada em fluxo (providers.Request.Interactive):
+// o Claude aceita orientação no meio da execução e a reconhece (`--replay-user-messages`), verificado. O Codex
+// não tem esse modo: segue no próximo ponto seguro.
+func CLIInteractiveCapabilities(c providers.CLI, o *Override) Capabilities {
+	caps := CLICapabilities(c, o)
+	if c == providers.Claude && providers.CapabilitiesOf(c).InteractiveIn && (o == nil || o.Interaction == nil) {
+		caps.Interaction = InteractionImmediate
 	}
 	return caps
 }
