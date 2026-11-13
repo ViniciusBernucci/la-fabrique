@@ -1,3 +1,6 @@
+## 2026-11-12 — E15: documentação viva e Draft PR (T15-02)
+Gate de documentação por módulo e histórico vivo da feature (commits por tarefa, checks, risco, revisão, E2E); a entrega só abre a Draft PR com os gates em dia, de forma idempotente pelo ledger (repetir e resposta perdida não duplicam). GitHub real NOT_RUN. [Entrega](entregas/2026-11-12-E15-documentacao-e-draft-pr.md) · [ADR-0049](adr/0049-documentacao-viva-e-draft-pr.md).
+
 ## 2026-11-12 — E16: status, controles e logs em tempo real (T16-01)
 Resumo do projeto com controles persistidos e a causa de cada bloqueio, histórico de eventos pesquisável e fluxo SSE com reconexão pelo cursor (sem perder nem repetir), com painel de execução no detalhe do projeto. Executores gravando eventos e navegador real NOT_RUN. [Entrega](entregas/2026-11-12-E16-execucao-ao-vivo.md) · [ADR-0048](adr/0048-painel-de-execucao-ao-vivo.md).
 
