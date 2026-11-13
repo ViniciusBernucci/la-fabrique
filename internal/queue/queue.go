@@ -38,6 +38,8 @@ const (
 
 var waitReasons = map[string]bool{WaitMerge: true, WaitProvider: true, WaitDecision: true, WaitResources: true}
 
+// WaitSuspended ("suspended") é reservado ao controle operacional (SuspendNow): não é um motivo de Block.
+
 // Erros.
 var (
 	ErrNoGate   = errors.New("não há porta configurada para este motivo de espera: o retorno é recusado")
@@ -251,8 +253,13 @@ func (q *Queue) reasons(ctx context.Context, db persistence.DBTX, it Item) ([]st
 	if state != projects.StateActive {
 		out = append(out, fmt.Sprintf("o projeto não está ativo (%s)", state))
 	}
+	ctl, err := q.controlReasons(ctx, db, it)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, ctl...)
 	var holder string
-	err := db.QueryRow(ctx, `SELECT task_key FROM queue_items WHERE project_id = $1 AND slot_held AND id <> $2`, it.ProjectID, it.ID).Scan(&holder)
+	err = db.QueryRow(ctx, `SELECT task_key FROM queue_items WHERE project_id = $1 AND slot_held AND id <> $2`, it.ProjectID, it.ID).Scan(&holder)
 	switch {
 	case err == nil:
 		out = append(out, fmt.Sprintf("a vaga do projeto está ocupada pela tarefa %q", holder))

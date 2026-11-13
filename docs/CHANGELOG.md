@@ -1,3 +1,6 @@
+## 2026-11-12 — E10: controles operacionais (T10-04)
+Controles globais e por projeto, persistentes e auditados: pausar após a feature atual (feature nova não inicia, a atual termina) e suspender agora (para com checkpoint seguro, devolve a vaga e invalida o dono antigo); retomar sem reativar o que outro escopo mantém suspenso. Suspensor real e tela NOT_RUN. [Entrega](entregas/2026-11-12-E10-controles.md) · [ADR-0044](adr/0044-controles-operacionais-pausa-e-suspensao.md).
+
 ## 2026-11-12 — E14: classificação e reavaliação de risco (T14-02)
 Nível de risco = máximo entre a estimativa da IA e pisos determinísticos (arquivos críticos e tamanho do diff, por projeto), reavaliado com o diff real e justificado; os três níveis escolhem as verificações previstas. Diff real, checks de segurança e tela NOT_RUN. [Entrega](entregas/2026-11-12-E14-risco.md) · [ADR-0043](adr/0043-classificacao-de-risco-por-pisos-deterministicos.md).
 
