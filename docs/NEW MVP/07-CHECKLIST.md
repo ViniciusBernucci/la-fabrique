@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E10 (T10-02)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E14 (T14-01)._
 
 ## Resumo
 
-**19 feitos · 30 parciais · 18 pendentes** de 67 tickets.
+**19 feitos · 31 parciais · 17 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -150,7 +150,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E10 (T10-02)._
 
 ## E14 — Qualidade e revisão
 
-- [ ] **[T14-01](03-BACKLOG.md#t14-01)** — Executar baseline, critérios e checks · dep.: T05-03, T11-02.
+- [~] **[T14-01](03-BACKLOG.md#t14-01)** — Executar baseline, critérios e checks · dep.: T05-03, T11-02.
+  - PASS (unitário + PostgreSQL real + Docker real, `-race`): checks por revisão (baseline e candidata) com assinatura da falha, trecho redigido e truncado, hash e duração; regressão (passava, ou falha nova) bloqueia; falha anterior comprovada (mesma assinatura no baseline) registrada em `known_failures` e reconhecida depois, sem bloquear; origem desconhecida (sem baseline utilizável) fica em investigação, bloqueia e nunca vira baseline por suposição (resolução como anterior exige a prova de uma execução de baseline com a mesma assinatura); evidência vale só para a revisão exata; erro de infraestrutura/tempo limite é inconclusivo. **Parcial:** sem preparo automático do baseline (checkout da revisão anterior), sem montar os checks a partir do perfil do projeto, sem rotas/tela; assinatura é heurística textual. Revisão independente NOT_RUN. Entrega: [E14 checks](../entregas/2026-11-12-E14-checks-e-baseline.md).
 - [ ] **[T14-02](03-BACKLOG.md#t14-02)** — Classificar e reavaliar risco · dep.: T10-01, T14-01.
 - [ ] **[T14-03](03-BACKLOG.md#t14-03)** — Executar revisão independente e correções · dep.: T07-03, T09-04, T14-02, T12-03.
 - [ ] **[T14-04](03-BACKLOG.md#t14-04)** — Criar testes e rodar E2E por impacto · dep.: T14-01, T14-02.

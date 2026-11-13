@@ -1,3 +1,6 @@
+## 2026-11-12 — E14: checks no baseline e classificação de falhas (T14-01)
+Execução dos checks no baseline e na revisão candidata (sandbox real), evidência com assinatura da falha, regressão bloqueia, falha anterior comprovada é registrada e origem desconhecida fica em investigação sem virar baseline. Preparo do baseline e tela NOT_RUN. [Entrega](entregas/2026-11-12-E14-checks-e-baseline.md) · [ADR-0040](adr/0040-checks-baseline-e-classificacao-de-falhas.md).
+
 ## 2026-11-12 — E10: fila local por projeto (T10-02)
 Fila de tarefas técnicas: só inicia o elegível (pré-requisitos, projeto ativo, requisito sem pendência, vaga única por projeto garantida por índice), correção de PR na próxima vaga, esperas por merge/provedor/decisão/recursos e vaga devolvida só com checkpoint seguro. Scheduler, portas de provedor e tela NOT_RUN. [Entrega](entregas/2026-11-12-E10-fila-local.md) · [ADR-0039](adr/0039-fila-local-por-projeto.md).
 
