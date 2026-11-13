@@ -45,6 +45,9 @@ type Source struct {
 type Syncer struct {
 	DB       DB
 	Sentinel *sentinel.Coordinator // opcional: rastreia as Issues novas
+	// PRD, quando definido, é chamado para Issue em PRD-DOC (nova ou com revisão nova): lê o PRD da origem e
+	// roda o gate. Pendências do PRD não são erro de sync: ficam registradas e a Issue permanece em PRD-DOC.
+	PRD func(ctx context.Context, projectID string, it integrations.Item) error
 	Now      func() time.Time
 }
 
@@ -123,6 +126,11 @@ func (s *Syncer) apply(ctx context.Context, projectID string, src Source, it int
 				return oIgnored, err
 			}
 		}
+		if code == flow.PRDDoc && s.PRD != nil {
+			if err := s.PRD(ctx, projectID, it); err != nil {
+				return oNew, err
+			}
+		}
 		return oNew, nil
 	}
 	// Liberação de correção (sync geral ou consulta direcionada): a Sentinela recebe a observação ANTES de
@@ -140,6 +148,11 @@ func (s *Syncer) apply(ctx context.Context, projectID string, src Source, it int
 	if _, err := s.DB.Exec(ctx, `UPDATE issue_registry SET issue_key=$4, title=$5, description=$6, raw_status=$7, status_code=$8, revision=$9, priority=$10, url=$11, last_seen_at=$12
 		WHERE project_id=$1 AND source=$2 AND remote_id=$3`, projectID, src.Kind, it.ID, it.Key, it.Title, it.Description, it.Status, code, it.Version, it.Priority, it.URL, s.now()); err != nil {
 		return oIgnored, persistence.MapError(err)
+	}
+	if code == flow.PRDDoc && s.PRD != nil {
+		if err := s.PRD(ctx, projectID, it); err != nil {
+			return oUpdated, err
+		}
 	}
 	return oUpdated, nil
 }

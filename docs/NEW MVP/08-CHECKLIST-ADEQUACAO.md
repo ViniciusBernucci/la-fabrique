@@ -1,9 +1,9 @@
 # Checklist do backlog de adequação (LF-AJ)
 Acompanhamento dos 35 tickets de [Le-Fabrique-Adequacao.md](Le-Fabrique-Adequacao.md). **Fonte de verdade do estado da adequação**: atualize ao concluir ou alterar um ticket (marcar `[x]` só com evidência real). Fica separado do [07-CHECKLIST.md](07-CHECKLIST.md) porque a matriz de aceite do MVP é derivada dele.
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
-_Última atualização: 2026-11-13 — AJ03-04, AJ03-05, AJ03-03._
+_Última atualização: 2026-11-13 — AJ04-02._
 ## Resumo
-**28 feitos · 7 parciais · 0 pendentes** de 35 tickets.
+**29 feitos · 6 parciais · 0 pendentes** de 35 tickets.
 
 ## LF-AJ-01 — Sincronização e gerenciamento de Issues
 - [x] **AJ01-01** — Leitura Jira/ClickUp: descobrir Issues elegíveis e atualizar conhecidas por ID · dep.: AJ02-01 · aceite: CT01.
@@ -38,8 +38,8 @@ _Última atualização: 2026-11-13 — AJ03-04, AJ03-05, AJ03-03._
 ## LF-AJ-04 — Contratos determinísticos de execução
 - [x] **AJ04-01** — Schema, proveniência, invariantes e snapshot validado pela Sentinela · dep.: AJ02-01, E12, E13 · aceite: CT04.
   - `internal/contract`: proposta do Tech Lead decodificada com campos proibidos (permissões, IDs, worktree) rejeitados; caminhos fora do worktree e ciclos recusados; piso de risco e proveniência por campo; snapshots versionados com hash, encadeados e imutáveis no banco (trigger). Migration 00045. PASS: `go test ./internal/contract` e integração `TestContractSnapshotsAreVersionedHashedAndImmutable`.
-- [~] **AJ04-02** — Gate PRD e contrato inicial antes de liberar o planejamento · dep.: AJ04-01, AJ01-01, AJ03-02 · aceite: CT03.
-  - `internal/prdgate`: campos obrigatórios, conteúdo acessível, consistência e referências; pendências persistidas e Issue em PRD-DOC; válido publica exatamente um contrato inicial por revisão antes da transição a PRD-DOC-CONCLUIDO; evento forjado de agente recusado. Migration 00046. PASS: integração `TestPRDGateBlocksUntilCompleteThenPublishesOneInitialContract` (CT03). **Pendente:** ligar à leitura da origem (AJ01-01), pois o gate recebe o PRD já normalizado.
+- [x] **AJ04-02** — Gate PRD e contrato inicial antes de liberar o planejamento · dep.: AJ04-01, AJ01-01, AJ03-02 · aceite: CT03.
+  - `internal/prdgate`: campos obrigatórios, conteúdo acessível (descrição longa demais é tratada como possivelmente truncada), consistência e referências; pendências persistidas e Issue em PRD-DOC; válido publica exatamente um contrato inicial por revisão ANTES da transição a PRD-DOC-CONCLUIDO; evento forjado de agente recusado. `prdgate.FromItem`/`Gate.RunItem` leem o PRD da Issue da origem (seções `## Critérios de aceite`, `Referências`, campos por nome) e `issuesync.Syncer.PRD` chama o gate no sync para Issue em PRD-DOC nova ou com revisão nova. Migration 00046. PASS: `TestPRDGateBlocksUntilCompleteThenPublishesOneInitialContract`, `TestFromItemParsesSectionsCriteriaAndReferences`, `TestPRDReadFromTheOriginGatesTheIssueDuringSync` (CT03). **Limite:** o worker ainda não define `Syncer.PRD`: faltam os campos obrigatórios, a identidade do repositório e os limites por projeto (configuração a decidir).
 - [x] **AJ04-03** — Contrato imutável no cabeçalho de cada despacho e revisão dos insumos · dep.: AJ04-01, AJ07-01 · aceite: CT04, CT07.
   - `internal/dispatch`: `Begin`/`Run`/`Complete` entregam ao CLI e à API o contrato imutável no cabeçalho (mesmo texto, versão e hash fixados no despacho); reentrega/retomada da mesma execução recebe a mesma versão; revisão dos insumos publica outra versão para o despacho seguinte (`Stale` sinaliza) sem reescrever histórico; evidência liga versão, execução e resultado (migration 00050); sem contrato publicado nada é despachado. PASS: integração `TestDispatchCarriesTheImmutableContractAndSurvivesInputRevisions` (CT04) com adaptadores de teste; adaptadores reais cobertos em `internal/executor`.
 
