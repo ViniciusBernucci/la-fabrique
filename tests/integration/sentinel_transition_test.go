@@ -104,3 +104,60 @@ func TestSentinelIsTheOnlyAuthorityForTransitions(t *testing.T) {
 		t.Fatalf("%+v", rp)
 	}
 }
+
+// AJ03-03 — reserva atômica de vagas com geração; escritor antigo perde a autoridade.
+func TestReservationsAreAtomicAndFenceStaleWriters(t *testing.T) {
+	db := newMigratedDB(t)
+	ctx := context.Background()
+	p := mustProject(t, db.Pool, "reserv")
+	r := &sentinel.Reserver{DB: db.Pool}
+	front, err := r.Acquire(ctx, p.ID, "feat-1", "FRONTEND")
+	if err != nil || len(front) != 1 {
+		t.Fatalf("%v %v", front, err)
+	}
+	// Quem precisa das duas trilhas não fica com uma só.
+	if _, err := r.Acquire(ctx, p.ID, "feat-2", "BACKEND", "FRONTEND"); !errors.Is(err, sentinel.ErrSlotBusy) {
+		t.Fatalf("%v", err)
+	}
+	var n int
+	_ = db.Pool.QueryRow(ctx, `SELECT count(*) FROM track_reservations WHERE project_id=$1`, p.ID).Scan(&n)
+	if n != 1 {
+		t.Fatalf("a aquisição parcial não foi desfeita: %d", n)
+	}
+	// Concorrência: só um vence a mesma vaga.
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	won := 0
+	for i := 0; i < 6; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			if _, err := r.Acquire(ctx, p.ID, "h"+string(rune('a'+i)), "BACKEND"); err == nil {
+				mu.Lock()
+				won++
+				mu.Unlock()
+			}
+		}(i)
+	}
+	wg.Wait()
+	if won != 1 {
+		t.Fatalf("vencedores: %d", won)
+	}
+	// Retomada: nova geração; o escritor antigo é recusado e não libera a vaga do novo.
+	newer, err := r.Takeover(ctx, p.ID, "FRONTEND", "feat-1-recovery")
+	if err != nil || newer.Generation <= front[0].Generation {
+		t.Fatalf("%+v %v", newer, err)
+	}
+	if err := r.Validate(ctx, p.ID, front[0]); !errors.Is(err, sentinel.ErrStaleGeneration) {
+		t.Fatalf("%v", err)
+	}
+	if ok, _ := r.Release(ctx, p.ID, front[0]); ok {
+		t.Fatal("reserva antiga não pode liberar a nova")
+	}
+	if err := r.Validate(ctx, p.ID, newer); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := r.Release(ctx, p.ID, newer); !ok {
+		t.Fatal("liberação")
+	}
+}
