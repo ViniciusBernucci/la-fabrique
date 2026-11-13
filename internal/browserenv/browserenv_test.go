@@ -74,7 +74,9 @@ func (fakeDriver) Interact(context.Context, string, map[string]string) (string, 
 	return "ok", nil
 }
 func (fakeDriver) Screenshot(context.Context, string) ([]byte, error) { return []byte("png"), nil }
-func (fakeDriver) ConsoleLogs(context.Context) ([]string, error)      { return []string{"token=abc12345"}, nil }
+func (fakeDriver) ConsoleLogs(context.Context) ([]string, error) {
+	return []string{"token=abc12345"}, nil
+}
 
 func spec() Spec {
 	return Spec{ProjectID: "p1", ExecutionID: "e1", Image: "chromium-mcp:1", Allowed: []string{"http://app:3000"}}

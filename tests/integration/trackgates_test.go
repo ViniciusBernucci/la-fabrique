@@ -39,7 +39,9 @@ func TestPublishGateNeedsEveryTrackIntegratedTestsAndTheRightHead(t *testing.T) 
 	front := qualitypolicy.Decide(qualitypolicy.Input{Track: statusflow.Frontend, Suggested: risk.Low, Policy: risk.DefaultPolicy(), Available: avail})
 	back := qualitypolicy.Decide(qualitypolicy.Input{Track: statusflow.Backend, Suggested: risk.Low, Policy: risk.DefaultPolicy(), Available: avail})
 	in := trackgates.Input{FeatureID: feature, Head: "headaaaa1111", Required: []statusflow.Track{statusflow.Frontend, statusflow.Backend}}
-	has := func(res trackgates.Result, sub string) bool { return strings.Contains(strings.Join(res.Problems, "|"), sub) }
+	has := func(res trackgates.Result, sub string) bool {
+		return strings.Contains(strings.Join(res.Problems, "|"), sub)
+	}
 
 	// O Front termina cedo, com review visual.
 	if err := st.RecordTrack(ctx, feature, statusflow.Frontend, "frontrev1", front, trackEvidence(front, "frontrev1"), []trackgates.Artifact{{Kind: "screenshot", Name: "home", SHA256: "abc"}}); err != nil {
