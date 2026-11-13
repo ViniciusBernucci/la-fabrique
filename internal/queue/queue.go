@@ -79,6 +79,11 @@ type Queue struct {
 	Checkpoints *checkpoints.Store
 	Gates       map[string]Gate // por motivo de espera
 	Now         func() time.Time
+	// RequireRecovery: um item com a lease vencida NÃO é devolvido à fila às cegas por Claim;
+	// fica à espera da recuperação diagnosticada (internal/recovery), que prova quietude,
+	// checkpoint e efeitos antes. Em produção deve ser true; ExpireLeases segue sendo o
+	// caminho sem diagnóstico.
+	RequireRecovery bool
 }
 
 func (q *Queue) now() time.Time {

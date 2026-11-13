@@ -1,3 +1,6 @@
+## 2026-11-12 — E12: recuperação após falha ou reboot (T12-03)
+Tentativas interrompidas (lease vencida) são diagnosticadas item a item — quietude, checkpoint íntegro, efeitos e estado verificável — e voltam à fila sozinhas quando seguras; incerteza abre decisão e bloqueia só o afetado (a vaga só volta com quietude e checkpoint provados); limites separados por classe de falha. Inspetor real, varredura no worker e tela NOT_RUN. [Entrega](entregas/2026-11-12-E12-recuperacao.md) · [ADR-0045](adr/0045-recuperacao-de-tentativas-interrompidas.md).
+
 ## 2026-11-12 — E10: controles operacionais (T10-04)
 Controles globais e por projeto, persistentes e auditados: pausar após a feature atual (feature nova não inicia, a atual termina) e suspender agora (para com checkpoint seguro, devolve a vaga e invalida o dono antigo); retomar sem reativar o que outro escopo mantém suspenso. Suspensor real e tela NOT_RUN. [Entrega](entregas/2026-11-12-E10-controles.md) · [ADR-0044](adr/0044-controles-operacionais-pausa-e-suspensao.md).
 

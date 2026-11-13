@@ -181,8 +181,10 @@ func (q *Queue) Claim(ctx context.Context, owner, executionID string, lease time
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('scheduler', 15))`); err != nil {
 			return persistence.MapError(err)
 		}
-		if _, err := q.expireTx(ctx, tx); err != nil {
-			return err
+		if !q.RequireRecovery {
+			if _, err := q.expireTx(ctx, tx); err != nil {
+				return err
+			}
 		}
 		st, err := q.settings(ctx, tx)
 		if err != nil {
@@ -265,5 +267,85 @@ func (q *Queue) Events(ctx context.Context, itemID string) ([]string, error) {
 		out = append(out, fmt.Sprintf("%s:%s:%d", a, o, g))
 	}
 	sort.Strings(out[:0])
+	return out, persistence.MapError(rows.Err())
+}
+
+// ErrNotStale: o item não está em execução com a lease vencida (um worker vivo não pode ser tocado).
+var ErrNotStale = errors.New("o item não está em execução com a lease vencida")
+
+// RecoverRequeue devolve à fila um item interrompido (em execução com a lease VENCIDA), depois
+// que a recuperação provou que é seguro: libera a vaga e a lease e guarda o checkpoint a usar.
+// A geração só sobe na próxima reclamação.
+func (q *Queue) RecoverRequeue(ctx context.Context, itemID, checkpointID string) (Item, error) {
+	return q.recoverStale(ctx, itemID, "queued", "", "", checkpointID, false)
+}
+
+// RecoverPark põe em espera um item interrompido cuja retomada NÃO é segura (incerteza), sem
+// tocar nos demais. A vaga só é liberada com `releaseSlot` (prova de quietude e checkpoint íntegro).
+func (q *Queue) RecoverPark(ctx context.Context, itemID, reason, ref, checkpointID string, releaseSlot bool) (Item, error) {
+	if !waitReasons[reason] {
+		return Item{}, &FieldError{"reason", "use merge, provider, decision ou resources"}
+	}
+	return q.recoverStale(ctx, itemID, "waiting", reason, ref, checkpointID, !releaseSlot)
+}
+
+func (q *Queue) recoverStale(ctx context.Context, itemID, to, reason, ref, checkpointID string, holdSlot bool) (Item, error) {
+	var out Item
+	err := persistence.WithTx(ctx, q.DB, func(tx pgx.Tx) error {
+		first, err := scanItem(tx.QueryRow(ctx, `SELECT `+cols+` FROM queue_items WHERE id = $1`, itemID))
+		if err != nil {
+			return err
+		}
+		if err := lockProject(ctx, tx, first.ProjectID); err != nil {
+			return err
+		}
+		it, err := scanItem(tx.QueryRow(ctx, `SELECT `+cols+` FROM queue_items WHERE id = $1 FOR UPDATE`, itemID))
+		if err != nil {
+			return err
+		}
+		if it.State != StateRunning || it.LeaseExpires == nil || it.LeaseExpires.After(q.now()) {
+			return ErrNotStale
+		}
+		var cp, rsn any
+		if checkpointID != "" {
+			cp = checkpointID
+		}
+		if reason != "" {
+			rsn = reason
+		}
+		out, err = scanItem(tx.QueryRow(ctx, `UPDATE queue_items SET state = $2, wait_reason = $3, wait_ref = $4, checkpoint_id = COALESCE($5::uuid, checkpoint_id),
+			slot_held = $6, lease_owner = NULL, lease_expires_at = NULL, version = version + 1 WHERE id = $1 RETURNING `+cols,
+			itemID, to, rsn, ref, cp, holdSlot))
+		if err != nil {
+			return err
+		}
+		if out.Kind == KindTask {
+			state := "pending"
+			if to == "waiting" {
+				state = "blocked"
+			}
+			_, err = tx.Exec(ctx, `UPDATE plan_tasks SET state = $5, updated_at = $4 WHERE project_id = $1 AND feature_id = $2 AND task_key = $3 AND state = 'running'`,
+				out.ProjectID, out.FeatureID, out.TaskKey, q.now(), state)
+		}
+		return persistence.MapError(err)
+	})
+	return out, err
+}
+
+// ListStale devolve, sem alterar nada, os itens em execução com a lease vencida.
+func (q *Queue) ListStale(ctx context.Context) ([]Item, error) {
+	rows, err := q.DB.Query(ctx, `SELECT `+cols+` FROM queue_items WHERE state = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at <= $1 ORDER BY seq`, q.now())
+	if err != nil {
+		return nil, persistence.MapError(err)
+	}
+	defer rows.Close()
+	out := []Item{}
+	for rows.Next() {
+		it, err := scanItem(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
 	return out, persistence.MapError(rows.Err())
 }
