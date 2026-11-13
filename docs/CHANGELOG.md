@@ -1,3 +1,6 @@
+## 2026-11-12 — E12: retomada seletiva e reconciliação de insumos (T12-04)
+Retomada num nó pelo grafo congelado: valida checkpoint, versão e efeitos, incorpora mudanças compatíveis, abre decisão no conflito sem alterar nada e refaz só o conjunto afetado (dependentes só se a saída mudar). Worker, Git real e tela NOT_RUN. [Entrega](entregas/2026-11-12-E12-retomada-seletiva.md) · [ADR-0036](adr/0036-retomada-seletiva-e-reconciliacao.md).
+
 ## 2026-11-12 — E10: plano versionado da feature (T10-01)
 Contrato do plano com critérios verificáveis, risco e DAG; validador que recusa ciclo, referência ausente e critério inverificável; versões que preservam a anterior em caso de conflito; publicação das subtarefas na origem sem duplicar no retry. Agente planejador, scheduler e tela NOT_RUN. [Entrega](entregas/2026-11-12-E10-planejamento.md) · [ADR-0035](adr/0035-plano-versionado-da-feature.md).
 

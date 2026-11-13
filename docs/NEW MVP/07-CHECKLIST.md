@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E10 (T10-01)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E12 (T12-04)._
 
 ## Resumo
 
-**19 feitos · 26 parciais · 22 pendentes** de 67 tickets.
+**19 feitos · 27 parciais · 21 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -130,7 +130,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E10 (T10-01)._
 - [~] **[T12-02](03-BACKLOG.md#t12-02)** — Compor contexto seletivo e renovar sessão · dep.: T07-02, T12-01.
   - PASS (PostgreSQL real, `-race`): contexto determinístico por contrato com manifesto (hash, tokens, omissões, redação), obrigatória nunca descartada em silêncio, segredos removidos antes do hash, decisão por métrica oficial ou estimativa com margem (método gravado), sessão só sobre checkpoint íntegro da mesma execução, troca de modelo só autorizada, retomada que recusa pacote ou checkpoint adulterado, sequência sem corrida. **Parcial:** sem ligação ao worker (nada decide renovar nem cria o checkpoint do marco), memória real (T15-05) não alimenta o pacote, sem rotas/tela. Revisão independente NOT_RUN. Entrega: [E12 contexto](../entregas/2026-11-12-E12-contexto-e-sessao.md).
 - [ ] **[T12-03](03-BACKLOG.md#t12-03)** — Recuperar execução após falha ou reboot · dep.: T10-03, T12-01, T13-04.
-- [ ] **[T12-04](03-BACKLOG.md#t12-04)** — Implementar retomada seletiva e reconciliação de insumos · dep.: T07-03, T06-04, T12-01, T13-04.
+- [~] **[T12-04](03-BACKLOG.md#t12-04)** — Implementar retomada seletiva e reconciliação de insumos · dep.: T07-03, T06-04, T12-01, T13-04.
+  - PASS (unitário + PostgreSQL real, `-race`): conjunto afetado calculado no grafo congelado; reexecução só do nó escolhido (saída igual mantém dependentes; saída diferente invalida só os descendentes e o motor refaz só eles; falha mantém o estado); validação de checkpoint íntegro, versão publicada executável e efeitos (incerto bloqueia com decisão, confirmado reaproveitado); insumos × baseline com mudança compatível incorporada e conflito abrindo decisão sem alterar estado, checkpoint nem baseline; workflow original fixado mesmo se republicado. **Parcial:** sem ligação ao worker (nada chama a retomada nem grava o novo checkpoint), sem rotas/tela; a convenção de chave de efeito `exec:<execução>:<nó>:` ainda não é seguida pelos executores; fast-forward real em Git NOT_RUN (função injetada). Revisão independente NOT_RUN. Entrega: [E12 retomada](../entregas/2026-11-12-E12-retomada-seletiva.md).
 
 ## E13 — Autorizações e efeitos
 
