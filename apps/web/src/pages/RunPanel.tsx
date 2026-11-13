@@ -12,6 +12,7 @@ import {
 import { useSession } from "../lib/session";
 import { useEventStream } from "../lib/useEventStream";
 import { useResource } from "../lib/useResource";
+import { AgentMonitor, GuidanceChat } from "./AgentMonitor";
 
 const stateLabel: Record<QueueItemView["state"], string> = {
   queued: "Na fila",
@@ -214,6 +215,8 @@ export function RunPanel({ projectId }: { projectId: string }) {
                 </select>
               </label>
               {execution && <LogStream projectId={projectId} executionId={execution} />}
+              {execution && <AgentMonitor projectId={projectId} executionId={execution} />}
+              {execution && <GuidanceChat projectId={projectId} executionId={execution} />}
             </div>
           )}
         </>

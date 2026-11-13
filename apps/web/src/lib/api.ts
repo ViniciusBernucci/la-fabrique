@@ -175,6 +175,48 @@ export interface ProjectionPending {
   updated_at: string;
 }
 
+export interface MonitorEvent {
+  seq: number;
+  kind: string;
+  at: string;
+  text?: string;
+  tool?: string;
+  subagent?: string;
+  progress?: number | null;
+}
+
+export interface ExecutionMonitor {
+  events: MonitorEvent[];
+  cursor: number;
+  summary: {
+    started_at: string | null;
+    last_event_at: string | null;
+    elapsed_seconds: number;
+    done: boolean;
+    tool_calls: number;
+    errors: number;
+    dropped: number;
+    progress: number | null;
+    subagents: {
+      name: string;
+      events: number;
+      state: "running" | "done";
+      progress: number | null;
+    }[];
+  };
+}
+
+export interface GuidanceItem {
+  id: string;
+  seq: number;
+  author: string;
+  body: string;
+  mode: "immediate" | "next_safe_point" | "none";
+  state: "queued" | "sent" | "acknowledged" | "uncertain" | "undeliverable";
+  detail?: string;
+  created_at: string;
+}
+
 export interface IssueProgress {
   key: string;
   internal_status: string;
@@ -911,6 +953,23 @@ export const api = {
     request<{ items: ExecutionEvent[]; next_cursor: number }>(
       `/projects/${encodeURIComponent(projectId)}/executions/${encodeURIComponent(executionId)}/events?limit=200${q ? `&q=${encodeURIComponent(q)}` : ""}`,
       { signal },
+    ),
+
+  // Monitor do agente e orientações.
+  executionMonitor: (projectId: string, executionId: string, after: number, signal?: AbortSignal) =>
+    request<ExecutionMonitor>(
+      `/projects/${encodeURIComponent(projectId)}/executions/${encodeURIComponent(executionId)}/monitor?after=${after}&limit=500`,
+      { signal },
+    ),
+  listGuidance: (projectId: string, executionId: string, signal?: AbortSignal) =>
+    request<{ items: GuidanceItem[]; live: boolean }>(
+      `/projects/${encodeURIComponent(projectId)}/executions/${encodeURIComponent(executionId)}/guidance`,
+      { signal },
+    ),
+  sendGuidance: (projectId: string, executionId: string, text: string) =>
+    post<GuidanceItem>(
+      `/projects/${encodeURIComponent(projectId)}/executions/${encodeURIComponent(executionId)}/guidance`,
+      { text },
     ),
 
   // Issues da origem oficial (sync geral).

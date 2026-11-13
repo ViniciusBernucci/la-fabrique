@@ -738,6 +738,36 @@ paths:
         "400": {$ref: "#/components/responses/Error"}
         "401": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/executions/{executionId}/guidance:
+    get:
+      tags: [operacao-ao-vivo]
+      summary: Histórico de orientações ao agente com o estado comprovado da entrega
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: executionId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Orientações, content: {application/json: {schema: {$ref: "#/components/schemas/GuidanceList"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [operacao-ao-vivo]
+      summary: Enviar orientação ao agente da execução
+      description: >
+        Entrega imediata, enfileirada para o próximo ponto seguro, ou só registrada para a retomada, conforme a
+        capacidade do executor. O estado reflete só o que foi comprovado. A orientação não altera contrato,
+        permissões nem aprovações; texto que imita o cabeçalho do contrato ou comando da fábrica é recusado (422).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: executionId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [text], properties: {text: {type: string, maxLength: 4000}}}}}
+      responses:
+        "201": {description: Registrada, content: {application/json: {schema: {$ref: "#/components/schemas/GuidanceItem"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
   /projects/{id}/pull-requests:
     get:
       tags: [issues]
@@ -2251,6 +2281,24 @@ components:
         detail: {type: string}
         attempts: {type: integer}
         updated_at: {type: string, format: date-time}
+    GuidanceItem:
+      type: object
+      required: [id, seq, author, body, mode, state, created_at]
+      properties:
+        id: {type: string}
+        seq: {type: integer}
+        author: {type: string}
+        body: {type: string}
+        mode: {type: string, enum: [immediate, next_safe_point, none]}
+        state: {type: string, enum: [queued, sent, acknowledged, uncertain, undeliverable]}
+        detail: {type: string}
+        created_at: {type: string, format: date-time}
+    GuidanceList:
+      type: object
+      required: [items, live]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/GuidanceItem"}}
+        live: {type: boolean, description: Há um executor vivo registrado para a execução}
     ExecutionMonitor:
       type: object
       required: [events, cursor, summary]

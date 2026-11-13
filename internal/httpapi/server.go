@@ -4,6 +4,7 @@ package httpapi
 
 import (
 	"context"
+	"github.com/ViniciusBernucci/le-fabrique/internal/guidance"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -42,6 +43,7 @@ type Server struct {
 	policy   *policy.Policy
 
 	mcpAllowPrivate bool
+	guidanceLive    guidance.Registry
 	githubBase      string
 	githubPrivate   bool
 }
@@ -218,6 +220,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/projects/{id}/overview", s.protected(s.projectOverview))
 	mux.HandleFunc("GET /api/projects/{id}/executions/{executionId}/events", s.protected(s.executionEvents))
 	mux.HandleFunc("GET /api/projects/{id}/executions/{executionId}/monitor", s.protected(s.executionMonitor))
+	mux.HandleFunc("GET /api/projects/{id}/executions/{executionId}/guidance", s.protected(s.listGuidance))
+	mux.HandleFunc("POST /api/projects/{id}/executions/{executionId}/guidance", s.protected(s.sendGuidance))
 	mux.HandleFunc("GET /api/projects/{id}/executions/{executionId}/stream", s.protected(s.executionStream))
 	mux.HandleFunc("PUT /api/projects/{id}/features/{featureId}/plan", s.protected(s.proposePlan))
 	mux.HandleFunc("GET /api/projects/{id}/features/{featureId}/plan", s.protected(s.getPlan))

@@ -23,5 +23,5 @@
 - Os adaptadores Jira/ClickUp são exercitados pela suíte de contrato existente e por rastreadores de teste; o ciclo contra Jira/ClickUp/GitHub reais segue NOT_RUN.
 - O laço de execução (agente dentro da worktree, orquestração contínua pelo worker) não está ligado de ponta a ponta: a admissão por trilhas (`trackadmit`), a ativação e a recusa da fila legada existem e são testadas, mas o worker ainda não roda `trackadmit.Tick` nem `correction.Dispatcher`. Os testes simulam o agente por commits.
 - GitHub, Jira/ClickUp, Chromium com MCP, o runner real de validação do ambiente e os CLIs reais seguem NOT_RUN: as interfaces (`Reader`, `Pusher`, `PRs`, `Driver`, `Runner`, `Deliverer`) têm fakes nos testes; o Docker real foi exercitado só para isolamento e limpeza (alpine como substituto do Chromium).
-- Sem tela dedicada para as PRs gerenciadas, o terminal/subagentes e o chat de orientações (há API, histórico/SSE existente e a visão por Issue na página Issues).
+- Sem tela dedicada para as PRs gerenciadas (há API e a visão por Issue na página Issues). O terminal/subagentes e o chat de orientações têm tela no painel de execução, mas o laço que inicia o executor ainda precisa registrar-se (`guidance.Registry`/`Inbox`).
 - Comando `/fabrique fix` enviado antes da revisão formal sobre os mesmos comentários gera rodadas distintas (só revisão → comando é a mesma rodada).
