@@ -197,36 +197,61 @@ func (s *Store) Prune(ctx context.Context, projectID, executionID string, keep i
 			return persistence.MapError(err)
 		}
 		removed = int(tag.RowsAffected())
-		rows, err := tx.Query(ctx, `SELECT manifest FROM checkpoints WHERE project_id = $1`, projectID)
-		if err != nil {
-			return persistence.MapError(err)
-		}
-		live := map[string]bool{}
-		for rows.Next() {
-			var raw []byte
-			if err := rows.Scan(&raw); err != nil {
-				rows.Close()
-				return persistence.MapError(err)
-			}
-			var m Manifest
-			if json.Unmarshal(raw, &m) != nil {
-				rows.Close()
-				return fmt.Errorf("%w: manifesto ilegível", ErrCorrupt)
-			}
-			for _, f := range m.Files {
-				live[f.SHA256] = true
-			}
-			if m.Git.PatchHash != "" {
-				live[m.Git.PatchHash] = true
-			}
-		}
-		rows.Close()
-		hashes := make([]string, 0, len(live))
-		for h := range live {
-			hashes = append(hashes, h)
-		}
-		_, err = tx.Exec(ctx, `DELETE FROM checkpoint_objects WHERE project_id = $1 AND NOT (hash = ANY($2))`, projectID, hashes)
+		_, err = gcObjects(ctx, tx, projectID)
 		return persistence.MapError(err)
 	})
 	return removed, err
+}
+
+// gcObjects remove os objetos do projeto que nenhum checkpoint referencia mais (arquivos e patch).
+func gcObjects(ctx context.Context, tx pgx.Tx, projectID string) (int, error) {
+	rows, err := tx.Query(ctx, `SELECT manifest FROM checkpoints WHERE project_id = $1`, projectID)
+	if err != nil {
+		return 0, persistence.MapError(err)
+	}
+	live := map[string]bool{}
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			rows.Close()
+			return 0, persistence.MapError(err)
+		}
+		var m Manifest
+		if json.Unmarshal(raw, &m) != nil {
+			rows.Close()
+			return 0, fmt.Errorf("%w: manifesto ilegível", ErrCorrupt)
+		}
+		for _, f := range m.Files {
+			live[f.SHA256] = true
+		}
+		if m.Git.PatchHash != "" {
+			live[m.Git.PatchHash] = true
+		}
+	}
+	rows.Close()
+	hashes := make([]string, 0, len(live))
+	for h := range live {
+		hashes = append(hashes, h)
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM checkpoint_objects WHERE project_id = $1 AND NOT (hash = ANY($2))`, projectID, hashes)
+	return int(tag.RowsAffected()), persistence.MapError(err)
+}
+
+// Delete remove os checkpoints informados (do projeto) e os objetos que ficaram sem referência.
+// Quem chama decide o que é elegível (a retenção); aqui só se garante que objetos usados por
+// outros checkpoints permanecem. Devolve quantos checkpoints e objetos foram removidos.
+func (s *Store) Delete(ctx context.Context, projectID string, ids []string) (checkpoints, objects int, err error) {
+	if len(ids) == 0 {
+		return 0, 0, nil
+	}
+	err = persistence.WithTx(ctx, s.DB, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `DELETE FROM checkpoints WHERE project_id = $1 AND id::text = ANY($2)`, projectID, ids)
+		if err != nil {
+			return persistence.MapError(err)
+		}
+		checkpoints = int(tag.RowsAffected())
+		objects, err = gcObjects(ctx, tx, projectID)
+		return err
+	})
+	return
 }

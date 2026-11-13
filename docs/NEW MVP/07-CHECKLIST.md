@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E15 (T15-02)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E16 (T16-04)._
 
 ## Resumo
 
-**19 feitos · 40 parciais · 8 pendentes** de 67 tickets.
+**19 feitos · 41 parciais · 7 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -179,7 +179,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E15 (T15-02)._
 - [ ] **[T16-02](03-BACKLOG.md#t16-02)** — Consolidar Central e auditoria operacional · dep.: T13-03, T13-05, T15-04, T16-01.
 - [~] **[T16-03](03-BACKLOG.md#t16-03)** — Exibir consumo, orçamento e provedores · dep.: T09-03, T09-04, T03-03.
   - PASS (PostgreSQL real + vitest + Biome/tsc): tela `/usage` com tetos, gasto, reservas e disponível; gasto em API por origem (reportado, estimado, reconciliação) separado do consumo de assinatura; cota só quando observada (senão "não observada"/"sem limite observado", nunca zero); disponibilidade por conta com causa, sinal e retorno; "Bloqueia novas chamadas" no teto esgotado e aviso sem teto global. **Parcial:** somente leitura (sem editar teto nem período), sem verificação em navegador real, provedores reais NOT_RUN. Revisão independente NOT_RUN. Entrega: [E16 consumo](../entregas/2026-11-12-E16-consumo-e-provedores.md).
-- [ ] **[T16-04](03-BACKLOG.md#t16-04)** — Automatizar retenção com integridade · dep.: T12-01, T16-01.
+- [~] **[T16-04](03-BACKLOG.md#t16-04)** — Automatizar retenção com integridade · dep.: T12-01, T16-01.
+  - PASS (PostgreSQL real, `-race`): logs detalhados com mais de 30 dias removidos DEPOIS de gravar o resumo permanente (contagens, tipos, horários, último seq) e sem reaproveitar seq (cursores seguem válidos); checkpoints de execuções concluídas removidos só após a carência, com os objetos órfãos (objeto compartilhado preservado); bloqueado, usado por sessão do agente, em execução/falho e ligado a incidente (decisão pendente, efeito sem confirmação) continuam íntegros e restauráveis (manifesto, estado e todos os objetos conferidos); relógio de teste só remove o elegível; simulação sem efeito; auditoria por item com o motivo; proteção liberada vira elegível. **Parcial:** nada agenda a retenção (sem laço no worker), sem rotas/tela; o resumo guarda contagens, não o conteúdo; carência conta pela última atualização da execução. Revisão independente NOT_RUN. Entrega: [E16 retenção](../entregas/2026-11-12-E16-retencao.md).
 
 ## E17 — Piloto e aceite
 

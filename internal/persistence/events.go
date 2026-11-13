@@ -17,7 +17,8 @@ type Event struct {
 	Payload     json.RawMessage
 }
 
-// AppendEvent grava o próximo evento da execução. Trava a linha da execução
+// AppendEvent grava o próximo evento da execução. A sequência nunca reaproveita um seq de
+// evento removido pela retenção (o último seq fica no resumo da execução). Trava a linha da execução
 // (escopada ao projeto) para que a sequência seja monotônica sem lacunas, mesmo
 // com escritores concorrentes. Deve ser chamado dentro de uma transação.
 func AppendEvent(ctx context.Context, tx pgx.Tx, projectID, executionID, eventType string, payload any) (Event, error) {
@@ -38,7 +39,7 @@ func AppendEvent(ctx context.Context, tx pgx.Tx, projectID, executionID, eventTy
 	ev := Event{ExecutionID: executionID, ProjectID: projectID, Type: eventType, Payload: raw}
 	err = tx.QueryRow(ctx, `
 		INSERT INTO execution_events (execution_id, seq, project_id, type, payload)
-		SELECT $1, COALESCE(MAX(seq), 0) + 1, $2, $3, $4::jsonb
+		SELECT $1, GREATEST(COALESCE(MAX(seq), 0), COALESCE((SELECT last_seq FROM execution_summaries WHERE execution_id = $1), 0)) + 1, $2, $3, $4::jsonb
 		FROM execution_events WHERE execution_id = $1
 		RETURNING seq`,
 		executionID, projectID, eventType, string(raw)).Scan(&ev.Seq)

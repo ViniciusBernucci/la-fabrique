@@ -1,3 +1,6 @@
+## 2026-11-12 — E16: retenção com integridade (T16-04)
+Logs detalhados removidos após 30 dias com resumo permanente e seq preservado; checkpoints de execuções concluídas removidos após carência, sem tocar em bloqueados nem em ligados a incidente, com conferência de integridade, simulação e auditoria por item. Agendamento e tela NOT_RUN. [Entrega](entregas/2026-11-12-E16-retencao.md) · [ADR-0050](adr/0050-retencao-com-integridade.md).
+
 ## 2026-11-12 — E15: documentação viva e Draft PR (T15-02)
 Gate de documentação por módulo e histórico vivo da feature (commits por tarefa, checks, risco, revisão, E2E); a entrega só abre a Draft PR com os gates em dia, de forma idempotente pelo ledger (repetir e resposta perdida não duplicam). GitHub real NOT_RUN. [Entrega](entregas/2026-11-12-E15-documentacao-e-draft-pr.md) · [ADR-0049](adr/0049-documentacao-viva-e-draft-pr.md).
 
