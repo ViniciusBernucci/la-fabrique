@@ -58,5 +58,8 @@ func registerIssueSync(sch *sentinel.Scheduler, pool *pgxpool.Pool, cfg config.W
 		return issuesync.Source{Kind: p.Source.Kind, Container: p.Source.Container, Map: m.ProjectMap}, tr, nil
 	}
 	sy := &issuesync.Syncer{DB: pool, Sentinel: &sentinel.Coordinator{DB: pool}}
-	return sch.Register(sy.Routine(resolve, sentinel.DailyAt{Hour: cfg.IssueSyncHour, Loc: loc}))
+	if err := sch.Register(sy.Routine(resolve, sentinel.DailyAt{Hour: cfg.IssueSyncHour, Loc: loc})); err != nil {
+		return err
+	}
+	return sch.Register(sy.TargetedRoutine(resolve, cfg.CorrectionsPollInterval))
 }

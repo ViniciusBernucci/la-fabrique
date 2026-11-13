@@ -125,6 +125,13 @@ func (s *Syncer) apply(ctx context.Context, projectID string, src Source, it int
 		}
 		return oNew, nil
 	}
+	// Liberação de correção (sync geral ou consulta direcionada): a Sentinela recebe a observação ANTES de
+	// o registro mudar; se falhar, o item continua aguardando e a próxima consulta repete (deduplicada).
+	if kindDB == "correction" && code == flow.CorrecaoPR {
+		if err := s.forwardRelease(ctx, projectID, it); err != nil {
+			return oIgnored, err
+		}
+	}
 	if rev == it.Version && it.Version != "" {
 		_, err := s.DB.Exec(ctx, `UPDATE issue_registry SET last_seen_at=$4 WHERE project_id=$1 AND source=$2 AND remote_id=$3`, projectID, src.Kind, it.ID, s.now())
 		return oSame, persistence.MapError(err)

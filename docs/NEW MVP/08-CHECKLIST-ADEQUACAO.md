@@ -1,16 +1,17 @@
 # Checklist do backlog de adequação (LF-AJ)
 Acompanhamento dos 35 tickets de [Le-Fabrique-Adequacao.md](Le-Fabrique-Adequacao.md). **Fonte de verdade do estado da adequação**: atualize ao concluir ou alterar um ticket (marcar `[x]` só com evidência real). Fica separado do [07-CHECKLIST.md](07-CHECKLIST.md) porque a matriz de aceite do MVP é derivada dele.
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
-_Última atualização: 2026-11-13 — AJ01-01, AJ01-02._
+_Última atualização: 2026-11-13 — AJ01-03._
 ## Resumo
-**7 feitos · 2 parciais · 26 pendentes** de 35 tickets.
+**8 feitos · 2 parciais · 25 pendentes** de 35 tickets.
 
 ## LF-AJ-01 — Sincronização e gerenciamento de Issues
 - [x] **AJ01-01** — Leitura Jira/ClickUp: descobrir Issues elegíveis e atualizar conhecidas por ID · dep.: AJ02-01 · aceite: CT01.
   - `internal/issuesync`: sync geral paginado com Issues fechadas incluídas, importa só novas em PRD-DOC/CORRECAO_PR (pelo mapa de status do projeto), ignora desconhecidas em outros estados, atualiza as conhecidas em qualquer estado por ID (GetItem quando a listagem não traz), upsert por projeto+origem+ID remoto, prioridade local preservada; novas são rastreadas pela Sentinela. Migration 00048. PASS: integração `TestIssueSyncDiscoversEntryStatesAndUpdatesKnownOnes` (jira e clickup, via Tracker simétrico; os adaptadores reais seguem cobertos pela suíte de contrato existente) e `TestIssuesAPIStatusMapManualSyncAndHistory` contra o fake Jira.
 - [x] **AJ01-02** — Sync matinal e manual com resultado na página Issues · dep.: AJ01-01, AJ03-01 · aceite: CT01, CT15.
   - Rotina matinal `issues.sync` por fuso (uma vez por janela, backoff e erro/último sucesso por escopo) + sync manual `POST /projects/{id}/issues/sync` que usa a mesma função; falha paginada vira `partial` com progresso preservado; página **Issues** no painel (lista, status canônico, histórico, botão Sincronizar agora); rotas de mapa de status. PASS: integração `TestMorningIssueSync…`, `TestIssueSyncKeepsProgressWhenAPageFails`, `TestIssuesAPI…`, vitest `issues.test.tsx`, contrato OpenAPI. O worker só registra o sync com `SENTINEL_ISSUE_SYNC=true` (exige `VAULT_KEY` no worker; decisão de implantação, desligado por padrão).
-- [ ] **AJ01-03** — Consulta por ID das correções aguardando liberação · dep.: AJ01-01, AJ03-01 · aceite: CT02.
+- [x] **AJ01-03** — Consulta por ID das correções aguardando liberação · dep.: AJ01-01, AJ03-01 · aceite: CT02.
+  - `Syncer.Targeted`: consulta POR ID só as correções em REPROVADO_PR aguardando liberação (nunca lista a origem), atualiza o registro e encaminha à Sentinela a observação de CORRECAO_PR (liberação humana + vínculo à feature/PR); a chave é a revisão observada, então consulta direcionada, sync geral e reentregas concorrentes viram uma só liberação; encaminha antes de atualizar o registro (falha mantém o item em espera). Rotina `corrections.poll` com intervalo próprio (`CORRECTIONS_POLL_INTERVAL`, dentro do opt-in do worker). PASS: integração `TestTargetedPollReleasesCorrectionsOnlyForPendingIDs` (CT02: alias legado converge, 3 goroutines + sync geral = 1 liberação).
 - [ ] **AJ01-04** — Projeção Jira/ClickUp e pendências de mapeamento/conflito/escrita · dep.: AJ01-01, AJ02-02, AJ03-02 · aceite: CT01, CT15.
 
 ## LF-AJ-02 — Catálogo de status e transições

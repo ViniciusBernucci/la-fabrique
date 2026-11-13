@@ -70,8 +70,10 @@ type Worker struct {
 	IssueSync     bool
 	IssueSyncHour int
 	IssueSyncTZ   string
-	VaultKey      []byte
-	VaultKeyID    string
+	// CorrectionsPollInterval é o intervalo da consulta direcionada das correções aguardando liberação.
+	CorrectionsPollInterval time.Duration
+	VaultKey                []byte
+	VaultKeyID              string
 }
 
 // Migrate é a configuração do cmd/migrate.
@@ -272,6 +274,7 @@ func LoadWorker(lookup Lookup) (Worker, error) {
 			l.fail("ISSUE_SYNC_HOUR deve ser de 0 a 23")
 		}
 		cfg.IssueSyncHour = hour
+		cfg.CorrectionsPollInterval = l.duration("CORRECTIONS_POLL_INTERVAL", 5*time.Minute, 30*time.Second)
 	}
 	return cfg, l.result()
 }
