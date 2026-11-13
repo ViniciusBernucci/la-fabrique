@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E15 (T15-04)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E15 (T15-05)._
 
 ## Resumo
 
-**19 feitos · 43 parciais · 5 pendentes** de 67 tickets.
+**19 feitos · 44 parciais · 4 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -172,7 +172,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E15 (T15-04)._
   - PASS (PostgreSQL real, `-race`; API do GitHub de mentira em HTTP): consulta da PR só sob demanda (falha de consulta não altera nada e é auditada); aberta e fechada sem merge não liberam nem concluem; "integrada" sem SHA não libera; merge com SHA registra o SHA e o horário, conclui o item na origem pelo ledger e devolve à fila os itens que esperavam esse merge (porta `MergeGate`); falha ao projetar o status fica visível (`projection = failed`) e reconciliável sem concluir duas vezes; observação do merge auditada uma vez. **Parcial:** GitHub real NOT_RUN; nada aciona `Observe` a partir do worker/painel (ponto D89 ainda sem ligação), sem rotas/tela; dependência entre features e promoção de memória (T15-05) e as ações do fechamento sem merge (T15-04) pendentes. Revisão independente NOT_RUN. Entrega: [E15 merge](../entregas/2026-11-12-E15-merge.md).
 - [~] **[T15-04](03-BACKLOG.md#t15-04)** — Corrigir revisão externa e tratar PR fechada · dep.: T15-03, T13-02, T10-02.
   - PASS (PostgreSQL real, `-race`; API do GitHub de mentira em HTTP): comentários só de autores autorizados, redigidos, registrados uma vez por identificador e conteúdo (editado vira trabalho novo) e ligados a um único item de correção na próxima vaga; correção só conta com docs atualizadas e checks aprovados; PR fechada conserva PR, documentação e comentários (retidos), oferta única das três ações; reabrir confere no GitHub antes de mudar o estado, cancelar cancela os itens ativos, nova tentativa limitada; histórico com autor; tentativa encerrada ou sem `retry` não é entregue de novo. **Parcial:** GitHub real NOT_RUN; a execução da correção pelo agente/worker e o acionamento da descoberta (D89) não estão ligados; sem rotas/tela. Revisão independente NOT_RUN. Entrega: [E15 revisão externa](../entregas/2026-11-12-E15-revisao-externa-e-pr-fechada.md).
-- [ ] **[T15-05](03-BACKLOG.md#t15-05)** — Manter memória técnica pendente e oficial · dep.: T15-03, T12-02.
+- [~] **[T15-05](03-BACKLOG.md#t15-05)** — Manter memória técnica pendente e oficial · dep.: T15-03, T12-02.
+  - PASS (PostgreSQL real, `-race`): registros com evidência obrigatória, chave normalizada e deduplicação por branch (evidências somadas, versão mais recente vale), conteúdo redigido; todo acesso escopado por projeto (A não lê, invalida nem promove o que é de B); pendente visível só na própria branch; PR aberta ou fechada sem merge não promove; merge confirmado promove só o que se refere à revisão integrada (o resto é invalidado com motivo), duplicata soma evidência ao oficial, fato mudado substitui o anterior, repetir não muda nada; invalidação manual e validador opcional; lições extraídas de achados de revisão corrigidos sem duplicar. **Parcial:** sem ligação ao montador de contexto/worker, sem rotas/tela; extração só de achados de revisão; validade é checagem por revisão (sem avaliação semântica do conteúdo); GitHub real NOT_RUN. Revisão independente NOT_RUN. Entrega: [E15 memória](../entregas/2026-11-12-E15-memoria-tecnica.md).
 
 ## E16 — Operação, uso e retenção
 

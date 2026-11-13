@@ -1,3 +1,6 @@
+## 2026-11-12 — E15: memória técnica pendente e oficial (T15-05)
+Registros de memória com evidência, deduplicação e escopo por projeto; pendentes só na própria branch; só o merge confirmado promove, e só o que vale para a revisão integrada (duplicata soma evidência, fato mudado substitui o oficial); lições extraídas de achados de revisão corrigidos. Ligação ao contexto/worker e telas NOT_RUN. [Entrega](entregas/2026-11-12-E15-memoria-tecnica.md) · [ADR-0053](adr/0053-memoria-tecnica-pendente-e-oficial.md).
+
 ## 2026-11-12 — E15: revisão externa e PR fechada (T15-04)
 Comentários de autores autorizados descobertos sob demanda viram um só item de correção (o mesmo comentário não duplica trabalho); PR fechada conserva artefatos e oferece cancelar, reabrir (conferida no GitHub) e nova tentativa limitada, com histórico e decisão respeitada. GitHub real e execução da correção pelo worker NOT_RUN. [Entrega](entregas/2026-11-12-E15-revisao-externa-e-pr-fechada.md) · [ADR-0052](adr/0052-revisao-externa-e-pr-fechada.md).
 
