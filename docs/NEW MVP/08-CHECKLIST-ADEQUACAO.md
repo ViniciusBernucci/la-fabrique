@@ -1,9 +1,9 @@
 # Checklist do backlog de adequação (LF-AJ)
 Acompanhamento dos 35 tickets de [Le-Fabrique-Adequacao.md](Le-Fabrique-Adequacao.md). **Fonte de verdade do estado da adequação**: atualize ao concluir ou alterar um ticket (marcar `[x]` só com evidência real). Fica separado do [07-CHECKLIST.md](07-CHECKLIST.md) porque a matriz de aceite do MVP é derivada dele.
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
-_Última atualização: 2026-11-13 — AJ04-03._
+_Última atualização: 2026-11-13 — AJ05-02._
 ## Resumo
-**10 feitos · 3 parciais · 22 pendentes** de 35 tickets.
+**11 feitos · 3 parciais · 21 pendentes** de 35 tickets.
 
 ## LF-AJ-01 — Sincronização e gerenciamento de Issues
 - [x] **AJ01-01** — Leitura Jira/ClickUp: descobrir Issues elegíveis e atualizar conhecidas por ID · dep.: AJ02-01 · aceite: CT01.
@@ -42,7 +42,8 @@ _Última atualização: 2026-11-13 — AJ04-03._
 
 ## LF-AJ-05 — Workflow padrão, planejamento técnico e subtarefas
 - [ ] **AJ05-01** — Workflow estrutural no cadastro com caminhos de feature e correção · dep.: AJ02-02, E05, E07 · aceite: CT14.
-- [ ] **AJ05-02** — Validar proposta do Tech Lead e materializar plano e subtarefas internas · dep.: AJ04-01, E10 · aceite: CT04, CT05.
+- [x] **AJ05-02** — Validar proposta do Tech Lead e materializar plano e subtarefas internas · dep.: AJ04-01, E10 · aceite: CT04, CT05.
+  - `internal/techplan`: valida a proposta (plano geral + trilha FRONTEND/BACKEND coerente com os arquivos, tarefa mista recusada salvo indivisível com responsabilidade predominante, acesso exclusivo às duas trilhas só para indivisível, ciclo bloqueia), deriva recursos compartilhados por caminho (contrato de API, schema, dependências, config), grava o plano versionado e materializa subtarefas só na fábrica (migration 00051, idempotente). PASS: `go test ./internal/techplan` e integração `TestTechLeadPlanBecomesInternalSubtasksOnly` (ciclo não grava; sem remote_id nem efeito na outbox).
 - [ ] **AJ05-03** — Configuração manual dos nós, publicação, ativação e fixação de versão · dep.: AJ05-01, AJ07-01 · aceite: CT14, CT16.
 - [ ] **AJ05-04** — Plano focalizado de correção a partir da rodada e da cabeça da PR · dep.: AJ05-02, AJ09-02 · aceite: CT11, CT12.
 

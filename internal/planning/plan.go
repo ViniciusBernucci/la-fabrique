@@ -55,6 +55,11 @@ type Task struct {
 	DependsOn   []string    `json:"depends_on"`
 	Order       int         `json:"order"` // estimativa de ordem (desempate)
 	Paths       []string    `json:"paths,omitempty"`
+	// Trilha e recursos (adequação, LF-AJ-05): classificação, indivisibilidade e recursos compartilhados.
+	Track           string   `json:"track,omitempty"`
+	Indivisible     bool     `json:"indivisible,omitempty"`
+	ExclusiveBoth   bool     `json:"exclusive_both,omitempty"`
+	SharedResources []string `json:"shared_resources,omitempty"`
 }
 
 // Plan é o plano de uma feature.
@@ -304,6 +309,10 @@ func normalizeTask(t Task) Task {
 	sort.Strings(t.DependsOn)
 	t.Paths = append([]string{}, t.Paths...)
 	sort.Strings(t.Paths)
+	if t.SharedResources != nil {
+		t.SharedResources = append([]string{}, t.SharedResources...)
+		sort.Strings(t.SharedResources)
+	}
 	if t.Criteria == nil {
 		t.Criteria = []Criterion{}
 	}
