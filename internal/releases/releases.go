@@ -18,6 +18,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
 	"github.com/ViniciusBernucci/le-fabrique/internal/skills"
+	"github.com/ViniciusBernucci/le-fabrique/internal/stdflow"
 	"github.com/ViniciusBernucci/le-fabrique/internal/tools"
 	"github.com/ViniciusBernucci/le-fabrique/internal/workflows"
 )
@@ -245,6 +246,14 @@ func (p *Publisher) Publish(ctx context.Context, workflowID string, expectedDraf
 		var problems []Problem
 		for _, is := range workflows.Validate(wf.Graph) {
 			problems = append(problems, Problem{Node: is.Node, Code: is.Code, Message: is.Message})
+		}
+		// Workflow de projeto: nenhuma personalização pode contornar as guardas obrigatórias da Sentinela.
+		if managed, merr := stdflow.Managed(ctx, tx, workflowID); merr != nil {
+			return persistence.MapError(merr)
+		} else if managed {
+			for _, is := range workflows.GuardIssues(wf.Graph) {
+				problems = append(problems, Problem{Node: is.Node, Code: is.Code, Message: is.Message})
+			}
 		}
 		if len(problems) > 0 {
 			return &PublishError{Problems: problems}

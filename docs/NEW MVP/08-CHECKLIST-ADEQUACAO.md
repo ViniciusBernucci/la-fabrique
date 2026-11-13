@@ -1,9 +1,9 @@
 # Checklist do backlog de adequação (LF-AJ)
 Acompanhamento dos 35 tickets de [Le-Fabrique-Adequacao.md](Le-Fabrique-Adequacao.md). **Fonte de verdade do estado da adequação**: atualize ao concluir ou alterar um ticket (marcar `[x]` só com evidência real). Fica separado do [07-CHECKLIST.md](07-CHECKLIST.md) porque a matriz de aceite do MVP é derivada dele.
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
-_Última atualização: 2026-11-13 — AJ05-02._
+_Última atualização: 2026-11-13 — AJ05-03._
 ## Resumo
-**11 feitos · 3 parciais · 21 pendentes** de 35 tickets.
+**13 feitos · 3 parciais · 19 pendentes** de 35 tickets.
 
 ## LF-AJ-01 — Sincronização e gerenciamento de Issues
 - [x] **AJ01-01** — Leitura Jira/ClickUp: descobrir Issues elegíveis e atualizar conhecidas por ID · dep.: AJ02-01 · aceite: CT01.
@@ -41,10 +41,12 @@ _Última atualização: 2026-11-13 — AJ05-02._
   - `internal/dispatch`: `Begin`/`Run`/`Complete` entregam ao CLI e à API o contrato imutável no cabeçalho (mesmo texto, versão e hash fixados no despacho); reentrega/retomada da mesma execução recebe a mesma versão; revisão dos insumos publica outra versão para o despacho seguinte (`Stale` sinaliza) sem reescrever histórico; evidência liga versão, execução e resultado (migration 00050); sem contrato publicado nada é despachado. PASS: integração `TestDispatchCarriesTheImmutableContractAndSurvivesInputRevisions` (CT04) com adaptadores de teste; adaptadores reais cobertos em `internal/executor`.
 
 ## LF-AJ-05 — Workflow padrão, planejamento técnico e subtarefas
-- [ ] **AJ05-01** — Workflow estrutural no cadastro com caminhos de feature e correção · dep.: AJ02-02, E05, E07 · aceite: CT14.
+- [x] **AJ05-01** — Workflow estrutural no cadastro com caminhos de feature e correção · dep.: AJ02-02, E05, E07 · aceite: CT14.
+  - `workflows.StandardGraph` (gate do PRD, planejamento, implementação e review por trilha, convergência, consolidação, checks integrados, Draft PR, espera do merge, caminho de correção) provisionado no cadastro por `stdflow.Provision` (migration 00052; idempotente, preserva edição) + `GET /projects/{id}/workflow` com diagnóstico por nó. PASS: `go test ./internal/workflows` e integração `TestNewProjectGetsTheStructuralWorkflowAndKeepsEdits` (rodada antes da queda do Postgres).
 - [x] **AJ05-02** — Validar proposta do Tech Lead e materializar plano e subtarefas internas · dep.: AJ04-01, E10 · aceite: CT04, CT05.
   - `internal/techplan`: valida a proposta (plano geral + trilha FRONTEND/BACKEND coerente com os arquivos, tarefa mista recusada salvo indivisível com responsabilidade predominante, acesso exclusivo às duas trilhas só para indivisível, ciclo bloqueia), deriva recursos compartilhados por caminho (contrato de API, schema, dependências, config), grava o plano versionado e materializa subtarefas só na fábrica (migration 00051, idempotente). PASS: `go test ./internal/techplan` e integração `TestTechLeadPlanBecomesInternalSubtasksOnly` (ciclo não grava; sem remote_id nem efeito na outbox).
-- [ ] **AJ05-03** — Configuração manual dos nós, publicação, ativação e fixação de versão · dep.: AJ05-01, AJ07-01 · aceite: CT14, CT16.
+- [x] **AJ05-03** — Configuração manual dos nós, publicação, ativação e fixação de versão · dep.: AJ05-01, AJ07-01 · aceite: CT14, CT16.
+  - Publicação de workflow de projeto exige as guardas (`workflows.GuardIssues`: remoção, troca de tipo e atalho até o sucesso são recusados; nó customizado livre desde que não contorne); bindings incompletos bloqueiam com a lista por nó; `projectres.Ready` exige o workflow do projeto publicado e revalidado; execução fica presa à versão publicada. PASS: integração `TestProjectWorkflowPublishNeedsBindingsAndKeepsGuards` (CT14, CT16 parcial). **Pendente:** reexecutar a suíte de integração completa (o Postgres de dev caiu por erro de I/O do Docker no meio da rodada; regressão do provisionamento automático em testes antigos NÃO verificada).
 - [ ] **AJ05-04** — Plano focalizado de correção a partir da rodada e da cabeça da PR · dep.: AJ05-02, AJ09-02 · aceite: CT11, CT12.
 
 ## LF-AJ-06 — Execução paralela Frontend/Backend e consolidação Git

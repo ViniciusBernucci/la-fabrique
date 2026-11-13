@@ -7,6 +7,9 @@ import (
 
 	"github.com/ViniciusBernucci/le-fabrique/internal/integrations"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
+	"github.com/ViniciusBernucci/le-fabrique/internal/releases"
+	"github.com/ViniciusBernucci/le-fabrique/internal/stdflow"
+	"github.com/ViniciusBernucci/le-fabrique/internal/workflows"
 )
 
 func (s *Server) projectID(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -40,7 +43,40 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 		s.writeDomainError(w, r, err)
 		return
 	}
+	// O cadastro entrega o workflow estrutural (rascunho editável) e o catálogo de status. Falhou aqui?
+	// O projeto existe e GET /projects/{id}/workflow provisiona na primeira consulta.
+	_ = s.flowStore().EnsureCatalog(r.Context())
+	if _, _, perr := stdflow.Provision(r.Context(), s.db, p.ID, p.Name); perr != nil {
+		s.log.Warn("workflow padrão não provisionado no cadastro", "project", p.ID)
+	}
 	writeJSON(w, http.StatusCreated, p)
+}
+
+// getProjectWorkflow devolve o workflow estrutural do projeto (provisiona se ainda não existir) e o
+// diagnóstico por nó do que falta configurar antes de publicar.
+func (s *Server) getProjectWorkflow(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.projectID(w, r)
+	if !ok {
+		return
+	}
+	p, err := projects.Get(r.Context(), s.db, id)
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	wf, created, err := stdflow.Provision(r.Context(), s.db, id, p.Name)
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	issues := workflows.Validate(wf.Graph)
+	issues = append(issues, workflows.GuardIssues(wf.Graph)...)
+	if issues == nil {
+		issues = []workflows.Issue{}
+	}
+	_, perr := releases.Published(r.Context(), s.db, wf.ID)
+	writeJSON(w, http.StatusOK, map[string]any{"workflow_id": wf.ID, "name": wf.Name, "version": wf.Version, "created": created,
+		"published": perr == nil, "issues": issues})
 }
 
 type repositoryBody struct {

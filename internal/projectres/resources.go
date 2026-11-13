@@ -17,6 +17,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/releases"
 	"github.com/ViniciusBernucci/le-fabrique/internal/selection"
 	"github.com/ViniciusBernucci/le-fabrique/internal/skills"
+	"github.com/ViniciusBernucci/le-fabrique/internal/stdflow"
 	"github.com/ViniciusBernucci/le-fabrique/internal/tools"
 	"github.com/ViniciusBernucci/le-fabrique/internal/workflows"
 )
@@ -369,6 +370,29 @@ func Ready(ctx context.Context, db persistence.DBTX, projectID string) (Readines
 		out.Problems = append(out.Problems, "nenhum fluxo padrão definido na seleção do projeto")
 	} else {
 		out.Target = cfg.Default
+	}
+	// Workflow estrutural do projeto (adequação): rascunho incompleto ou sem versão publicada não executa.
+	wfID, err := stdflow.Of(ctx, db, projectID)
+	if err != nil {
+		return Readiness{}, err
+	}
+	if wfID != "" {
+		ver, perr := releases.Published(ctx, db, wfID)
+		switch {
+		case errors.Is(perr, persistence.ErrNotFound) || errors.Is(perr, releases.ErrNotPublished):
+			out.Problems = append(out.Problems, "o workflow do projeto não está publicado")
+			if wf, gerr := workflows.Get(ctx, db, wfID); gerr == nil {
+				for _, is := range workflows.Validate(wf.Graph) {
+					out.Problems = append(out.Problems, fmt.Sprintf("nó %s: %s", is.Node, is.Message))
+				}
+			}
+		case perr != nil:
+			return Readiness{}, perr
+		default:
+			for _, pr := range releases.Revalidate(ctx, db, ver) {
+				out.Problems = append(out.Problems, fmt.Sprintf("nó %s: %s", pr.Node, pr.Message))
+			}
+		}
 	}
 	out.Ready = len(out.Problems) == 0
 	return out, nil

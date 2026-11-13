@@ -655,6 +655,20 @@ paths:
         "401": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
 
+  /projects/{id}/workflow:
+    get:
+      tags: [workflows]
+      summary: Workflow estrutural do projeto (criado no cadastro) e o diagnóstico por nó do que falta configurar
+      description: >
+        Provisiona o rascunho padrão na primeira consulta de projetos antigos. Repetir não cria cópia nem
+        altera o que o administrador editou. `issues` lista cada nó/campo pendente e qualquer guarda
+        obrigatória removida ou contornada.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Workflow do projeto, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectWorkflow"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
   /projects/{id}/status-map:
     get:
       tags: [issues]
@@ -2111,6 +2125,25 @@ components:
         local_priority: {type: [integer, "null"]}
         conflict: {type: [object, "null"], properties: {field: {type: string}, local: {type: integer}, remote: {type: [integer, "null"]}}}
         content_hash: {type: string}
+    ProjectWorkflow:
+      type: object
+      required: [workflow_id, name, version, created, published, issues]
+      properties:
+        workflow_id: {type: string, format: uuid}
+        name: {type: string}
+        version: {type: integer}
+        created: {type: boolean}
+        published: {type: boolean}
+        issues:
+          type: array
+          items:
+            type: object
+            required: [node, field, code, message]
+            properties:
+              node: {type: string}
+              field: {type: string}
+              code: {type: string}
+              message: {type: string}
     StatusMap:
       type: object
       required: [source, remote, moves, version]
