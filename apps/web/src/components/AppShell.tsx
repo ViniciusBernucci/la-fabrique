@@ -11,6 +11,7 @@ const COLLAPSE_KEY = "le-fabrique.menu-collapsed";
 export const navigation: { name: string; to: string; icon: IconName; end?: boolean }[] = [
   { name: "Painel", to: "/", icon: "home", end: true },
   { name: "Projetos", to: "/projects", icon: "folder" },
+  { name: "Issues", to: "/issues", icon: "decisions" },
   { name: "Biblioteca", to: "/library", icon: "library" },
   { name: "Agentes", to: "/agents", icon: "key" },
   { name: "Skills", to: "/skills", icon: "library" },

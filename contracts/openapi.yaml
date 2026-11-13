@@ -655,6 +655,57 @@ paths:
         "401": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
 
+  /projects/{id}/status-map:
+    get:
+      tags: [issues]
+      summary: Mapa de status do projeto (origem ↔ catálogo canônico) e os códigos que a fábrica projeta
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Mapa (null se ainda não configurado), content: {application/json: {schema: {$ref: "#/components/schemas/StatusMapView"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+    put:
+      tags: [issues]
+      summary: Grava o mapa de status. Inválido volta 422 com o campo ou a transição que impede a projeção
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/StatusMapInput"}}}
+      responses:
+        "200": {description: Mapa gravado, content: {application/json: {schema: {$ref: "#/components/schemas/StatusMap"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /projects/{id}/issues:
+    get:
+      tags: [issues]
+      summary: Issues registradas da origem oficial e o histórico de sincronização
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Issues e execuções de sync, content: {application/json: {schema: {$ref: "#/components/schemas/IssuesView"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/issues/sync:
+    post:
+      tags: [issues]
+      summary: Sync geral manual (a mesma rotina do horário matinal)
+      description: >
+        Importa Issues novas em PRD-DOC ou CORRECAO_PR e atualiza todas as conhecidas em qualquer estado.
+        Falha remota volta como `outcome: partial|failed` (HTTP 200) com o progresso já gravado preservado.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Resultado, content: {application/json: {schema: {$ref: "#/components/schemas/IssueSyncRun"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
   /projects/{id}/sync:
     post:
       tags: [sincronizacao]
@@ -2060,6 +2111,63 @@ components:
         local_priority: {type: [integer, "null"]}
         conflict: {type: [object, "null"], properties: {field: {type: string}, local: {type: integer}, remote: {type: [integer, "null"]}}}
         content_hash: {type: string}
+    StatusMap:
+      type: object
+      required: [source, remote, moves, version]
+      properties:
+        source: {type: string, enum: [jira, clickup]}
+        remote: {type: object, additionalProperties: {type: string}}
+        moves: {type: object, additionalProperties: {type: string}}
+        version: {type: integer}
+    StatusMapInput:
+      type: object
+      required: [version, source, remote, moves]
+      properties:
+        version: {type: integer, description: "0 cria; senão a versão lida"}
+        source: {type: string, enum: [jira, clickup]}
+        remote: {type: object, additionalProperties: {type: string}}
+        moves: {type: object, additionalProperties: {type: string}}
+    StatusMapView:
+      type: object
+      required: [map, codes]
+      properties:
+        map: {oneOf: [{$ref: "#/components/schemas/StatusMap"}, {type: "null"}]}
+        codes: {type: array, items: {type: string}}
+    IssueRecord:
+      type: object
+      required: [id, source, remote_id, key, title, raw_status, status_code, revision, kind]
+      properties:
+        id: {type: string}
+        source: {type: string}
+        remote_id: {type: string}
+        key: {type: string}
+        title: {type: string}
+        raw_status: {type: string}
+        status_code: {type: string}
+        revision: {type: string}
+        kind: {type: string, enum: [feature, correction]}
+        local_priority: {type: integer}
+    IssueSyncRun:
+      type: object
+      required: [id, trigger, scope, outcome, read, new, updated, ignored, started_at, finished_at]
+      properties:
+        id: {type: integer}
+        trigger: {type: string, enum: [daily, manual, targeted]}
+        scope: {type: string}
+        outcome: {type: string, enum: [ok, partial, failed]}
+        read: {type: integer}
+        new: {type: integer}
+        updated: {type: integer}
+        ignored: {type: integer}
+        error: {type: string}
+        started_at: {type: string, format: date-time}
+        finished_at: {type: string, format: date-time}
+    IssuesView:
+      type: object
+      required: [issues, runs]
+      properties:
+        issues: {type: array, items: {$ref: "#/components/schemas/IssueRecord"}}
+        runs: {type: array, items: {$ref: "#/components/schemas/IssueSyncRun"}}
     SyncView:
       type: object
       required: [last, items]

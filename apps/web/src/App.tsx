@@ -6,6 +6,7 @@ import { AgentsPage } from "./pages/AgentsPage";
 import { ConnectionsPage } from "./pages/ConnectionsPage";
 import { DecisionsPage } from "./pages/DecisionsPage";
 import { HomePage } from "./pages/HomePage";
+import { IssuesPage } from "./pages/IssuesPage";
 import { LibraryPage } from "./pages/LibraryPage";
 import { LoginPage } from "./pages/LoginPage";
 import { NewProjectPage } from "./pages/NewProjectPage";
@@ -58,6 +59,7 @@ export function App() {
         <Route path="projects/new" element={<NewProjectPage />} />
         <Route path="projects/:id" element={<ProjectDetailPage />} />
         <Route path="projects/:id/setup" element={<ProjectSetupPage />} />
+        <Route path="issues" element={<IssuesPage />} />
         <Route path="library" element={<LibraryPage />} />
         <Route path="agents" element={<AgentsPage />} />
         <Route path="skills" element={<SkillsPage />} />

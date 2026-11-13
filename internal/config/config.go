@@ -64,6 +64,14 @@ type Worker struct {
 	// só simula e registra).
 	RetentionInterval time.Duration
 	RetentionApply    bool
+	// IssueSync liga o sync matinal das Issues pelo worker (SENTINEL_ISSUE_SYNC=true). Desligado por
+	// padrão: exige VAULT_KEY no worker para abrir as conexões do cofre, o que é uma decisão de
+	// implantação. Hora e fuso definem a janela diária.
+	IssueSync     bool
+	IssueSyncHour int
+	IssueSyncTZ   string
+	VaultKey      []byte
+	VaultKeyID    string
 }
 
 // Migrate é a configuração do cmd/migrate.
@@ -251,6 +259,20 @@ func LoadWorker(lookup Lookup) (Worker, error) {
 	cfg.JobsInterval = l.duration("WORKER_JOBS_INTERVAL", 30*time.Second, time.Second)
 	cfg.RetentionInterval = l.duration("RETENTION_INTERVAL", 24*time.Hour, time.Minute)
 	cfg.RetentionApply = l.boolean("RETENTION_APPLY", false)
+	cfg.IssueSync = l.boolean("SENTINEL_ISSUE_SYNC", false)
+	if cfg.IssueSync {
+		cfg.VaultKeyID = l.str("VAULT_KEY_ID", "k1")
+		cfg.VaultKey = l.vaultKey()
+		cfg.IssueSyncTZ = l.str("ISSUE_SYNC_TZ", "America/Sao_Paulo")
+		if _, err := time.LoadLocation(cfg.IssueSyncTZ); err != nil {
+			l.fail("ISSUE_SYNC_TZ não é um fuso válido")
+		}
+		hour, err := strconv.Atoi(l.str("ISSUE_SYNC_HOUR", "7"))
+		if err != nil || hour < 0 || hour > 23 {
+			l.fail("ISSUE_SYNC_HOUR deve ser de 0 a 23")
+		}
+		cfg.IssueSyncHour = hour
+	}
 	return cfg, l.result()
 }
 

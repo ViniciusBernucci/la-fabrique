@@ -124,3 +124,20 @@ func TestLoadWorker(t *testing.T) {
 		t.Fatal("intervalo abaixo do mínimo deveria falhar")
 	}
 }
+
+func TestWorkerIssueSyncIsOptInAndNeedsTheVault(t *testing.T) {
+	cfg, err := LoadWorker(env(map[string]string{"DATABASE_URL": goodDB}))
+	if err != nil || cfg.IssueSync || cfg.VaultKey != nil {
+		t.Fatalf("%+v %v", cfg, err)
+	}
+	if _, err := LoadWorker(env(map[string]string{"DATABASE_URL": goodDB, "SENTINEL_ISSUE_SYNC": "true"})); err == nil || !strings.Contains(err.Error(), "VAULT_KEY é obrigatória") {
+		t.Fatalf("%v", err)
+	}
+	cfg, err = LoadWorker(env(map[string]string{"DATABASE_URL": goodDB, "SENTINEL_ISSUE_SYNC": "true", "VAULT_KEY": goodKey, "ISSUE_SYNC_HOUR": "6"}))
+	if err != nil || !cfg.IssueSync || cfg.IssueSyncHour != 6 || cfg.IssueSyncTZ != "America/Sao_Paulo" || len(cfg.VaultKey) != 32 {
+		t.Fatalf("%+v %v", cfg, err)
+	}
+	if _, err := LoadWorker(env(map[string]string{"DATABASE_URL": goodDB, "SENTINEL_ISSUE_SYNC": "true", "VAULT_KEY": goodKey, "ISSUE_SYNC_HOUR": "30"})); err == nil {
+		t.Fatal("hora inválida")
+	}
+}

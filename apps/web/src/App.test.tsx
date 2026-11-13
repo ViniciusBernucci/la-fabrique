@@ -114,6 +114,7 @@ describe("com sessão", () => {
     expect(links.map((l) => [l.getAttribute("aria-label"), l.getAttribute("href")])).toEqual([
       ["Painel", "/"],
       ["Projetos", "/projects"],
+      ["Issues", "/issues"],
       ["Biblioteca", "/library"],
       ["Agentes", "/agents"],
       ["Skills", "/skills"],

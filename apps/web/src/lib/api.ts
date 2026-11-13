@@ -138,6 +138,38 @@ export interface ProjectChange {
   created_at: string;
 }
 
+export interface IssueRecord {
+  id: string;
+  source: string;
+  remote_id: string;
+  key: string;
+  title: string;
+  raw_status: string;
+  status_code: string;
+  revision: string;
+  kind: "feature" | "correction";
+  local_priority?: number;
+}
+
+export interface IssueSyncRun {
+  id: number;
+  trigger: "daily" | "manual" | "targeted";
+  scope: string;
+  outcome: "ok" | "partial" | "failed";
+  read: number;
+  new: number;
+  updated: number;
+  ignored: number;
+  error?: string;
+  started_at: string;
+  finished_at: string;
+}
+
+export interface IssuesView {
+  issues: IssueRecord[];
+  runs: IssueSyncRun[];
+}
+
 export interface ProjectPage {
   items: Project[];
   next_cursor?: string;
@@ -855,6 +887,12 @@ export const api = {
       `/projects/${encodeURIComponent(projectId)}/executions/${encodeURIComponent(executionId)}/events?limit=200${q ? `&q=${encodeURIComponent(q)}` : ""}`,
       { signal },
     ),
+
+  // Issues da origem oficial (sync geral).
+  listIssues: (projectId: string, signal?: AbortSignal) =>
+    request<IssuesView>(`/projects/${encodeURIComponent(projectId)}/issues`, { signal }),
+  syncIssues: (projectId: string) =>
+    post<IssueSyncRun>(`/projects/${encodeURIComponent(projectId)}/issues/sync`),
 
   // Consumo, orçamento e provedores.
   listBudgets: (signal?: AbortSignal) => request<{ items: BudgetStatus[] }>("/budgets", { signal }),

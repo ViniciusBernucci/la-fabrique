@@ -11,6 +11,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/budget"
 	"github.com/ViniciusBernucci/le-fabrique/internal/decisions"
 	"github.com/ViniciusBernucci/le-fabrique/internal/delivery"
+	"github.com/ViniciusBernucci/le-fabrique/internal/flow"
 	"github.com/ViniciusBernucci/le-fabrique/internal/gitops"
 	"github.com/ViniciusBernucci/le-fabrique/internal/mcp"
 	"github.com/ViniciusBernucci/le-fabrique/internal/memory"
@@ -152,6 +153,8 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 		writeError(w, r, http.StatusBadRequest, "invalid_request", wfField.Message, "Corrija o campo \""+wfField.Field+"\" e tente novamente.")
 	case errors.As(err, &invalid):
 		writeError(w, r, http.StatusUnprocessableEntity, "validation_failed", "O projeto tem pendências e não pode ser ativado.", "Resolva os itens pendentes em GET /api/projects/{id}/validation.")
+	case errors.Is(err, flow.ErrStaleMap):
+		writeError(w, r, http.StatusConflict, "stale_status_map", err.Error(), "Recarregue o mapa de status e salve de novo.")
 	case errors.Is(err, syncsource.ErrNoConflict):
 		writeError(w, r, http.StatusConflict, "no_conflict", err.Error(), "Sincronize de novo e confira os itens com conflito.")
 	case errors.Is(err, syncsource.ErrNoItem):
