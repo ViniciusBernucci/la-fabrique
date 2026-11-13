@@ -584,6 +584,98 @@ export interface RevokeResult {
   already_revoked: boolean;
 }
 
+// Entrega, PR e memória técnica.
+export type DeliveryState = "blocked" | "draft_open" | "merged" | "closed" | "cancelled";
+
+export interface Delivery {
+  id: string;
+  feature_id: string;
+  feature_key: string;
+  feature_title: string;
+  attempt: number;
+  branch: string;
+  revision: string;
+  state: DeliveryState;
+  reasons: string[];
+  pr_url: string;
+  merge_sha: string;
+  projection: "none" | "pending" | "done" | "failed";
+  projection_error: string;
+  observed_at: string | null;
+  created_at: string;
+  comments: Record<string, number>;
+}
+
+export interface PRComment {
+  id: number;
+  comment_id: number;
+  author: string;
+  body: string;
+  state: "queued" | "held" | "fixed" | "dismissed";
+  queue_item_id?: string;
+}
+
+export interface DeliveryDetail {
+  delivery: Delivery;
+  comments: PRComment[];
+  offer: {
+    options: { id: "cancel" | "reopen" | "retry"; label: string; description: string }[];
+    max_attempts: number;
+  } | null;
+  history: string[];
+  observations: { outcome: string; detail: string; created_at: string }[];
+}
+
+export interface DeliverySettings {
+  review_authors: string[];
+  status_map: { awaiting_merge?: string; done?: string };
+  version: number;
+}
+
+export interface ObserveResult {
+  observation: {
+    outcome: "open" | "closed" | "merged" | "unknown";
+    merge_sha?: string;
+    projection: string;
+    projection_error?: string;
+    released: unknown[];
+    detail?: string;
+  };
+  origin_note: string;
+  memory?: { promoted: number; rejected: number; duplicates: number };
+  memory_error?: string;
+}
+
+export interface DiscoverResult {
+  discovery: { new: number; ignored: number; held: number; item?: { id: string } | null };
+  authorized: number;
+}
+
+export type MemoryState = "pending" | "official" | "invalidated";
+
+export interface MemoryRecord {
+  id: string;
+  branch: string;
+  key: string;
+  kind: "fact" | "decision" | "constraint" | "lesson";
+  content: string;
+  source: string;
+  evidence: { label: string; ref: string }[];
+  revision: string;
+  confidence: "low" | "medium" | "high";
+  state: MemoryState;
+  promoted_revision?: string;
+  invalid_reason?: string;
+}
+
+export interface FeatureReport {
+  feature_key: string;
+  title: string;
+  revision: string;
+  doc_path: string;
+  markdown: string;
+}
+
 const BASE = "/api";
 
 /** Token CSRF da sessão atual (memória; o servidor o devolve em /session e no login). */
@@ -700,6 +792,60 @@ export const api = {
   ) => put<Workflow>(`/workflows/${encodeURIComponent(id)}`, input),
   validateWorkflowGraph: (graph: WorkflowGraph, signal?: AbortSignal) =>
     post<{ issues: WorkflowIssue[] }>("/workflows/validate", { graph }, signal),
+
+  // Entrega, PR e memória técnica.
+  deliveries: (projectId: string, signal?: AbortSignal) =>
+    request<{ items: Delivery[] }>(`/projects/${encodeURIComponent(projectId)}/deliveries`, {
+      signal,
+    }),
+  deliveryDetail: (projectId: string, id: string, signal?: AbortSignal) =>
+    request<DeliveryDetail>(
+      `/projects/${encodeURIComponent(projectId)}/deliveries/${encodeURIComponent(id)}`,
+      { signal },
+    ),
+  observeDelivery: (projectId: string, id: string) =>
+    post<ObserveResult>(
+      `/projects/${encodeURIComponent(projectId)}/deliveries/${encodeURIComponent(id)}/observe`,
+      {},
+    ),
+  discoverComments: (projectId: string, id: string, taskKey: string) =>
+    post<DiscoverResult>(
+      `/projects/${encodeURIComponent(projectId)}/deliveries/${encodeURIComponent(id)}/comments/discover`,
+      { task_key: taskKey },
+    ),
+  deliveryAction: (projectId: string, id: string, action: string, note: string) =>
+    post<{ state: DeliveryState; replayed: boolean; next_attempt?: number }>(
+      `/projects/${encodeURIComponent(projectId)}/deliveries/${encodeURIComponent(id)}/actions`,
+      { action, note },
+    ),
+  deliverySettings: (projectId: string, signal?: AbortSignal) =>
+    request<DeliverySettings>(`/projects/${encodeURIComponent(projectId)}/delivery-settings`, {
+      signal,
+    }),
+  saveDeliverySettings: (
+    projectId: string,
+    input: { review_authors: string[]; status_map: { awaiting_merge?: string; done?: string } },
+  ) => put<DeliverySettings>(`/projects/${encodeURIComponent(projectId)}/delivery-settings`, input),
+  featureReport: (projectId: string, featureId: string, signal?: AbortSignal) =>
+    request<FeatureReport>(
+      `/projects/${encodeURIComponent(projectId)}/features/${encodeURIComponent(featureId)}/report`,
+      { signal },
+    ),
+  memory: (projectId: string, state: MemoryState | "", q: string, signal?: AbortSignal) =>
+    request<{ items: MemoryRecord[] }>(
+      `/projects/${encodeURIComponent(projectId)}/memory?state=${state}&q=${encodeURIComponent(q)}`,
+      { signal },
+    ),
+  invalidateMemory: (projectId: string, id: string, reason: string) =>
+    post<MemoryRecord>(
+      `/projects/${encodeURIComponent(projectId)}/memory/${encodeURIComponent(id)}/invalidate`,
+      { reason },
+    ),
+  setProjectControl: (projectId: string, mode: ControlMode, reason: string) =>
+    put<{ control: ControlState; failed?: { reason: string }[] }>(
+      `/projects/${encodeURIComponent(projectId)}/controls`,
+      { mode, reason },
+    ),
 
   // Operação ao vivo.
   projectOverview: (id: string, signal?: AbortSignal) =>

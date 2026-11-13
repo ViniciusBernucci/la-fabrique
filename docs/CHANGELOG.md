@@ -1,3 +1,9 @@
+## 2026-11-13 — Rotas, telas e ensaio com navegador real (E15/E16)
+Entregas (consulta da PR sob demanda, comentários autorizados, ações da PR fechada), memória técnica, controles do projeto e relatório da feature ganham rotas e telas no padrão do painel; ensaio com Chromium real (`make e2e`) sobre API, banco e GitHub descartáveis; `useResource.reload` deixou de apagar a tela; erros de tipo antigos corrigidos. Ambiente e projeto reais NOT_RUN. [Entrega](entregas/2026-11-13-E15-rotas-telas-e-navegador.md) · [ADR-0057](adr/0057-rotas-telas-e-ensaio-com-navegador.md).
+
+## 2026-11-13 — Worker: tarefas periódicas (T10-02, T12-03, T16-04)
+Liberar itens cuja decisão foi resolvida, recuperar tentativas interrompidas com inspetor Docker real e retenção simulada ou aplicada, com situação em `/jobs`. Executar agentes segue sem executor. [Entrega](entregas/2026-11-13-E10-worker-tarefas-periodicas.md) · [ADR-0056](adr/0056-tarefas-periodicas-do-worker.md).
+
 ## 2026-11-12 — E17: ensaios e relatório de aceite (T17-02, T17-03, T17-04)
 Ensaio da feature da Draft PR ao pós-merge nos dobles, catálogo de 15 cenários de falha, segurança e integração com esperado e observado gerados por `make ensaios`, e relatório de aceite derivado do checklist que nunca declara o aceite. Ambiente, projeto e conectores reais, e a decisão do responsável, seguem NOT_RUN: o aceite integral não está fechado. [Entrega](entregas/2026-11-12-E17-ensaios-e-relatorio-de-aceite.md) · [ADR-0055](adr/0055-ensaios-e-relatorio-de-aceite.md).
 

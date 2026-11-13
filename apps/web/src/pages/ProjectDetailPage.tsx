@@ -6,6 +6,8 @@ import { EmptyState, ErrorState, LoadingState } from "../components/States";
 import { type ApiError, api, type Connection, type Project, type ProjectChange } from "../lib/api";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
+import { DeliveryPanel } from "./DeliveryPanel";
+import { MemoryPanel } from "./MemoryPanel";
 import { StateBadge } from "./ProjectsPage";
 import { RunPanel } from "./RunPanel";
 
@@ -141,6 +143,8 @@ function ProjectDetail({ project, reload }: { project: Project; reload: () => vo
       />
       <FormError error={error} />
       {project.state !== "draft" && <RunPanel projectId={project.id} />}
+      {project.state !== "draft" && <DeliveryPanel projectId={project.id} />}
+      {project.state !== "draft" && <MemoryPanel projectId={project.id} />}
       <section className="panel" aria-label="Resumo do projeto">
         <dl className="facts">
           <div>

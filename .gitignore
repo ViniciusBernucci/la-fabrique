@@ -13,6 +13,9 @@ coverage/
 !.env.production.example
 
 # Dados e saídas locais
+apps/web/e2e/.results/
+apps/web/playwright-report/
+apps/web/test-results/
 *.log
 .artifacts/
 backups/

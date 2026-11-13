@@ -663,7 +663,7 @@ function ReviewStep({
               <button
                 type="button"
                 className="secondary-action"
-                onClick={() => onGoto(areaStep[c.area])}
+                onClick={() => onGoto(areaStep[c.area] ?? "basics")}
               >
                 Ir para a etapa
               </button>

@@ -61,7 +61,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("catálogo de ferramentas", () => {
   it("resume assinaturas com os obrigatórios marcados", () => {
-    expect(signature(items[0].input)).toBe("path*: path, max_bytes: int");
+    expect(signature(items[0]?.input ?? [])).toBe("path*: path, max_bytes: int");
     expect(signature([])).toBe("sem parâmetros");
   });
 

@@ -1,6 +1,14 @@
 import { type FormEvent, useEffect, useState } from "react";
+import { FormError, toApiError } from "../components/AuthParts";
 import { ErrorState, LoadingState } from "../components/States";
-import { api, type ControlState, type ExecutionEvent, type QueueItemView } from "../lib/api";
+import {
+  type ApiError,
+  api,
+  type ControlMode,
+  type ControlState,
+  type ExecutionEvent,
+  type QueueItemView,
+} from "../lib/api";
 import { useSession } from "../lib/session";
 import { useEventStream } from "../lib/useEventStream";
 import { useResource } from "../lib/useResource";
@@ -31,6 +39,83 @@ function ControlLine({ label, c }: { label: string; c: ControlState }) {
       <strong>{label}:</strong> {modeText[c.mode]}
       {c.reason ? ` Motivo: ${c.reason}.` : ""}
     </p>
+  );
+}
+
+/** Controles do projeto: pausar após a feature atual, suspender ou retomar. */
+function ProjectControls({
+  projectId,
+  mode,
+  onChange,
+}: {
+  projectId: string;
+  mode: ControlMode;
+  onChange: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [notice, setNotice] = useState("");
+
+  async function apply(next: ControlMode) {
+    setBusy(true);
+    setError(null);
+    setNotice("");
+    try {
+      const r = await api.setProjectControl(projectId, next, reason.trim());
+      const first = r.failed?.[0];
+      if (r.failed && first)
+        setNotice(
+          `${r.failed.length} tarefa(s) não puderam ser paradas com checkpoint seguro e seguem em execução: ${first.reason}`,
+        );
+      onChange();
+    } catch (e) {
+      setError(toApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel--pad" aria-label="Controles do projeto">
+      <label>
+        Motivo (opcional)
+        <input value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
+      </label>
+      <div className="actions">
+        {mode !== "active" && (
+          <button type="button" disabled={busy} onClick={() => apply("active")}>
+            Retomar projeto
+          </button>
+        )}
+        {mode === "active" && (
+          <button
+            type="button"
+            className="secondary-action"
+            disabled={busy}
+            onClick={() => apply("draining")}
+          >
+            Pausar após a feature atual
+          </button>
+        )}
+        {mode !== "suspended" && (
+          <button
+            type="button"
+            className="secondary-action"
+            disabled={busy}
+            onClick={() => apply("suspended")}
+          >
+            Suspender agora
+          </button>
+        )}
+      </div>
+      <FormError error={error} />
+      {notice && (
+        <p className="callout callout--warn" role="status">
+          {notice}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -65,6 +150,11 @@ export function RunPanel({ projectId }: { projectId: string }) {
             state.data.controls.project.mode === "active" && (
               <p className="state-meta">Controles operacionais: ativos.</p>
             )}
+          <ProjectControls
+            projectId={projectId}
+            mode={state.data.controls.project.mode}
+            onChange={reload}
+          />
           <dl className="facts">
             {(["running", "queued", "waiting", "done"] as const).map((k) => (
               <div key={k}>

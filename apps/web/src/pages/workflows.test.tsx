@@ -239,7 +239,7 @@ describe("editor de workflows", () => {
     expect(put?.body?.expected_version).toBe(1);
     const graph = put?.body?.graph as WorkflowGraph;
     expect(graph.nodes.map((n) => n.id)).toEqual(["inicio", "fim", "agent-1"]);
-    expect(graph.nodes[2].props).toEqual({
+    expect(graph.nodes[2]?.props).toEqual({
       agent: "dev",
       prompt: "Implemente a feature",
       timeout_minutes: 30,

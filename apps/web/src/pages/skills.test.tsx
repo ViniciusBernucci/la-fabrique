@@ -44,7 +44,7 @@ function stub(routes: Record<string, (call: Call) => Response>) {
       });
       const handler = routes[`${method} ${url.split("?")[0]}`];
       return handler
-        ? handler(calls[calls.length - 1])
+        ? handler(calls[calls.length - 1] as Call)
         : err(404, "not_found", "Rota inexistente.");
     }),
   );

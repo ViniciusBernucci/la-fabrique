@@ -31,4 +31,4 @@ Fonte única em [`skills/`](skills/README.md): `grill-me`, `tech-lead`, `worktre
 
 ## Comandos
 
-`make help` lista tudo. Principais: `make bootstrap`, `make up`, `make lint`, `make test`, `make test-integration`, `make seed`, `make db-backup`.
+`make help` lista tudo. Telas novas ou alteradas: rode também `make e2e` (navegador real) e `npm run typecheck` em `apps/web`. Principais: `make bootstrap`, `make up`, `make lint`, `make test`, `make test-integration`, `make seed`, `make db-backup`.

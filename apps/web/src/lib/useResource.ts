@@ -8,7 +8,8 @@ export type ResourceState<T> =
 
 /**
  * Carrega um recurso com cancelamento. `onUnauthorized` é chamado quando o
- * servidor responde 401, para a aplicação voltar à tela de sessão.
+ * servidor responde 401, para a aplicação voltar à tela de sessão. `reload` não apaga o que já
+ * está na tela (ver a nota no efeito).
  */
 export function useResource<T>(
   load: (signal: AbortSignal) => Promise<T>,
@@ -17,6 +18,7 @@ export function useResource<T>(
 ): { state: ResourceState<T>; reload: () => void } {
   const [state, setState] = useState<ResourceState<T>>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
+  const keyRef = useRef(key);
   const loadRef = useRef(load);
   const unauthorizedRef = useRef(onUnauthorized);
   loadRef.current = load;
@@ -25,7 +27,12 @@ export function useResource<T>(
   // biome-ignore lint/correctness/useExhaustiveDependencies: key e attempt identificam o recurso; load/onUnauthorized ficam em refs.
   useEffect(() => {
     const controller = new AbortController();
-    setState({ status: "loading" });
+    // Recarregar o MESMO recurso (reload ou atualização periódica) mantém os dados na tela até os
+    // novos chegarem: nada some nem perde o estado local (mensagens, campos digitados, detalhes
+    // abertos). Só uma chave nova, ou uma nova tentativa depois de erro, volta a "carregando".
+    const sameKey = keyRef.current === key;
+    keyRef.current = key;
+    setState((prev) => (sameKey && prev.status === "ready" ? prev : { status: "loading" }));
     loadRef
       .current(controller.signal)
       .then((data) => setState({ status: "ready", data }))

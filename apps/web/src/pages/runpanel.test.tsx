@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -121,6 +121,12 @@ class FakeEventSource {
   }
 }
 
+function esAt(i: number): FakeEventSource {
+  const e = FakeEventSource.all[i];
+  if (!e) throw new Error(`EventSource ${i} não foi aberto`);
+  return e;
+}
+
 function stub(extra: Record<string, () => Response> = {}) {
   const calls: string[] = [];
   vi.stubGlobal(
@@ -135,6 +141,10 @@ function stub(extra: Record<string, () => Response> = {}) {
         [`GET /projects/${PID}/changes`]: () => json({ items: [] }),
         "GET /connections": () => json({ items: [] }),
         [`GET /projects/${PID}/overview`]: () => json(overview),
+        [`GET /projects/${PID}/deliveries`]: () => json({ items: [] }),
+        [`GET /projects/${PID}/delivery-settings`]: () =>
+          json({ review_authors: [], status_map: {}, version: 1 }),
+        [`GET /projects/${PID}/memory?state=&q=`]: () => json({ items: [] }),
         ...extra,
       };
       const h = routes[`${(init.method ?? "GET").toUpperCase()} ${url}`];
@@ -203,7 +213,7 @@ describe("Execução do projeto", () => {
     const select = await screen.findByRole("combobox", { name: "Execução" });
     await userEvent.selectOptions(select, EID);
     await waitFor(() => expect(FakeEventSource.all).toHaveLength(1));
-    const first = FakeEventSource.all[0];
+    const first = esAt(0);
     expect(first.url).toBe(`/api/projects/${PID}/executions/${EID}/stream?after=0`);
     act(() => {
       first.onopen?.();
@@ -224,7 +234,7 @@ describe("Execução do projeto", () => {
     vi.useRealTimers();
     expect(FakeEventSource.all).toHaveLength(2);
     expect(first.closed).toBe(true);
-    const second = FakeEventSource.all[1];
+    const second = esAt(1);
     expect(second.url).toBe(`/api/projects/${PID}/executions/${EID}/stream?after=2`);
     act(() => {
       second.onopen?.();
@@ -238,9 +248,7 @@ describe("Execução do projeto", () => {
       second.listeners.reconnect?.();
       await new Promise((r) => setTimeout(r, 20));
     });
-    expect(FakeEventSource.all[2].url).toBe(
-      `/api/projects/${PID}/executions/${EID}/stream?after=3`,
-    );
+    expect(esAt(2).url).toBe(`/api/projects/${PID}/executions/${EID}/stream?after=3`);
   });
 
   it("busca no histórico e volta ao ao vivo", async () => {
@@ -261,7 +269,9 @@ describe("Execução do projeto", () => {
     renderAt(`/projects/${PID}`);
     await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Execução" }), EID);
     await userEvent.type(await screen.findByLabelText("Buscar no histórico"), "erro");
-    await userEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    await userEvent.click(
+      within(screen.getByRole("region", { name: "Logs" })).getByRole("button", { name: "Buscar" }),
+    );
     expect(await screen.findByText(/#7 error/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Voltar ao ao vivo" }));
     expect(await screen.findByText("Nenhum evento ainda.")).toBeInTheDocument();

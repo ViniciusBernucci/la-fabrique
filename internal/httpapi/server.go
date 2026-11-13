@@ -18,6 +18,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 	"github.com/ViniciusBernucci/le-fabrique/internal/policy"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
+	"github.com/ViniciusBernucci/le-fabrique/internal/queue"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
 )
 
@@ -41,6 +42,8 @@ type Server struct {
 	policy   *policy.Policy
 
 	mcpAllowPrivate bool
+	githubBase      string
+	githubPrivate   bool
 }
 
 // Option personaliza o servidor (usado em testes).
@@ -171,6 +174,19 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/authorizations", s.protected(s.listAuthorizations))
 	mux.HandleFunc("POST /api/authorizations/{id}/revoke", s.sensitive(s.revokeAuthorization))
 	mux.HandleFunc("GET /api/executions/{id}/sequence", s.protected(s.executionSequence))
+	mux.HandleFunc("GET /api/projects/{id}/delivery-settings", s.protected(s.getDeliverySettings))
+	mux.HandleFunc("PUT /api/projects/{id}/delivery-settings", s.protected(s.putDeliverySettings))
+	mux.HandleFunc("GET /api/projects/{id}/deliveries", s.protected(s.listDeliveries))
+	mux.HandleFunc("GET /api/projects/{id}/deliveries/{deliveryId}", s.protected(s.getDelivery))
+	mux.HandleFunc("POST /api/projects/{id}/deliveries/{deliveryId}/observe", s.protected(s.observeDelivery))
+	mux.HandleFunc("POST /api/projects/{id}/deliveries/{deliveryId}/comments/discover", s.protected(s.discoverComments))
+	mux.HandleFunc("POST /api/projects/{id}/deliveries/{deliveryId}/actions", s.sensitive(s.decideDelivery))
+	mux.HandleFunc("POST /api/projects/{id}/deliveries/{deliveryId}/memory/extract", s.protected(s.extractMemory))
+	mux.HandleFunc("GET /api/projects/{id}/memory", s.protected(s.listMemory))
+	mux.HandleFunc("POST /api/projects/{id}/memory/{recordId}/invalidate", s.protected(s.invalidateMemory))
+	mux.HandleFunc("PUT /api/projects/{id}/controls", s.protected(s.setControl(queue.Scope{})))
+	mux.HandleFunc("PUT /api/controls/global", s.sensitive(s.setControl(queue.Scope{Global: true})))
+	mux.HandleFunc("GET /api/projects/{id}/features/{featureId}/report", s.protected(s.featureReport))
 	mux.HandleFunc("GET /api/tools", s.protected(s.listTools))
 	mux.HandleFunc("POST /api/tools", s.protected(s.createTool))
 	mux.HandleFunc("POST /api/tools/{name}/check", s.protected(s.checkTool))

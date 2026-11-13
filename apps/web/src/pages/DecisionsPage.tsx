@@ -190,7 +190,7 @@ function DecisionCard({ decision: d, onDone }: { decision: DecisionRequest; onDo
               Registrar decisão
             </button>
             {refusal && (
-              <button type="button" className="btn-secondary" disabled={busy} onClick={refuse}>
+              <button type="button" className="secondary-action" disabled={busy} onClick={refuse}>
                 Recusar
               </button>
             )}
@@ -240,20 +240,25 @@ function SequenceView({ executionId }: { executionId: string }) {
 
   return (
     <div>
-      <button type="button" className="btn-secondary" aria-expanded={open} onClick={toggle}>
+      <button type="button" className="secondary-action" aria-expanded={open} onClick={toggle}>
         {open ? "Ocultar sequência" : "Ver sequência"}
       </button>
       {open && (
         <section aria-label="Sequência do incidente e da retomada">
           <FormError error={error} />
           {items?.length === 0 && <p className="muted">Nenhum registro para esta execução.</p>}
-          <ol className="timeline">
+          <ul className="item-list" aria-label="Linhas da sequência">
             {items?.map((e) => (
               <li key={`${e.at}-${e.source}-${e.type}-${JSON.stringify(e.detail)}`}>
-                <small className="muted">{when(e.at)}</small> {seqText(e)}
+                <div className="item-link">
+                  <span>
+                    <strong>{seqText(e)}</strong>
+                  </span>
+                  <small>{when(e.at)}</small>
+                </div>
               </li>
             ))}
-          </ol>
+          </ul>
         </section>
       )}
     </div>

@@ -1111,6 +1111,247 @@ paths:
                         detail: {type: object, additionalProperties: true}
         "401": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/delivery-settings:
+    get:
+      tags: [entrega]
+      summary: Quem pode pedir correção na PR e o mapa de estados da origem
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Configuração, content: {application/json: {schema: {$ref: "#/components/schemas/DeliverySettings"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+    put:
+      tags: [entrega]
+      summary: Define os autores autorizados (logins do GitHub) e o mapa de estados da origem
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                review_authors: {type: array, maxItems: 20, items: {type: string}}
+                status_map:
+                  type: object
+                  additionalProperties: false
+                  properties: {awaiting_merge: {type: string, maxLength: 100}, done: {type: string, maxLength: 100}}
+      responses:
+        "200": {description: Configuração salva, content: {application/json: {schema: {$ref: "#/components/schemas/DeliverySettings"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/deliveries:
+    get:
+      tags: [entrega]
+      summary: Entregas (tentativas) do projeto, com a PR, o merge e a projeção do status na origem
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Entregas, da mais recente para a mais antiga
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/Delivery"}}}
+        "401": {$ref: "#/components/responses/Error"}
+  /projects/{id}/deliveries/{deliveryId}:
+    get:
+      tags: [entrega]
+      summary: Entrega com comentários da PR, ações oferecidas, histórico e observações
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: deliveryId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Detalhe da entrega
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [delivery, comments, history, observations]
+                properties:
+                  project_id: {type: string, format: uuid}
+                  delivery: {$ref: "#/components/schemas/Delivery"}
+                  comments: {type: array, items: {$ref: "#/components/schemas/PRComment"}}
+                  offer: {type: object, nullable: true, additionalProperties: true}
+                  history: {type: array, items: {type: string}}
+                  observations: {type: array, items: {type: object, additionalProperties: true}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/deliveries/{deliveryId}/observe:
+    post:
+      tags: [entrega]
+      summary: Consulta a PR AGORA (sob demanda, D89) e propaga o merge
+      description: >
+        Aberta ou fechada sem merge não libera nada. Com merge e SHA: registra o SHA, conclui o item na origem pelo
+        ledger (se o mapa de estados existir), devolve à fila quem esperava esse merge e promove a memória pendente da
+        branch. Falha ao consultar o GitHub não altera nada (`outcome: unknown`).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: deliveryId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Resultado da consulta, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+        "502": {$ref: "#/components/responses/Error"}
+  /projects/{id}/deliveries/{deliveryId}/comments/discover:
+    post:
+      tags: [entrega]
+      summary: Descobre comentários de autores autorizados na PR e os enfileira como UMA correção
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: deliveryId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [task_key]
+              additionalProperties: false
+              properties:
+                task_key: {type: string}
+                priority: {type: integer, minimum: 0, maximum: 4}
+      responses:
+        "200": {description: Descoberta, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+        "502": {$ref: "#/components/responses/Error"}
+  /projects/{id}/deliveries/{deliveryId}/actions:
+    post:
+      tags: [entrega]
+      summary: Ação sobre a PR fechada sem merge (cancelar, reabrir ou nova tentativa; ação sensível)
+      description: Repetir a mesma ação não repete o efeito. Reabrir confere no GitHub antes de mudar o estado. Exige reautenticação.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: deliveryId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              additionalProperties: false
+              properties:
+                action: {type: string, enum: [cancel, reopen, retry]}
+                note: {type: string, maxLength: 500}
+      responses:
+        "200": {description: Resultado, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+        "502": {$ref: "#/components/responses/Error"}
+  /projects/{id}/deliveries/{deliveryId}/memory/extract:
+    post:
+      tags: [memória]
+      summary: Extrai lições dos achados de revisão corrigidos da entrega (memória pendente da branch)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: deliveryId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Registros pendentes, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/MemoryRecord"}}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/memory:
+    get:
+      tags: [memória]
+      summary: Memória técnica do projeto (pendente, oficial e invalidada)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: state, in: query, schema: {type: string, enum: [pending, official, invalidated]}, description: "Vazio = todos"}
+        - {name: q, in: query, schema: {type: string}, description: "Termos na chave ou no conteúdo"}
+      responses:
+        "200": {description: Registros, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/MemoryRecord"}}}}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+  /projects/{id}/memory/{recordId}/invalidate:
+    post:
+      tags: [memória]
+      summary: Invalida um registro de memória, com o motivo
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: recordId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              additionalProperties: false
+              properties: {reason: {type: string, maxLength: 500}}
+      responses:
+        "200": {description: Registro, content: {application/json: {schema: {$ref: "#/components/schemas/MemoryRecord"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/controls:
+    put:
+      tags: [execução]
+      summary: Controle operacional do projeto (ativo, pausa após a feature atual ou suspensão)
+      description: >
+        `suspended` persiste a suspensão e tenta parar o que roda; o que não pôde ser parado com checkpoint seguro
+        segue em execução e aparece em `failed`. `active` retoma e devolve à fila o que estava suspenso.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              additionalProperties: false
+              properties:
+                mode: {type: string, enum: [active, draining, suspended]}
+                reason: {type: string, maxLength: 500}
+      responses:
+        "200": {description: Controle aplicado, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /controls/global:
+    put:
+      tags: [execução]
+      summary: Controle operacional global (ação sensível)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              additionalProperties: false
+              properties:
+                mode: {type: string, enum: [active, draining, suspended]}
+                reason: {type: string, maxLength: 500}
+      responses:
+        "200": {description: Controle aplicado, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /projects/{id}/features/{featureId}/report:
+    get:
+      tags: [entrega]
+      summary: Histórico vivo da feature (requisito, tarefas, commits, checks, risco, revisão e E2E registrados)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: featureId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Relatório em Markdown, content: {application/json: {schema: {type: object, required: [feature_key, markdown], properties: {feature_key: {type: string}, title: {type: string}, revision: {type: string}, delivery_id: {type: string}, doc_path: {type: string}, markdown: {type: string}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
   /tools:
     get:
       tags: [ferramentas]
@@ -2213,6 +2454,65 @@ components:
         remaining: {type: integer}
         in_flight: {type: integer}
         expires_in_seconds: {type: integer, description: "Negativo = já venceu"}
+    DeliverySettings:
+      type: object
+      required: [review_authors, status_map, version]
+      properties:
+        review_authors: {type: array, items: {type: string}}
+        status_map: {type: object, additionalProperties: {type: string}}
+        version: {type: integer}
+    Delivery:
+      type: object
+      required: [id, feature_id, feature_key, attempt, branch, state, pr_url, projection, comments]
+      properties:
+        id: {type: string, format: uuid}
+        feature_id: {type: string, format: uuid}
+        feature_key: {type: string}
+        feature_title: {type: string}
+        attempt: {type: integer}
+        branch: {type: string}
+        revision: {type: string}
+        state: {type: string, enum: [blocked, draft_open, merged, closed, cancelled]}
+        reasons: {type: array, items: {type: string}}
+        pr_url: {type: string}
+        merge_sha: {type: string}
+        projection: {type: string, enum: [none, pending, done, failed]}
+        projection_error: {type: string}
+        observed_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+        comments: {type: object, additionalProperties: {type: integer}}
+    PRComment:
+      type: object
+      required: [id, comment_id, author, body, state]
+      properties:
+        id: {type: integer}
+        comment_id: {type: integer}
+        author: {type: string}
+        body: {type: string}
+        state: {type: string, enum: [queued, held, fixed, dismissed]}
+        queue_item_id: {type: string}
+        handled_at: {type: string, format: date-time, nullable: true}
+    MemoryRecord:
+      type: object
+      required: [id, project_id, key, kind, content, source, evidence, revision, confidence, state]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        feature_id: {type: string, format: uuid}
+        branch: {type: string}
+        pr_url: {type: string}
+        key: {type: string}
+        kind: {type: string, enum: [fact, decision, constraint, lesson]}
+        content: {type: string}
+        source: {type: string}
+        evidence: {type: array, items: {type: object, required: [label, ref], properties: {label: {type: string}, ref: {type: string}}}}
+        revision: {type: string}
+        confidence: {type: string, enum: [low, medium, high]}
+        state: {type: string, enum: [pending, official, invalidated]}
+        promoted_revision: {type: string}
+        promoted_at: {type: string, format: date-time, nullable: true}
+        invalid_reason: {type: string}
+        version: {type: integer}
     DecisionRequest:
       type: object
       required: [id, project_id, execution_id, node_id, kind, title, problem, impact, evidence, options, state, execution_version, resolution_option, resolution_note, resolved_at, version, created_at]

@@ -32,3 +32,7 @@ Tokens em `apps/web/src/styles/tokens.css`; componentes de estado (`LoadingState
 ## Matriz de evidências do aceite
 
 `docs/aceite/02-matriz-de-evidencias.md` é **gerada** a partir do checklist, do backlog e dos casos de aceite. Depois de alterar `07-CHECKLIST.md`, rode `make matriz` e inclua o arquivo no commit; o mesmo comando gera `docs/aceite/04-relatorio-de-aceite.md`; `make test` falha se algum estiver desatualizado ([ADR-0041](../adr/0041-matriz-de-evidencias-derivada.md), [ADR-0055](../adr/0055-ensaios-e-relatorio-de-aceite.md)). `make ensaios` roda os cenários de falha e segurança contra o PostgreSQL real e regenera `docs/aceite/03-ensaios-de-falha-e-seguranca.md`.
+
+## Ensaio com navegador real
+
+`make e2e` sobe uma API descartável (banco temporário removido ao encerrar, GitHub de mentira, dados de ensaio) e o front em portas livres escolhidas pelo sistema, e roda o Playwright (Chromium) em `apps/web/e2e/`. Primeira vez na máquina: `cd apps/web && npx playwright install chromium`. Telas e capturas ficam em `apps/web/e2e/.results/` (ignorado pelo Git). Mudou uma tela do painel: rode `make e2e` além de `make test` ([ADR-0057](../adr/0057-rotas-telas-e-ensaio-com-navegador.md)). `npm run typecheck` e `npm run build` fazem parte da verificação do front.

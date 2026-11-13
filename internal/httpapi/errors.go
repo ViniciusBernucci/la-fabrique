@@ -10,7 +10,10 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/agents"
 	"github.com/ViniciusBernucci/le-fabrique/internal/budget"
 	"github.com/ViniciusBernucci/le-fabrique/internal/decisions"
+	"github.com/ViniciusBernucci/le-fabrique/internal/delivery"
+	"github.com/ViniciusBernucci/le-fabrique/internal/gitops"
 	"github.com/ViniciusBernucci/le-fabrique/internal/mcp"
+	"github.com/ViniciusBernucci/le-fabrique/internal/memory"
 	"github.com/ViniciusBernucci/le-fabrique/internal/models"
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
@@ -66,6 +69,8 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 	var selField *selection.FieldError
 	var budField *budget.FieldError
 	var budExceeded *budget.ExceededError
+	var dlvField *delivery.FieldError
+	var memField *memory.FieldError
 	switch {
 	case errors.As(err, &field):
 		writeError(w, r, http.StatusBadRequest, "invalid_request", field.Message, "Corrija o campo \""+field.Field+"\" e tente novamente.")
@@ -99,6 +104,18 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 		writeError(w, r, http.StatusNotFound, "tool_not_found", err.Error(), "Descubra as ferramentas do servidor de novo.")
 	case errors.As(err, &mcpErr):
 		writeError(w, r, http.StatusBadGateway, "mcp_error", mcpErr.Error(), "Verifique o servidor MCP e a conexão.")
+	case errors.As(err, &dlvField):
+		writeError(w, r, http.StatusBadRequest, "invalid_request", dlvField.Message, "Corrija \""+dlvField.Field+"\" e tente novamente.")
+	case errors.As(err, &memField):
+		writeError(w, r, http.StatusBadRequest, "invalid_request", memField.Message, "Corrija o campo \""+memField.Field+"\" e tente novamente.")
+	case errors.Is(err, memory.ErrNotMerged):
+		writeError(w, r, http.StatusConflict, "not_merged", "A entrega ainda não foi integrada: nada é promovido.", "Consulte a PR depois do merge.")
+	case errors.Is(err, errRepoIncomplete):
+		writeError(w, r, http.StatusUnprocessableEntity, "repo_incomplete", "O repositório do projeto não tem conexão do GitHub, dono e nome.", "Complete a etapa Repositório do projeto.")
+	case errors.Is(err, gitops.ErrRejected):
+		writeError(w, r, http.StatusUnprocessableEntity, "github_rejected", err.Error(), "Confira a PR no GitHub e as permissões da conexão.")
+	case errors.Is(err, gitops.ErrAuth), errors.Is(err, gitops.ErrNotFound), errors.Is(err, gitops.ErrGit):
+		writeError(w, r, http.StatusBadGateway, "github_unavailable", "Não foi possível falar com o GitHub.", "Confira a conexão do repositório e tente de novo.")
 	case errors.As(err, &decField):
 		writeError(w, r, http.StatusBadRequest, "invalid_request", decField.Message, "Corrija o campo \""+decField.Field+"\" e tente novamente.")
 	case errors.Is(err, decisions.ErrInvalidOption):

@@ -406,3 +406,36 @@ func (s *Store) ExtractFromDelivery(ctx context.Context, projectID, deliveryID s
 	}
 	return out, nil
 }
+
+// List lista os registros do projeto para o painel (de qualquer branch e estado, do mais recente
+// ao mais antigo), com filtros opcionais de estado e de termos. Só do projeto informado.
+func (s *Store) List(ctx context.Context, projectID, state, query string, limit int) ([]Record, error) {
+	if limit < 1 || limit > 200 {
+		limit = 100
+	}
+	if state != "" && state != StatePending && state != StateOfficial && state != StateInvalidated {
+		return nil, &FieldError{"state", "estado desconhecido (pending, official, invalidated)"}
+	}
+	where := []string{`project_id::text = $1`, `($2 = '' OR state = $2)`}
+	args := []any{projectID, state}
+	for _, t := range strings.Fields(strings.ToLower(query)) {
+		args = append(args, "%"+strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(t)+"%")
+		where = append(where, fmt.Sprintf(`(lower(key) LIKE $%d OR lower(content) LIKE $%d)`, len(args), len(args)))
+	}
+	args = append(args, limit)
+	rows, err := s.DB.Query(ctx, `SELECT `+cols+` FROM memory_records WHERE `+strings.Join(where, " AND ")+
+		fmt.Sprintf(` ORDER BY updated_at DESC, key LIMIT $%d`, len(args)), args...)
+	if err != nil {
+		return nil, persistence.MapError(err)
+	}
+	defer rows.Close()
+	out := []Record{}
+	for rows.Next() {
+		r, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, persistence.MapError(rows.Err())
+}
