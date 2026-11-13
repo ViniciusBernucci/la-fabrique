@@ -121,7 +121,7 @@ func TestParsersNormalizeBothClients(t *testing.T) {
 		`   `:                          nil,
 	}
 	codex := map[string][]Event{
-		`{"type":"thread.started","thread_id":"t1"}`:                                        {{Kind: EvStart}},
+		`{"type":"thread.started","thread_id":"t1"}`:                                        {{Kind: EvStart, Session: "t1"}},
 		`{"type":"item.completed","item":{"type":"agent_message","text":"feito"}}`:          {{Kind: EvMessage, Text: "feito"}},
 		`{"type":"item.started","item":{"type":"command_execution","command":"make test"}}`: {{Kind: EvTool, Tool: "shell", Text: "make test"}},
 		`{"type":"item.completed","item":{"type":"command_execution","command":"x"}}`:       nil,
@@ -237,5 +237,30 @@ func TestRunCancelsWhenContextEnds(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Run não terminou após o cancelamento")
+	}
+}
+
+func TestNativeSessionIsOptInAndResumeIsClaudeOnly(t *testing.T) {
+	acct := Account{ID: "0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f", Name: "c", CLI: Claude}
+	base := Request{Account: acct, Prompt: "faça", Mode: ModeReadOnly}
+	c, err := BuildCommand(base)
+	if err != nil || !has(c.Args, "--no-session-persistence") || has(c.Args, "--resume") {
+		t.Fatalf("%v %v", c.Args, err)
+	}
+	base.Persist = true
+	if c, _ = BuildCommand(base); has(c.Args, "--no-session-persistence") {
+		t.Fatalf("persistente não pode desligar a sessão: %v", c.Args)
+	}
+	base.ResumeSession = "sess-12345678"
+	if c, err = BuildCommand(base); err != nil || !has(c.Args, "--resume", "sess-12345678") || has(c.Args, "--no-session-persistence") {
+		t.Fatalf("%v %v", c.Args, err)
+	}
+	base.ResumeSession = "inválida; rm -rf"
+	if _, err := BuildCommand(base); err == nil {
+		t.Fatal("sessão inválida deve ser recusada")
+	}
+	codex := Request{Account: Account{ID: acct.ID, Name: "x", CLI: Codex}, Prompt: "x", Mode: ModeReadOnly, ResumeSession: "sess-12345678"}
+	if _, err := BuildCommand(codex); err == nil {
+		t.Fatal("retomada nativa não é declarada para o Codex")
 	}
 }

@@ -23,6 +23,7 @@ type Event struct {
 	Tool         string `json:"tool,omitempty"`
 	InputTokens  int    `json:"input_tokens,omitempty"`
 	OutputTokens int    `json:"output_tokens,omitempty"`
+	Session      string `json:"session,omitempty"` // id da sessão nativa, quando o cliente o informa
 }
 
 // ParseLine converte uma linha JSON do cliente em eventos. Os formatos seguem a
@@ -63,7 +64,7 @@ func sub(m map[string]any, k string) map[string]any { s, _ := m[k].(map[string]a
 func parseClaude(m map[string]any, raw string) []Event {
 	switch str(m, "type") {
 	case "system":
-		return []Event{{Kind: EvStart}}
+		return []Event{{Kind: EvStart, Session: str(m, "session_id")}}
 	case "assistant":
 		var out []Event
 		content, _ := sub(m, "message")["content"].([]any)
@@ -93,7 +94,7 @@ func parseClaude(m map[string]any, raw string) []Event {
 func parseCodex(m map[string]any, raw string) []Event {
 	switch str(m, "type") {
 	case "thread.started":
-		return []Event{{Kind: EvStart}}
+		return []Event{{Kind: EvStart, Session: str(m, "thread_id")}}
 	case "item.completed", "item.started":
 		it := sub(m, "item")
 		switch str(it, "type") {

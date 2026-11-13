@@ -125,6 +125,25 @@ type RunConfig struct {
 	MaxToolCalls int
 	Redact       func(string) string // aplicado ao texto de erro devolvido ao modelo
 	Meter        Meter               // opcional: orçamento por chamada
+	// OnEvent recebe os eventos estruturados da execução (resposta, ferramenta, uso), em ordem.
+	OnEvent func(Event)
+}
+
+// Evento estruturado de uma execução por API.
+const (
+	EventMessage = "message"
+	EventTool    = "tool"
+	EventUsage   = "usage"
+)
+
+// Event é um fato observável da execução por API.
+type Event struct {
+	Kind         string `json:"kind"`
+	Text         string `json:"text,omitempty"`
+	Tool         string `json:"tool,omitempty"`
+	Outcome      string `json:"outcome,omitempty"`
+	InputTokens  int    `json:"input_tokens,omitempty"`
+	OutputTokens int    `json:"output_tokens,omitempty"`
 }
 
 // Result é o resultado da execução.
@@ -211,6 +230,15 @@ func Run(ctx context.Context, gw Chatter, cfg RunConfig) (Result, error) {
 		res.Turns = turn
 		res.Usage.PromptTokens += resp.Usage.PromptTokens
 		res.Usage.CompletionTokens += resp.Usage.CompletionTokens
+		emit := func(e Event) {
+			if cfg.OnEvent != nil {
+				cfg.OnEvent(e)
+			}
+		}
+		if strings.TrimSpace(resp.Text) != "" {
+			emit(Event{Kind: EventMessage, Text: clipText(redact(resp.Text), 2000)})
+		}
+		emit(Event{Kind: EventUsage, InputTokens: resp.Usage.PromptTokens, OutputTokens: resp.Usage.CompletionTokens})
 		if len(resp.ToolCalls) == 0 {
 			res.Text = clipText(resp.Text, maxFinalText)
 			return res, nil
@@ -236,6 +264,7 @@ func Run(ctx context.Context, gw Chatter, cfg RunConfig) (Result, error) {
 				}
 			}
 			res.Calls = append(res.Calls, CallRecord{Name: clipText(tc.Name, 64), Outcome: outcome})
+			emit(Event{Kind: EventTool, Tool: clipText(tc.Name, 64), Outcome: outcome})
 			msgs = append(msgs, Message{Role: "tool", ToolCallID: tc.ID, Content: content})
 		}
 	}

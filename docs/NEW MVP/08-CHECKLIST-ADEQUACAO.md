@@ -1,9 +1,9 @@
 # Checklist do backlog de adequação (LF-AJ)
 Acompanhamento dos 35 tickets de [Le-Fabrique-Adequacao.md](Le-Fabrique-Adequacao.md). **Fonte de verdade do estado da adequação**: atualize ao concluir ou alterar um ticket (marcar `[x]` só com evidência real). Fica separado do [07-CHECKLIST.md](07-CHECKLIST.md) porque a matriz de aceite do MVP é derivada dele.
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
-_Última atualização: 2026-11-13 — AJ01-04._
+_Última atualização: 2026-11-13 — AJ07-01._
 ## Resumo
-**9 feitos · 2 parciais · 24 pendentes** de 35 tickets.
+**9 feitos · 3 parciais · 23 pendentes** de 35 tickets.
 
 ## LF-AJ-01 — Sincronização e gerenciamento de Issues
 - [x] **AJ01-01** — Leitura Jira/ClickUp: descobrir Issues elegíveis e atualizar conhecidas por ID · dep.: AJ02-01 · aceite: CT01.
@@ -52,7 +52,8 @@ _Última atualização: 2026-11-13 — AJ01-04._
 - [ ] **AJ06-04** — Consolidação, checks integrados e adaptador de publicação GitHub (Draft PR) · dep.: AJ06-03, AJ08-05 · aceite: CT06, CT12.
 
 ## LF-AJ-07 — Monitoramento de agentes, terminais e interação humana
-- [ ] **AJ07-01** — Capacidades CLI/API no contrato dos adaptadores de execução e recuperação · dep.: E08, E09, E11, E12 · aceite: CT07, CT10, CT14.
+- [~] **AJ07-01** — Capacidades CLI/API no contrato dos adaptadores de execução e recuperação · dep.: E08, E09, E11, E12 · aceite: CT07, CT10, CT14.
+  - `internal/executor`: contrato único `Adapter` com `Capabilities` declaradas (sessão nativa, retomada, interação imediata/próximo ponto/nenhuma, subagentes, `Verified`), `Task` igual para CLI e API (cabeçalho determinístico do contrato + skill + instruções) e `Event` com Seq e origem. CLI configurável por `Override`; sessão nativa opt-in no `providers` (`--resume` só para o Claude; Codex não declara). API emite eventos estruturados (`gateways.RunConfig.OnEvent`) sob os mesmos limites. PASS: `go test ./internal/executor ./internal/providers ./internal/gateways` com Runner e gateway de teste. **Pendente (NOT_RUN):** as flags de sessão/retomada e o formato de `session_id` não foram verificados contra os clientes reais; capacidades dos CLIs ficam `verified=false` até a verificação por um responsável.
 - [ ] **AJ07-02** — Terminal, eventos, cronômetro, progresso e subagentes observáveis · dep.: AJ07-01 · aceite: CT10.
 - [ ] **AJ07-03** — Orientações ao agente com confirmação técnica e histórico na retomada · dep.: AJ07-02, AJ04-03 · aceite: CT07, CT10.
 

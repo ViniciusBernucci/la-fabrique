@@ -52,6 +52,7 @@ type Result struct {
 	InputTokens  int
 	OutputTokens int
 	Events       int
+	Session      string // id da sessão nativa informado pelo cliente (vazio se não informou)
 }
 
 const maxLine = 1 << 20
@@ -79,6 +80,9 @@ func Run(ctx context.Context, rn Runner, req Request, onEvent func(Event)) (Resu
 	for sc.Scan() {
 		for _, ev := range ParseLine(req.Account.CLI, sc.Text()) {
 			res.Events++
+			if ev.Session != "" {
+				res.Session = ev.Session
+			}
 			switch ev.Kind {
 			case EvMessage:
 				lastMessage = ev.Text

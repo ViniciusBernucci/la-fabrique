@@ -55,7 +55,13 @@ type Request struct {
 	Dir          string   // diretório de trabalho no sandbox (padrão /workspace)
 	AllowedTools []string // Claude: ferramentas extras no modo de escrita, ex.: "Bash(make test)"
 	Binary       string   // sobrescreve o executável (testes)
+	// Persist mantém a sessão nativa do cliente (padrão: efêmera, como antes). ResumeSession retoma
+	// uma sessão nativa já existente (implica Persist). Só o Claude declara suporte à retomada.
+	Persist       bool
+	ResumeSession string
 }
+
+var sessionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{7,63}$`)
 
 // Command é o que o executor roda: argumentos, ambiente (só caminhos, nenhum
 // segredo) e o prompt, entregue por stdin.
@@ -126,6 +132,15 @@ func BuildCommand(req Request) (Command, error) {
 			return bad("ferramenta inválida")
 		}
 	}
+	if req.ResumeSession != "" {
+		if !sessionPattern.MatchString(req.ResumeSession) {
+			return bad("sessão inválida")
+		}
+		if req.Account.CLI != Claude {
+			return bad("a retomada de sessão nativa só é suportada para o Claude")
+		}
+	}
+	persist := req.Persist || req.ResumeSession != ""
 	bin := req.Binary
 	if bin == "" {
 		bin = string(req.Account.CLI)
@@ -143,8 +158,14 @@ func BuildCommand(req Request) (Command, error) {
 		} else if len(req.AllowedTools) > 0 {
 			return bad("ferramentas extras exigem o modo de escrita")
 		}
-		cmd.Args = []string{bin, "-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence",
-			"--permission-mode", perm, "--allowedTools", strings.Join(tools, ",")}
+		cmd.Args = []string{bin, "-p", "--output-format", "stream-json", "--verbose"}
+		if !persist {
+			cmd.Args = append(cmd.Args, "--no-session-persistence")
+		}
+		if req.ResumeSession != "" {
+			cmd.Args = append(cmd.Args, "--resume", req.ResumeSession)
+		}
+		cmd.Args = append(cmd.Args, "--permission-mode", perm, "--allowedTools", strings.Join(tools, ","))
 		if req.Model != "" {
 			cmd.Args = append(cmd.Args, "--model", req.Model)
 		}
@@ -157,7 +178,11 @@ func BuildCommand(req Request) (Command, error) {
 		if req.Mode == ModeWorkspaceWrite {
 			sandbox = "workspace-write"
 		}
-		cmd.Args = []string{bin, "exec", "--json", "--skip-git-repo-check", "--ephemeral", "--sandbox", sandbox, "-C", dir}
+		cmd.Args = []string{bin, "exec", "--json", "--skip-git-repo-check"}
+		if !persist {
+			cmd.Args = append(cmd.Args, "--ephemeral")
+		}
+		cmd.Args = append(cmd.Args, "--sandbox", sandbox, "-C", dir)
 		if req.Model != "" {
 			cmd.Args = append(cmd.Args, "--model", req.Model)
 		}
