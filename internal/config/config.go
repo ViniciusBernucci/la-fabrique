@@ -58,6 +58,12 @@ type Worker struct {
 	Common
 	HealthAddr        string
 	HeartbeatInterval time.Duration
+	// JobsInterval é o intervalo das tarefas leves (liberar decisões, recuperar tentativas).
+	JobsInterval time.Duration
+	// RetentionInterval é o intervalo da retenção; RetentionApply liga a remoção real (padrão:
+	// só simula e registra).
+	RetentionInterval time.Duration
+	RetentionApply    bool
 }
 
 // Migrate é a configuração do cmd/migrate.
@@ -242,6 +248,9 @@ func LoadWorker(lookup Lookup) (Worker, error) {
 	cfg := Worker{Common: l.common()}
 	cfg.HealthAddr = l.addr("WORKER_HEALTH_ADDR", "127.0.0.1:8481")
 	cfg.HeartbeatInterval = l.duration("WORKER_HEARTBEAT_INTERVAL", 15*time.Second, time.Second)
+	cfg.JobsInterval = l.duration("WORKER_JOBS_INTERVAL", 30*time.Second, time.Second)
+	cfg.RetentionInterval = l.duration("RETENTION_INTERVAL", 24*time.Hour, time.Minute)
+	cfg.RetentionApply = l.boolean("RETENTION_APPLY", false)
 	return cfg, l.result()
 }
 

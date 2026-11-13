@@ -391,3 +391,30 @@ func (d *Docker) RemoveVolume(ctx context.Context, name string) error {
 	}
 	return nil
 }
+
+// ManagedContainers lista os containers EM EXECUÇÃO que a fábrica criou para a feature do projeto
+// (pelos rótulos lf.*). Serve à recuperação, que não guarda o objeto Sandbox de um worker que sumiu.
+func (d *Docker) ManagedContainers(ctx context.Context, projectID, featureID string) ([]string, error) {
+	if !idPattern.MatchString(projectID) || !idPattern.MatchString(featureID) {
+		return nil, ErrInvalidSpec
+	}
+	out, e, err := d.run(ctx, nil, "ps", "--filter", "label=lf.managed=true", "--filter", "label=lf.project="+projectID,
+		"--filter", "label=lf.feature="+featureID, "--format", "{{.Names}}")
+	if err != nil {
+		return nil, fmt.Errorf("listar sandboxes: %s", strings.TrimSpace(e))
+	}
+	var names []string
+	for _, n := range strings.Fields(out) {
+		if strings.HasPrefix(n, "lf-sbx-") {
+			names = append(names, n)
+		}
+	}
+	return names, nil
+}
+
+// Attach reencontra um sandbox existente pelo nome do container (só para verificação e parada;
+// não recria nada).
+func (d *Docker) Attach(container string) *Sandbox {
+	id := strings.TrimPrefix(container, "lf-sbx-")
+	return &Sandbox{ID: id, Container: container, Volume: "lf-ws-" + id, d: d}
+}

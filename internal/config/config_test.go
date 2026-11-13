@@ -110,6 +110,16 @@ func TestLoadWorker(t *testing.T) {
 	if err != nil || cfg.HeartbeatInterval != 5*time.Second || cfg.HealthAddr != "127.0.0.1:8481" {
 		t.Fatalf("cfg=%+v err=%v", cfg, err)
 	}
+	if cfg.JobsInterval != 30*time.Second || cfg.RetentionInterval != 24*time.Hour || cfg.RetentionApply {
+		t.Fatalf("padrões das tarefas: %+v", cfg)
+	}
+	on, err := LoadWorker(env(map[string]string{"DATABASE_URL": goodDB, "RETENTION_APPLY": "true", "WORKER_JOBS_INTERVAL": "5s"}))
+	if err != nil || !on.RetentionApply || on.JobsInterval != 5*time.Second {
+		t.Fatalf("%+v %v", on, err)
+	}
+	if _, err := LoadWorker(env(map[string]string{"DATABASE_URL": goodDB, "WORKER_JOBS_INTERVAL": "10ms"})); err == nil {
+		t.Fatal("intervalo das tarefas abaixo do mínimo deveria falhar")
+	}
 	if _, err := LoadWorker(env(map[string]string{"DATABASE_URL": goodDB, "WORKER_HEARTBEAT_INTERVAL": "100ms"})); err == nil {
 		t.Fatal("intervalo abaixo do mínimo deveria falhar")
 	}

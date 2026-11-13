@@ -1,9 +1,11 @@
 // Package worker implementa o ciclo de vida do processo worker: sondas de
-// saúde e heartbeat. Leases, fila e execução chegam com os épicos E10–E12.
+// saúde, heartbeat e tarefas periódicas (liberação de decisões, recuperação de tentativas
+// interrompidas e retenção). A execução dos agentes em si depende do executor de sandbox e IA.
 package worker
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"sync/atomic"
@@ -22,6 +24,7 @@ type Worker struct {
 	interval time.Duration
 	healthy  atomic.Bool
 	beats    atomic.Int64
+	jobs     []*jobState
 }
 
 // New cria o worker.
@@ -41,6 +44,7 @@ func (w *Worker) Healthy() bool { return w.healthy.Load() }
 func (w *Worker) Run(ctx context.Context) {
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
+	w.runJobs(ctx)
 	w.beat(ctx)
 	for {
 		select {
@@ -72,6 +76,10 @@ func (w *Worker) HealthHandler() http.Handler {
 	mux.HandleFunc("GET /healthz", func(rw http.ResponseWriter, _ *http.Request) {
 		rw.Header().Set("Content-Type", "application/json")
 		_, _ = rw.Write([]byte(`{"status":"ok"}`))
+	})
+	mux.HandleFunc("GET /jobs", func(rw http.ResponseWriter, _ *http.Request) {
+		rw.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(rw).Encode(map[string]any{"items": w.Jobs()})
 	})
 	mux.HandleFunc("GET /readyz", func(rw http.ResponseWriter, _ *http.Request) {
 		rw.Header().Set("Content-Type", "application/json")

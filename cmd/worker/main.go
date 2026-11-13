@@ -13,9 +13,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ViniciusBernucci/le-fabrique/internal/checkpoints"
 	"github.com/ViniciusBernucci/le-fabrique/internal/config"
+	"github.com/ViniciusBernucci/le-fabrique/internal/execution"
 	"github.com/ViniciusBernucci/le-fabrique/internal/logging"
+	"github.com/ViniciusBernucci/le-fabrique/internal/queue"
+	"github.com/ViniciusBernucci/le-fabrique/internal/recovery"
+	"github.com/ViniciusBernucci/le-fabrique/internal/retention"
+	"github.com/ViniciusBernucci/le-fabrique/internal/security"
 	"github.com/ViniciusBernucci/le-fabrique/internal/worker"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() { os.Exit(run()) }
@@ -38,6 +45,7 @@ func run() int {
 	defer pool.Close()
 
 	w := worker.New(pool, log, cfg.HeartbeatInterval)
+	registerJobs(w, pool, cfg)
 	srv := &http.Server{Addr: cfg.HealthAddr, Handler: w.HealthHandler(), ReadHeaderTimeout: 5 * time.Second}
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
@@ -57,4 +65,15 @@ func run() int {
 	}
 	log.Info("worker encerrado")
 	return 0
+}
+
+// registerJobs liga ao worker o que não depende do executor de agentes.
+func registerJobs(w *worker.Worker, pool *pgxpool.Pool, cfg config.Worker) {
+	cps := &checkpoints.Store{DB: pool}
+	q := &queue.Queue{DB: pool, Checkpoints: cps, RequireRecovery: true, Gates: map[string]queue.Gate{queue.WaitDecision: queue.DecisionGate{DB: pool}}}
+	rec := &recovery.Recoverer{DB: pool, Queue: q, Checkpoints: cps, Redactor: security.NewRedactor(),
+		Inspector: recovery.DockerInspector{Docker: &execution.Docker{}}}
+	w.AddJob(worker.ReleaseDecisionsJob(pool, q, cfg.JobsInterval))
+	w.AddJob(worker.RecoverJob(rec, cfg.JobsInterval))
+	w.AddJob(worker.RetentionJob(&retention.Retention{DB: pool, Checkpoints: cps}, retention.Policy{}, cfg.RetentionApply, cfg.RetentionInterval))
 }
