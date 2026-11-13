@@ -1,3 +1,6 @@
+## 2026-11-12 — E10: fila local por projeto (T10-02)
+Fila de tarefas técnicas: só inicia o elegível (pré-requisitos, projeto ativo, requisito sem pendência, vaga única por projeto garantida por índice), correção de PR na próxima vaga, esperas por merge/provedor/decisão/recursos e vaga devolvida só com checkpoint seguro. Scheduler, portas de provedor e tela NOT_RUN. [Entrega](entregas/2026-11-12-E10-fila-local.md) · [ADR-0039](adr/0039-fila-local-por-projeto.md).
+
 ## 2026-11-12 — E06: mudança de requisitos e troca de plataforma (T06-05)
 Revisões do requisito com histórico e impacto (metadado adiado até marco seguro, conteúdo sem trabalho iniciado pede novo plano, conteúdo com trabalho iniciado abre decisão sem alterar nada) e troca de origem por mapeamento validado, com histórico de identidades e uma única origem. Plataformas reais, rotas e tela NOT_RUN. [Entrega](entregas/2026-11-12-E06-mudanca-de-requisitos-e-troca-de-origem.md) · [ADR-0038](adr/0038-mudanca-de-requisitos-e-troca-de-origem.md).
 

@@ -116,6 +116,15 @@ func (s *Store) Current(ctx context.Context, projectID, featureID string) (Store
 	return st, err
 }
 
+// CurrentOf lê a versão vigente com qualquer consulta (inclusive dentro de uma transação).
+func (s *Store) CurrentOf(ctx context.Context, q persistence.DBTX, projectID, featureID string) (Stored, error) {
+	st, err := scanPlan(q.QueryRow(ctx, `SELECT `+planCols+` FROM plans WHERE project_id = $1 AND feature_id = $2 AND status = 'current'`, projectID, featureID))
+	if errors.Is(err, persistence.ErrNotFound) {
+		return Stored{}, ErrNoPlan
+	}
+	return st, err
+}
+
 // Versions lista todas as versões (inclusive rejeitadas), da mais nova para a mais antiga.
 func (s *Store) Versions(ctx context.Context, projectID, featureID string) ([]Stored, error) {
 	rows, err := s.DB.Query(ctx, `SELECT `+planCols+` FROM plans WHERE project_id = $1 AND feature_id = $2 ORDER BY version DESC`, projectID, featureID)
