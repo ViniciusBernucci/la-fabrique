@@ -1,0 +1,12 @@
+{
+  "tasks": [
+    {"id": "t3", "name": "Relatório mensal", "text_content": "",
+     "status": {"status": "complete", "type": "closed"}, "priority": null,
+     "parent": null, "tags": [{"name": "lf-ready"}], "date_updated": "1731312000000",
+     "url": "https://app.clickup.com/t/t3", "list": {"id": "L1"},
+     "dependencies": [
+       {"task_id": "t3", "depends_on": "t1", "type": 0},
+       {"task_id": "t9", "depends_on": "t3", "type": 0}]}
+  ],
+  "last_page": true
+}

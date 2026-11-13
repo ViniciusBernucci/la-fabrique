@@ -1,0 +1,13 @@
+{
+  "tasks": [
+    {"id": "t1", "custom_id": null, "name": "Cadastro de clientes", "text_content": "Permitir cadastrar clientes.",
+     "status": {"status": "to do", "type": "open"}, "priority": {"id": "2", "priority": "high"},
+     "parent": null, "tags": [{"name": "lf-ready"}, {"name": "backend"}], "date_updated": "1731240000000",
+     "url": "https://app.clickup.com/t/t1", "list": {"id": "L1"}, "dependencies": []},
+    {"id": "t2", "custom_id": "ABC-2", "name": "Validar CPF", "text_content": "",
+     "status": {"status": "in progress", "type": "custom"}, "priority": {"id": "3", "priority": "normal"},
+     "parent": "t1", "tags": [], "date_updated": "1731243600000",
+     "url": "https://app.clickup.com/t/t2", "list": {"id": "L1"}, "dependencies": []}
+  ],
+  "last_page": false
+}

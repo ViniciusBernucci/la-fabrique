@@ -1,0 +1,19 @@
+# ADR-0057 — Rotas e telas de entrega, memória e controles; ensaio com navegador real
+
+- **Estado:** ACEITA · **Tickets:** T15-03, T15-04, T15-05, T16-01, T16-02 (rotas, telas e navegador) · **Épicos:** E15, E16 · **Relacionadas:** [ADR-0051](0051-observacao-do-merge-e-propagacao.md), [ADR-0052](0052-revisao-externa-e-pr-fechada.md), [ADR-0053](0053-memoria-tecnica-pendente-e-oficial.md), [ADR-0056](0056-tarefas-periodicas-do-worker.md)
+
+## Decisão
+1. **Rotas (`contracts/openapi.yaml`, com teste de contrato):** `GET/PUT /projects/{id}/delivery-settings`, `GET /projects/{id}/deliveries` e `/{deliveryId}`, `POST .../observe`, `.../comments/discover`, `.../actions` (sensível), `.../memory/extract`, `GET /projects/{id}/memory`, `POST .../memory/{recordId}/invalidate`, `PUT /projects/{id}/controls`, `PUT /controls/global` (sensível) e `GET /projects/{id}/features/{featureId}/report`.
+2. **D89 mantido:** a consulta da PR (`observe`) e a busca de comentários só rodam quando alguém pede, pelo painel; nada faz polling. `observe` com merge provado conclui o item na origem **só se** o mapa de estados da origem estiver configurado, devolve à fila quem esperava e promove a memória pendente da branch; sem o mapa, a resposta diz que o item não foi movido.
+3. **Configuração da entrega (`delivery_settings`, migration 41):** logins autorizados a pedir correção e o mapa de estados da origem (`awaiting_merge`, `done`). A conexão do GitHub vem do cofre; o segredo não sai do servidor.
+4. **Controles:** pausar após a feature atual e retomar funcionam por completo; **suspender** persiste o modo e tenta parar o que roda, mas a API não controla o sandbox: o que não puder parar com checkpoint seguro segue em execução e é listado em `failed` (nunca se dá como parado sem checkpoint).
+5. **Telas no padrão do painel** (tokens `--hud-*`, `panel`, `item-list`, `badge`, `callout`, `stepper`, `inline-form`): Entregas, Configuração da entrega e Memória técnica no detalhe do projeto; controles do projeto no painel de Execução; Recusar, sequência e aba Autorizações na Central.
+6. **`useResource.reload` não apaga o que está na tela:** descoberto no navegador real: recarregar a lista desmontava os itens e perdia mensagens, campos e detalhes abertos (e o painel de execução, que recarrega a cada 10 s, perdia o texto digitado). Agora só uma chave nova (ou nova tentativa depois de erro) volta a "carregando".
+7. **Ensaio com navegador real (`make e2e`):** `cmd/e2e-stack` sobe uma API descartável sobre um banco temporário (removido ao encerrar), com um GitHub de mentira e dados de ensaio; `apps/web/e2e/run.mjs` sobe o front em portas livres escolhidas pelo sistema (nenhuma porta fixa) e roda o Playwright (Chromium) com o administrador de senha aleatória do ensaio. Cobre: primeiro acesso com cadastro do 2FA e códigos de recuperação, senha sozinha não abre sessão, projeto, entregas, consulta da PR e promoção da memória, PR fechada, comentários autorizados, Central (recusar, revogar, sequência), controles e ausência de erro de página ou resposta 5xx.
+8. **Verificação de tipos:** `npm run typecheck` (`tsc -b --noEmit`) já falhava no repositório (a checagem que vinha sendo usada não conferia nada porque o `tsconfig` raiz só referencia outros); os erros foram corrigidos e `tsconfig.node.json` passa a cobrir também o Playwright e o `e2e/`.
+
+## Limites
+- O navegador real roda contra API, banco e GitHub descartáveis: o ciclo no ambiente e no projeto reais (Jira, ClickUp, GitHub, VPS) segue NOT_RUN. Só Chromium.
+- Nada na tela dispara o `deliver` (abrir a Draft PR): ele depende do executor (arquivos alterados, gates) que não existe.
+- A parada segura na suspensão e na revogação com uso em andamento depende do executor de sandbox.
+- Os mapas de estados e os autores são por projeto e configurados à mão; não há descoberta a partir da origem.

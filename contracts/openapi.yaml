@@ -1,0 +1,3131 @@
+openapi: 3.0.3
+info:
+  title: Le Fabrique — API interna
+  version: 0.1.0
+  description: |
+    Contrato interno entre o painel web e a API Go. Cresce a cada épico; esta
+    versão cobre T03 (saúde, sessão, projetos) e E04 (login com senha + TOTP,
+    recuperação, sessões, reautenticação, CSRF e cofre de conexões).
+
+    **Autenticação.** Toda rota fora de /healthz, /readyz e /auth/login|totp|
+    recover|totp/setup|totp/enable exige o cookie de sessão `lf_session`
+    (HttpOnly, SameSite=Strict, Secure em produção). A sessão só nasce depois
+    de senha + segundo fator.
+
+    **CSRF.** Em POST/PUT/PATCH/DELETE autenticados envie `X-CSRF-Token` com o
+    `csrf_token` devolvido por `GET /session` ou pelo login. A API também recusa
+    `Origin`/`Sec-Fetch-Site` de outra origem (403 `csrf_rejected`).
+
+    **Ações sensíveis** (marcadas abaixo) exigem reautenticação recente
+    (`reauth_until` na sessão); sem ela: 403 `reauth_required`. Reautentique com
+    `POST /auth/reauth` e repita a ação.
+
+    **HTTPS.** Em produção a API recusa requisições que o proxy não marcou como
+    HTTPS (400 `https_required`) e envia HSTS.
+
+    Erros seguem `ErrorBody`. Nenhuma resposta contém segredos; o valor de uma
+    conexão nunca volta pela API.
+servers:
+  - url: /api
+tags:
+  - name: operacao
+  - name: sessao
+  - name: autenticacao
+  - name: conexoes
+  - name: projetos
+paths:
+  /healthz:
+    get:
+      tags: [operacao]
+      summary: Liveness do processo
+      security: []
+      responses:
+        "200": {description: Processo vivo, content: {application/json: {schema: {$ref: "#/components/schemas/Status"}}}}
+  /readyz:
+    get:
+      tags: [operacao]
+      summary: Readiness (inclui o PostgreSQL)
+      security: []
+      responses:
+        "200": {description: Pronto, content: {application/json: {schema: {$ref: "#/components/schemas/Status"}}}}
+        "503": {$ref: "#/components/responses/Error"}
+  /session:
+    get:
+      tags: [sessao]
+      summary: Sessão administrativa atual
+      responses:
+        "200": {description: Sessão válida, content: {application/json: {schema: {$ref: "#/components/schemas/Session"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+  /auth/login:
+    post:
+      tags: [autenticacao]
+      summary: Passo 1 do login — valida usuário e senha
+      description: |
+        NÃO abre sessão. Em caso de sucesso define o cookie de desafio
+        `lf_challenge` (10 min, HttpOnly) e informa o próximo passo. Após 5
+        falhas na conta (ou 20 no IP) em 15 min: 429 `too_many_attempts`.
+        Usuário inexistente e senha errada têm a mesma resposta.
+      security: []
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/LoginRequest"}}}}
+      responses:
+        "200": {description: Senha correta; falta o segundo fator, content: {application/json: {schema: {$ref: "#/components/schemas/LoginStage"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+  /auth/totp:
+    post:
+      tags: [autenticacao]
+      summary: Passo 2 do login — código TOTP
+      description: Exige o cookie `lf_challenge`. Cada código só vale uma vez (anti-replay). Abre a sessão.
+      security: []
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/CodeRequest"}}}}
+      responses:
+        "200": {description: Sessão aberta e cookie definido, content: {application/json: {schema: {$ref: "#/components/schemas/Session"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+  /auth/recover:
+    post:
+      tags: [autenticacao]
+      summary: Passo 2 alternativo — código de recuperação (uso único)
+      description: |
+        Exige `lf_challenge`. O código é consumido atomicamente: requisições
+        concorrentes com o mesmo código resultam em uma única sessão. A sessão
+        volta com `totp_reset_required=true` (substitua o 2FA).
+      security: []
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/RecoveryRequest"}}}}
+      responses:
+        "200": {description: Sessão aberta e cookie definido, content: {application/json: {schema: {$ref: "#/components/schemas/Session"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+  /auth/totp/setup:
+    post:
+      tags: [autenticacao]
+      summary: Primeiro acesso — gera o segredo TOTP
+      description: Exige `lf_challenge` de uma conta ainda sem 2FA. O segredo é guardado cifrado.
+      security: []
+      responses:
+        "200": {description: Material para o app autenticador, content: {application/json: {schema: {$ref: "#/components/schemas/Enrollment"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /auth/totp/enable:
+    post:
+      tags: [autenticacao]
+      summary: Primeiro acesso — confirma o TOTP, emite códigos de recuperação e abre a sessão
+      description: Os códigos de recuperação são mostrados **uma única vez**.
+      security: []
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/CodeRequest"}}}}
+      responses:
+        "201": {description: 2FA ativo e sessão aberta, content: {application/json: {schema: {$ref: "#/components/schemas/SessionWithRecoveryCodes"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+  /auth/logout:
+    post:
+      tags: [autenticacao]
+      summary: Encerra e revoga a sessão atual
+      responses:
+        "200": {description: Sessão revogada, content: {application/json: {schema: {$ref: "#/components/schemas/Status"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /auth/reauth:
+    post:
+      tags: [autenticacao]
+      summary: Reautentica (senha + código TOTP) e abre a janela de ações sensíveis
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/ReauthRequest"}}}}
+      responses:
+        "200": {description: Janela aberta (`reauth_until`), content: {application/json: {schema: {$ref: "#/components/schemas/Session"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+  /auth/events:
+    get:
+      tags: [autenticacao]
+      summary: Trilha de autenticação (últimos 50 eventos)
+      description: Nunca contém senha, código, token nem nome de usuário tentado.
+      responses:
+        "200": {description: Eventos, mais novos primeiro, content: {application/json: {schema: {$ref: "#/components/schemas/AuthEventList"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+  /auth/totp/replace/begin:
+    post:
+      tags: [autenticacao]
+      summary: "[SENSÍVEL] Inicia a substituição do segundo fator"
+      description: Gera um segredo pendente; o atual segue valendo até a confirmação.
+      responses:
+        "200": {description: Material para o novo autenticador, content: {application/json: {schema: {$ref: "#/components/schemas/Enrollment"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /auth/totp/replace/confirm:
+    post:
+      tags: [autenticacao]
+      summary: "[SENSÍVEL] Confirma a substituição do segundo fator"
+      description: Emite novos códigos de recuperação (invalida os anteriores) e revoga as demais sessões.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/CodeRequest"}}}}
+      responses:
+        "200": {description: Segundo fator substituído, content: {application/json: {schema: {$ref: "#/components/schemas/RecoveryCodes"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+  /sessions:
+    get:
+      tags: [sessao]
+      summary: Sessões ativas do administrador
+      responses:
+        "200": {description: Sessões, content: {application/json: {schema: {$ref: "#/components/schemas/SessionList"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+  /sessions/{id}:
+    delete:
+      tags: [sessao]
+      summary: Revoga uma sessão (a própria é livre; outra é SENSÍVEL)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Sessão revogada, content: {application/json: {schema: {$ref: "#/components/schemas/Status"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /sessions/revoke-others:
+    post:
+      tags: [sessao]
+      summary: "[SENSÍVEL] Revoga todas as sessões exceto a atual"
+      responses:
+        "200": {description: Quantidade revogada, content: {application/json: {schema: {$ref: "#/components/schemas/RevokedCount"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /connections:
+    get:
+      tags: [conexoes]
+      summary: Lista conexões do cofre (sem segredos)
+      responses:
+        "200": {description: Conexões, content: {application/json: {schema: {$ref: "#/components/schemas/ConnectionList"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [conexoes]
+      summary: "[SENSÍVEL] Cria uma conexão (o segredo é cifrado com chave externa ao banco)"
+      description: |
+        `secret` é aceito aqui e **nunca** devolvido. Jira: `email:token` com
+        `target` https://<site>.atlassian.net. Use escopos mínimos no destino.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/NewConnection"}}}}
+      responses:
+        "201": {description: Conexão criada, content: {application/json: {schema: {$ref: "#/components/schemas/Connection"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /connections/{id}:
+    get:
+      tags: [conexoes]
+      summary: Detalhe de uma conexão (sem segredo)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Conexão, content: {application/json: {schema: {$ref: "#/components/schemas/Connection"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /connections/{id}/test:
+    post:
+      tags: [conexoes]
+      summary: Testa a credencial no destino e grava o resultado
+      description: |
+        GitHub, ClickUp e Jira têm teste remoto. cli/api/mcp devolvem
+        `not_run` (sem teste remoto seguro): o segredo só é decifrado.
+        O detalhe nunca contém corpo remoto nem o segredo.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Resultado em `last_test_*`, content: {application/json: {schema: {$ref: "#/components/schemas/Connection"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /connections/{id}/rotate:
+    post:
+      tags: [conexoes]
+      summary: "[SENSÍVEL] Troca o segredo mantendo id e vínculos"
+      description: O valor anterior é descartado. `expected_version` evita sobrescrever alteração concorrente (409 `version_conflict`).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/RotateConnection"}}}}
+      responses:
+        "200": {description: Conexão rotacionada, content: {application/json: {schema: {$ref: "#/components/schemas/Connection"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /connections/{id}/revoke:
+    post:
+      tags: [conexoes]
+      summary: "[SENSÍVEL] Revoga a conexão e apaga o segredo (irreversível, idempotente)"
+      description: O efeito vale para o próximo uso, sem cache (`Vault.Resolve` consulta o banco).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Conexão revogada, content: {application/json: {schema: {$ref: "#/components/schemas/Connection"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects:
+    post:
+      tags: [projetos]
+      summary: Cria um projeto em rascunho, vazio de vínculos (agentes, workflows, recursos)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/NewProject"}}}
+      responses:
+        "201": {description: Projeto em rascunho, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+    get:
+      tags: [projetos]
+      summary: Lista projetos (mais novos primeiro), paginada por cursor
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: cursor, in: query, schema: {type: string}, description: "Valor de next_cursor da página anterior"}
+        - {name: state, in: query, schema: {$ref: "#/components/schemas/ProjectState"}}
+      responses:
+        "200": {description: Página de projetos, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectPage"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+  /projects/{id}:
+    get:
+      tags: [projetos]
+      summary: Detalhe de um projeto
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Projeto, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+    patch:
+      tags: [projetos]
+      summary: Persiste uma etapa do assistente ou ajusta dados do projeto
+      description: >
+        Controle otimista por `expected_version` (409 `version_conflict`). `repository` e `source`
+        substituem o grupo inteiro; campos vazios são aceitos no rascunho e viram pendências.
+        Alterar `repository` ou `source` de projeto ativo devolve 409 `project_active`.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ProjectPatch"}}}
+      responses:
+        "200": {description: Projeto atualizado, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /projects/{id}/validation:
+    get:
+      tags: [projetos]
+      summary: Relatório de validação do preenchimento (pendências com ação concreta)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Relatório, content: {application/json: {schema: {$ref: "#/components/schemas/ValidationReport"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/changes:
+    get:
+      tags: [projetos]
+      summary: Trilha de criação, alterações, mudança de origem, ativação e suspensão
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Alterações, da mais recente para a mais antiga
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/ProjectChange"}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/source/check:
+    post:
+      tags: [projetos]
+      summary: Verifica a origem (Jira/ClickUp) com a conexão do cofre e devolve o preview dos itens elegíveis
+      description: >
+        Prova credencial, projeto/lista, estados elegíveis e prioridades do mapa e lista até 20 itens
+        elegíveis. Nada é escrito na origem. Falhas remotas voltam como passos `failed` com motivo
+        (HTTP 200); o resultado fica gravado para a configuração atual e a ativação o exige.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Resultado da verificação, content: {application/json: {schema: {$ref: "#/components/schemas/SourceCheck"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /projects/{id}/activate:
+    post:
+      tags: [projetos]
+      summary: Ativa um rascunho; bloqueado (422) enquanto houver pendências obrigatórias
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ExpectedVersion"}}}
+      responses:
+        "200": {description: Projeto ativo, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /projects/{id}/suspend:
+    post:
+      tags: [projetos]
+      summary: Suspende um projeto ativo
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ExpectedVersion"}}}
+      responses:
+        "200": {description: Projeto suspenso, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /projects/{id}/resume:
+    post:
+      tags: [projetos]
+      summary: Reativa um projeto suspenso, revalidando a configuração
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ExpectedVersion"}}}
+      responses:
+        "200": {description: Projeto ativo, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /workflows/node-types:
+    get:
+      tags: [workflows]
+      summary: Catálogo de tipos de nó (portas e campos); fonte única do editor e do validador
+      responses:
+        "200":
+          description: Tipos de nó
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/NodeType"}}}
+        "401": {$ref: "#/components/responses/Error"}
+  /workflows/{id}/publish:
+    post:
+      tags: [workflows]
+      summary: Publica a versão salva do rascunho (imutável); idempotente para o mesmo conteúdo (200)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [expected_version], additionalProperties: false, properties: {expected_version: {type: integer}}}}}
+      responses:
+        "200": {description: Conteúdo igual ao vigente, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowVersion"}}}}
+        "201": {description: Nova versão publicada, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowVersion"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {description: Problemas impedem a publicação (envelope de erro mais a lista `problems`)}
+  /workflows/{id}/unpublish:
+    post:
+      tags: [workflows]
+      summary: Tira a versão vigente de circulação (execuções existentes não mudam)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "204": {description: Despublicado}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /workflows/{id}/versions:
+    get:
+      tags: [workflows]
+      summary: Versões publicadas do workflow (sem os grafos)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Versões
+          content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/WorkflowVersion"}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /workflow-versions/{id}:
+    get:
+      tags: [workflows]
+      summary: Versão publicada com a configuração efetiva congelada (sanitizada)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Versão, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowVersion"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /workflow-versions/{id}/revalidate:
+    get:
+      tags: [workflows]
+      summary: Revalida em tempo de execução (conta revogada, modelo desativado, itens removidos)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Resultado
+          content: {application/json: {schema: {type: object, required: [ok, problems], properties: {ok: {type: boolean}, problems: {type: array, items: {$ref: "#/components/schemas/PublishProblem"}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/features/{featureId}/plan:
+    put:
+      tags: [planejamento]
+      summary: Propõe o plano de decomposição da feature (valida, versiona; inválido ou conflitante preserva a versão anterior)
+      description: >
+        Recusa ciclo, referência ausente, tarefa sem critério e critério que não possa ser verificado. Uma tarefa que já saiu
+        de "pendente" não pode ser alterada nem removida. O mesmo conteúdo não gera versão nova (`unchanged`).
+        Plano rejeitado volta com 422 e a lista de `problems`; fica registrado como versão rejeitada.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: featureId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/Plan"}}}
+      responses:
+        "200": {description: Plano aceito (ou inalterado), content: {application/json: {schema: {$ref: "#/components/schemas/PlanOutcome"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "422": {description: Plano rejeitado, content: {application/json: {schema: {$ref: "#/components/schemas/PlanRejected"}}}}
+    get:
+      tags: [planejamento]
+      summary: Versão vigente do plano, tarefas (identidade estável) e histórico de versões
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: featureId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Plano, content: {application/json: {schema: {$ref: "#/components/schemas/PlanView"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/overview:
+    get:
+      tags: [operacao-ao-vivo]
+      summary: Resumo do projeto para o painel (controles persistidos, tarefas da fila com a causa do bloqueio, execuções com cursor)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Resumo, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectOverview"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+
+  /projects/{id}/executions/{executionId}/events:
+    get:
+      tags: [operacao-ao-vivo]
+      summary: Histórico pesquisável de eventos de uma execução, após um cursor
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: executionId, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: after, in: query, required: false, schema: {type: integer, minimum: 0}}
+        - {name: q, in: query, required: false, schema: {type: string, maxLength: 100}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 500}}
+      responses:
+        "200": {description: Eventos, content: {application/json: {schema: {$ref: "#/components/schemas/ExecutionEvents"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+
+  /projects/{id}/executions/{executionId}/stream:
+    get:
+      tags: [operacao-ao-vivo]
+      summary: Eventos da execução ao vivo (SSE) com reconexão pelo cursor
+      description: >
+        Cada evento tem `id: <seq>`. Ao reconectar, envie `Last-Event-ID` (ou `?after=`) e só chegam eventos
+        posteriores: nada se perde e nada se repete. Há heartbeat (`: ping`) e a conexão é encerrada após 5 minutos
+        com `event: reconnect`. O conteúdo passa pela redação de segredos.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: executionId, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: after, in: query, required: false, schema: {type: integer, minimum: 0}}
+        - {name: Last-Event-ID, in: header, required: false, schema: {type: integer, minimum: 0}}
+      responses:
+        "200": {description: Fluxo text/event-stream, content: {text/event-stream: {schema: {type: string}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+
+  /projects/{id}/profile/discover:
+    post:
+      tags: [recursos]
+      summary: Inspeciona manifestos enviados (package.json, go.mod, Makefile, Compose, .env.example) e sugere comandos com a origem
+      description: >
+        Nada é lido do disco do servidor nem executado. Só os NOMES de .env.example são devolvidos.
+        As sugestões só viram perfil por escolha explícita (PUT /profile).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [files], properties: {files: {type: object, additionalProperties: {type: string}}}}}}
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectDiscovery"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+
+  /projects/{id}/profile:
+    get:
+      tags: [recursos]
+      summary: Perfil técnico do projeto (comandos com origem, serviços, referências de segredo, última descoberta)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectProfile"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+
+    put:
+      tags: [recursos]
+      summary: Grava o perfil escolhido. Segredo só por referência connection:<id>; literal é recusado
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ProjectProfileInput"}}}
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectProfile"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+
+  /projects/{id}/resources:
+    get:
+      tags: [recursos]
+      summary: Recursos globais associados explicitamente ao projeto, com a configuração efetiva dos agentes
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectResources"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+
+    put:
+      tags: [recursos]
+      summary: Substitui, de forma atômica, as associações. A sobrescrita local nunca altera o recurso global
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [resources], properties: {resources: {type: array, items: {$ref: "#/components/schemas/ProjectResourceInput"}}}}}}
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectResources"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+
+  /projects/{id}/readiness:
+    get:
+      tags: [recursos]
+      summary: Diz se o projeto pode iniciar uma execução agora (ativo, recursos válidos, fluxo padrão publicado)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectReadiness"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+
+  /projects/{id}/workflow:
+    get:
+      tags: [workflows]
+      summary: Workflow estrutural do projeto (criado no cadastro) e o diagnóstico por nó do que falta configurar
+      description: >
+        Provisiona o rascunho padrão na primeira consulta de projetos antigos. Repetir não cria cópia nem
+        altera o que o administrador editou. `issues` lista cada nó/campo pendente e qualquer guarda
+        obrigatória removida ou contornada.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Workflow do projeto, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectWorkflow"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/status-map:
+    get:
+      tags: [issues]
+      summary: Mapa de status do projeto (origem ↔ catálogo canônico) e os códigos que a fábrica projeta
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Mapa (null se ainda não configurado), content: {application/json: {schema: {$ref: "#/components/schemas/StatusMapView"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+    put:
+      tags: [issues]
+      summary: Grava o mapa de status. Inválido volta 422 com o campo ou a transição que impede a projeção
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/StatusMapInput"}}}
+      responses:
+        "200": {description: Mapa gravado, content: {application/json: {schema: {$ref: "#/components/schemas/StatusMap"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /projects/{id}/issues:
+    get:
+      tags: [issues]
+      summary: Issues registradas da origem oficial e o histórico de sincronização
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Issues e execuções de sync, content: {application/json: {schema: {$ref: "#/components/schemas/IssuesView"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/issues/sync:
+    post:
+      tags: [issues]
+      summary: Sync geral manual (a mesma rotina do horário matinal)
+      description: >
+        Importa Issues novas em PRD-DOC ou CORRECAO_PR e atualiza todas as conhecidas em qualquer estado.
+        Falha remota volta como `outcome: partial|failed` (HTTP 200) com o progresso já gravado preservado.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Resultado, content: {application/json: {schema: {$ref: "#/components/schemas/IssueSyncRun"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /projects/{id}/executions/{executionId}/monitor:
+    get:
+      tags: [operacao-ao-vivo]
+      summary: Monitor do agente (CLI e API): eventos após o cursor e resumo da execução
+      description: >
+        Eventos normalizados do executor com sequência e cursor de reconexão (`after`), cronômetro, ferramentas,
+        subagentes identificados pelo executor e o progresso que o executor informou. O progresso nunca é estimado.
+        Lacunas por pressão aparecem em `summary.dropped`.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: executionId, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: after, in: query, required: false, schema: {type: integer, minimum: 0}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000}}
+      responses:
+        "200": {description: Monitor, content: {application/json: {schema: {$ref: "#/components/schemas/ExecutionMonitor"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/executions/{executionId}/guidance:
+    get:
+      tags: [operacao-ao-vivo]
+      summary: Histórico de orientações ao agente com o estado comprovado da entrega
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: executionId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Orientações, content: {application/json: {schema: {$ref: "#/components/schemas/GuidanceList"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [operacao-ao-vivo]
+      summary: Enviar orientação ao agente da execução
+      description: >
+        Entrega imediata, enfileirada para o próximo ponto seguro, ou só registrada para a retomada, conforme a
+        capacidade do executor. O estado reflete só o que foi comprovado. A orientação não altera contrato,
+        permissões nem aprovações; texto que imita o cabeçalho do contrato ou comando da fábrica é recusado (422).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: executionId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [text], properties: {text: {type: string, maxLength: 4000}}}}}
+      responses:
+        "201": {description: Registrada, content: {application/json: {schema: {$ref: "#/components/schemas/GuidanceItem"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /projects/{id}/pull-requests:
+    get:
+      tags: [issues]
+      summary: PRs gerenciadas com rodadas de revisão e pendências
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: PRs, content: {application/json: {schema: {$ref: "#/components/schemas/PullRequestsView"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/pull-requests/sync:
+    post:
+      tags: [issues]
+      summary: Consulta manual das PRs gerenciadas (a mesma passagem da rotina)
+      description: >
+        Lê revisões, comentários e estado das PRs, fecha rodadas, cria a Issue REPROVADO_PR de cada rodada
+        e conclui após merge confirmado. Limite de requisições do GitHub volta como 429.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Resultado, content: {application/json: {schema: {$ref: "#/components/schemas/PullRequestSyncReport"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+  /projects/{id}/sync:
+    post:
+      tags: [sincronizacao]
+      summary: Sincronização MANUAL da origem (Jira/ClickUp) com a conexão do cofre
+      description: >
+        Lê a origem agora, normaliza os itens e registra o que mudou desde a última leitura (uma vez).
+        Nada lê a origem sozinho. Falha remota volta como `outcome: failed` (HTTP 200) sem alterar nenhum item.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Resultado, content: {application/json: {schema: {$ref: "#/components/schemas/SyncResult"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+    get:
+      tags: [sincronizacao]
+      summary: Última sincronização, suas diferenças e os itens gravados
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Visão da sincronização, content: {application/json: {schema: {$ref: "#/components/schemas/SyncView"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/sync/items/{remoteId}/priority:
+    put:
+      tags: [sincronizacao]
+      summary: Edição humana da prioridade (0..4; null remove). Prevalece sobre a origem; mudança remota abre conflito
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: remoteId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [priority], properties: {priority: {type: [integer, "null"], minimum: 0, maximum: 4}}}}}
+      responses:
+        "200": {description: Item, content: {application/json: {schema: {$ref: "#/components/schemas/SyncItem"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/sync/items/{remoteId}/resolve:
+    post:
+      tags: [sincronizacao]
+      summary: Resolve o conflito de prioridade (keep_local ou use_remote)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: remoteId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [choice], properties: {choice: {type: string, enum: [keep_local, use_remote]}}}}}
+      responses:
+        "200": {description: Item, content: {application/json: {schema: {$ref: "#/components/schemas/SyncItem"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /projects/{id}/selection:
+    get:
+      tags: [selecao]
+      summary: Regras ordenadas e fluxo padrão de seleção do projeto
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Configuração, content: {application/json: {schema: {$ref: "#/components/schemas/SelectionConfig"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+    put:
+      tags: [selecao]
+      summary: Substitui, de forma atômica, as regras (na ordem recebida) e o padrão
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/SelectionConfig"}}}
+      responses:
+        "200": {description: Configuração gravada, content: {application/json: {schema: {$ref: "#/components/schemas/SelectionConfig"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /projects/{id}/selection/simulate:
+    post:
+      tags: [selecao]
+      summary: Simula a seleção (explica cada regra) sem gravar rastro
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [attributes], additionalProperties: false, properties: {attributes: {type: object}}}}}
+      responses:
+        "200": {description: Seleção explicada, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /projects/{id}/selection/traces:
+    get:
+      tags: [selecao]
+      summary: Rastros persistidos das seleções (mais recentes primeiro)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Rastros, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {type: object}}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+  /budgets:
+    get:
+      tags: [orcamento]
+      summary: Orçamentos de gasto em API com o uso do período corrente (gasto, reservas ativas e saldo)
+      responses:
+        "200":
+          description: Orçamentos
+          content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/BudgetStatus"}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [orcamento]
+      summary: Cria ou altera (upsert) o orçamento global ou de um agente (reautenticação exigida)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [scope, period, limit_micros], additionalProperties: false, properties: {scope: {type: string, enum: [global, agent]}, agent_id: {type: string, format: uuid}, period: {type: string, enum: [day, month]}, limit_micros: {type: integer, minimum: 0}, state: {type: string, enum: [active, disabled]}}}}}
+      responses:
+        "200": {description: Orçamento, content: {application/json: {schema: {$ref: "#/components/schemas/Budget"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /usage:
+    get:
+      tags: [orcamento]
+      summary: Uso do período (padrão mês corrente UTC) com gasto em API e consumo de assinatura em seções separadas
+      parameters:
+        - {name: from, in: query, required: false, schema: {type: string, format: date-time}}
+        - {name: to, in: query, required: false, schema: {type: string, format: date-time}}
+      responses:
+        "200": {description: Relatório, content: {application/json: {schema: {$ref: "#/components/schemas/UsageReport"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+  /providers:
+    get:
+      tags: [orcamento]
+      summary: Contas de IA (assinatura/CLI e API) com disponibilidade e a última cota OBSERVADA
+      description: >
+        Disponibilidade combina o sinal oficial e o histórico de falhas (autenticação, cota, indisponibilidade, financeiro).
+        `quota` é null quando nenhuma cota foi observada: o painel mostra "não observada". Sem segredos.
+      responses:
+        "200": {description: Contas, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/ProviderView"}}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+  /models:
+    get:
+      tags: [models]
+      summary: Modelos cadastrados manualmente
+      responses:
+        "200":
+          description: Modelos
+          content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/Model"}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [models]
+      summary: Cadastra um modelo (parâmetros e capacidades validados; gateway só no provedor api)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ModelInput"}}}
+      responses:
+        "201": {description: Modelo cadastrado, content: {application/json: {schema: {$ref: "#/components/schemas/Model"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /models/check:
+    post:
+      tags: [models]
+      summary: Diz, sem executar nada, se o modelo serve para provedor, conta e ferramentas
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [provider, model], additionalProperties: false, properties: {provider: {type: string}, connection_id: {type: string}, model: {type: string}, needs_tools: {type: boolean}}}}}
+      responses:
+        "200": {description: Veredito com os motivos, content: {application/json: {schema: {$ref: "#/components/schemas/ModelVerdict"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /models/{id}/state:
+    post:
+      tags: [models]
+      summary: Ativa ou desativa o modelo (controle otimista)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [state, expected_version], additionalProperties: false, properties: {state: {type: string, enum: [active, disabled]}, expected_version: {type: integer}}}}}
+      responses:
+        "200": {description: Modelo atualizado, content: {application/json: {schema: {$ref: "#/components/schemas/Model"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /mcp/servers:
+    get:
+      tags: [mcp]
+      summary: Servidores MCP cadastrados
+      responses:
+        "200":
+          description: Servidores
+          content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/McpServer"}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [mcp]
+      summary: Cadastra um servidor MCP remoto (https, externo); a credencial é a referência de uma conexão `mcp`
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [name, url], additionalProperties: false, properties: {name: {type: string}, url: {type: string}, connection_id: {type: [string, "null"], format: uuid}}}}}
+      responses:
+        "201": {description: Servidor cadastrado, content: {application/json: {schema: {$ref: "#/components/schemas/McpServer"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /mcp/servers/{id}/discover:
+    post:
+      tags: [mcp]
+      summary: Negocia o protocolo e descobre as ferramentas; nenhuma ganha acesso por ser descoberta
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Ferramentas do servidor
+          content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/McpTool"}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "502": {$ref: "#/components/responses/Error"}
+  /mcp/servers/{id}/tools:
+    get:
+      tags: [mcp]
+      summary: Ferramentas já descobertas do servidor
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Ferramentas
+          content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/McpTool"}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /mcp/calls:
+    get:
+      tags: [mcp]
+      summary: Trilha das chamadas MCP (argumentos redigidos)
+      responses:
+        "200":
+          description: Chamadas, da mais recente para a mais antiga
+          content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {type: object, additionalProperties: true}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+  /agents/{id}/mcp:
+    get:
+      tags: [mcp]
+      summary: Concessões MCP do agente e as ferramentas que ele pode usar agora (concedidas e com o esquema aprovado ainda vigente)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Concessões e ferramentas utilizáveis
+          content: {application/json: {schema: {type: object, required: [grants, tools], properties: {grants: {type: array, items: {$ref: "#/components/schemas/McpGrant"}}, tools: {type: array, items: {$ref: "#/components/schemas/McpTool"}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /agents/{id}/mcp-grants:
+    post:
+      tags: [mcp]
+      summary: Concede uma ferramenta MCP ao agente, fixando o hash do esquema aprovado
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/McpGrantInput"}}}
+      responses:
+        "204": {description: Concedida}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /agents/{id}/mcp-grants/revoke:
+    post:
+      tags: [mcp]
+      summary: Retira a concessão (idempotente)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/McpGrantInput"}}}
+      responses:
+        "204": {description: Revogada}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /decisions:
+    get:
+      tags: [decisões]
+      summary: Central de decisões humanas
+      parameters:
+        - {name: state, in: query, schema: {type: string, enum: [pending, resolved, stale]}, description: "Vazio = todos"}
+      responses:
+        "200":
+          description: Pedidos, do mais recente para o mais antigo
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/DecisionRequest"}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+  /decisions/{id}:
+    get:
+      tags: [decisões]
+      summary: Lê um pedido (problema, alternativas, impacto e evidência)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Pedido, content: {application/json: {schema: {$ref: "#/components/schemas/DecisionRequest"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /decisions/{id}/resolve:
+    post:
+      tags: [decisões]
+      summary: Registra a decisão; altera só a execução do pedido e emite o sinal de retomada
+      description: >
+        Repetir a mesma opção é idempotente (cabeçalho `X-Decision-Replayed: true`, sem novo sinal). Outra opção
+        depois de resolvido → 409 `decision_conflict`. Execução que mudou desde o pedido → 409 `decision_stale`
+        (o pedido vira `stale`). Pedido de operação sensível exige reautenticação (403 `reauth_required`).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [option]
+              additionalProperties: false
+              properties:
+                option: {type: string}
+                note: {type: string, maxLength: 500}
+      responses:
+        "200": {description: Pedido resolvido, content: {application/json: {schema: {$ref: "#/components/schemas/DecisionRequest"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /decisions/{id}/refuse:
+    post:
+      tags: [decisões]
+      summary: Recusa o pedido usando a alternativa de recusa que ele declara (`refuse`, `deny` ou `reject`)
+      description: >
+        Equivale a resolver com a alternativa de recusa: mesmo evento, mesma retomada e mesma auditoria. Pedido sem
+        alternativa de recusa → 422 `no_refusal_option`. Operação sensível exige reautenticação (403 `reauth_required`).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                note: {type: string, maxLength: 500}
+      responses:
+        "200": {description: Pedido recusado, content: {application/json: {schema: {$ref: "#/components/schemas/DecisionRequest"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /authorizations:
+    get:
+      tags: [decisões]
+      summary: Autorizações com situação, validade, uso em andamento e o que resta
+      parameters:
+        - {name: status, in: query, schema: {type: string, enum: [active, expired, exhausted, revoked, all]}, description: "Vazio = todas"}
+      responses:
+        "200":
+          description: Autorizações, da mais recente para a mais antiga (até 200)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/AuthorizationView"}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+  /authorizations/{id}/revoke:
+    post:
+      tags: [decisões]
+      summary: Revoga a autorização (imediato; ação sensível)
+      description: >
+        A revogação vale a partir do commit: nenhum uso novo passa. Com uso em andamento, dispara a parada segura;
+        se ela falhar, `halt_failed` é verdadeiro e a revogação continua valendo. Repetir é idempotente
+        (`already_revoked`). Exige reautenticação (403 `reauth_required`).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reason: {type: string, maxLength: 500}
+      responses:
+        "200":
+          description: Resultado da revogação
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authorization, in_flight, halted, halt_failed, already_revoked]
+                properties:
+                  authorization: {$ref: "#/components/schemas/AuthorizationView"}
+                  in_flight: {type: integer}
+                  halted: {type: boolean}
+                  halt_failed: {type: boolean}
+                  already_revoked: {type: boolean}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /executions/{id}/sequence:
+    get:
+      tags: [decisões]
+      summary: Sequência do incidente e da retomada da execução (eventos, decisões, autorizações, recuperação e retomada)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Linhas em ordem de tempo (até 500), já redigidas
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [execution_id, project_id, items]
+                properties:
+                  execution_id: {type: string, format: uuid}
+                  project_id: {type: string, format: uuid}
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [at, source, type, detail]
+                      properties:
+                        at: {type: string, format: date-time}
+                        source: {type: string, enum: [execution, decision, authorization, recovery, resume]}
+                        type: {type: string}
+                        detail: {type: object, additionalProperties: true}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/delivery-settings:
+    get:
+      tags: [entrega]
+      summary: Quem pode pedir correção na PR e o mapa de estados da origem
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Configuração, content: {application/json: {schema: {$ref: "#/components/schemas/DeliverySettings"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+    put:
+      tags: [entrega]
+      summary: Define os autores autorizados (logins do GitHub) e o mapa de estados da origem
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                review_authors: {type: array, maxItems: 20, items: {type: string}}
+                status_map:
+                  type: object
+                  additionalProperties: false
+                  properties: {awaiting_merge: {type: string, maxLength: 100}, done: {type: string, maxLength: 100}}
+      responses:
+        "200": {description: Configuração salva, content: {application/json: {schema: {$ref: "#/components/schemas/DeliverySettings"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/deliveries:
+    get:
+      tags: [entrega]
+      summary: Entregas (tentativas) do projeto, com a PR, o merge e a projeção do status na origem
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Entregas, da mais recente para a mais antiga
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/Delivery"}}}
+        "401": {$ref: "#/components/responses/Error"}
+  /projects/{id}/deliveries/{deliveryId}:
+    get:
+      tags: [entrega]
+      summary: Entrega com comentários da PR, ações oferecidas, histórico e observações
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: deliveryId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Detalhe da entrega
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [delivery, comments, history, observations]
+                properties:
+                  project_id: {type: string, format: uuid}
+                  delivery: {$ref: "#/components/schemas/Delivery"}
+                  comments: {type: array, items: {$ref: "#/components/schemas/PRComment"}}
+                  offer: {type: object, nullable: true, additionalProperties: true}
+                  history: {type: array, items: {type: string}}
+                  observations: {type: array, items: {type: object, additionalProperties: true}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/deliveries/{deliveryId}/observe:
+    post:
+      tags: [entrega]
+      summary: Consulta a PR AGORA (sob demanda, D89) e propaga o merge
+      description: >
+        Aberta ou fechada sem merge não libera nada. Com merge e SHA: registra o SHA, conclui o item na origem pelo
+        ledger (se o mapa de estados existir), devolve à fila quem esperava esse merge e promove a memória pendente da
+        branch. Falha ao consultar o GitHub não altera nada (`outcome: unknown`).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: deliveryId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Resultado da consulta, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+        "502": {$ref: "#/components/responses/Error"}
+  /projects/{id}/deliveries/{deliveryId}/comments/discover:
+    post:
+      tags: [entrega]
+      summary: Descobre comentários de autores autorizados na PR e os enfileira como UMA correção
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: deliveryId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [task_key]
+              additionalProperties: false
+              properties:
+                task_key: {type: string}
+                priority: {type: integer, minimum: 0, maximum: 4}
+      responses:
+        "200": {description: Descoberta, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+        "502": {$ref: "#/components/responses/Error"}
+  /projects/{id}/deliveries/{deliveryId}/actions:
+    post:
+      tags: [entrega]
+      summary: Ação sobre a PR fechada sem merge (cancelar, reabrir ou nova tentativa; ação sensível)
+      description: Repetir a mesma ação não repete o efeito. Reabrir confere no GitHub antes de mudar o estado. Exige reautenticação.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: deliveryId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              additionalProperties: false
+              properties:
+                action: {type: string, enum: [cancel, reopen, retry]}
+                note: {type: string, maxLength: 500}
+      responses:
+        "200": {description: Resultado, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+        "502": {$ref: "#/components/responses/Error"}
+  /projects/{id}/deliveries/{deliveryId}/memory/extract:
+    post:
+      tags: [memória]
+      summary: Extrai lições dos achados de revisão corrigidos da entrega (memória pendente da branch)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: deliveryId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Registros pendentes, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/MemoryRecord"}}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/memory:
+    get:
+      tags: [memória]
+      summary: Memória técnica do projeto (pendente, oficial e invalidada)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: state, in: query, schema: {type: string, enum: [pending, official, invalidated]}, description: "Vazio = todos"}
+        - {name: q, in: query, schema: {type: string}, description: "Termos na chave ou no conteúdo"}
+      responses:
+        "200": {description: Registros, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/MemoryRecord"}}}}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+  /projects/{id}/memory/{recordId}/invalidate:
+    post:
+      tags: [memória]
+      summary: Invalida um registro de memória, com o motivo
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: recordId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              additionalProperties: false
+              properties: {reason: {type: string, maxLength: 500}}
+      responses:
+        "200": {description: Registro, content: {application/json: {schema: {$ref: "#/components/schemas/MemoryRecord"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/controls:
+    put:
+      tags: [execução]
+      summary: Controle operacional do projeto (ativo, pausa após a feature atual ou suspensão)
+      description: >
+        `suspended` persiste a suspensão e tenta parar o que roda; o que não pôde ser parado com checkpoint seguro
+        segue em execução e aparece em `failed`. `active` retoma e devolve à fila o que estava suspenso.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              additionalProperties: false
+              properties:
+                mode: {type: string, enum: [active, draining, suspended]}
+                reason: {type: string, maxLength: 500}
+      responses:
+        "200": {description: Controle aplicado, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /controls/global:
+    put:
+      tags: [execução]
+      summary: Controle operacional global (ação sensível)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              additionalProperties: false
+              properties:
+                mode: {type: string, enum: [active, draining, suspended]}
+                reason: {type: string, maxLength: 500}
+      responses:
+        "200": {description: Controle aplicado, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /projects/{id}/features/{featureId}/report:
+    get:
+      tags: [entrega]
+      summary: Histórico vivo da feature (requisito, tarefas, commits, checks, risco, revisão e E2E registrados)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: featureId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Relatório em Markdown, content: {application/json: {schema: {type: object, required: [feature_key, markdown], properties: {feature_key: {type: string}, title: {type: string}, revision: {type: string}, delivery_id: {type: string}, doc_path: {type: string}, markdown: {type: string}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /tools:
+    get:
+      tags: [ferramentas]
+      summary: Catálogo de ferramentas (nativas e personalizadas) com esquemas, permissões e limites
+      responses:
+        "200":
+          description: Ferramentas
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/Tool"}}}
+        "401": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [ferramentas]
+      summary: Cadastra uma ferramenta personalizada (script ou integração); o comando passa pela política
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/Tool"}}}
+      responses:
+        "201": {description: Ferramenta criada, content: {application/json: {schema: {$ref: "#/components/schemas/Tool"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /tools/{name}/check:
+    post:
+      tags: [ferramentas]
+      summary: Valida uma chamada sem executá-la (existência, concessão, escopo e argumentos)
+      parameters:
+        - {name: name, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [grant]
+              additionalProperties: false
+              properties:
+                args: {type: object, additionalProperties: true}
+                grant:
+                  type: object
+                  properties:
+                    tools: {type: array, items: {type: string}}
+                    permissions: {type: array, items: {type: string, enum: [read, write, exec, git, api]}}
+      responses:
+        "200":
+          description: Chamada válida; devolve os argumentos normalizados
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, args]
+                properties: {ok: {type: boolean}, args: {type: object, additionalProperties: true}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /skills:
+    get:
+      tags: [skills]
+      summary: Lista o catálogo de skills
+      responses:
+        "200":
+          description: Skills
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/Skill"}}}
+        "401": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [skills]
+      summary: Cadastra uma skill manualmente (ia, script, deterministic ou hybrid)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/SkillInput"}}}
+      responses:
+        "201": {description: Skill criada, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}
+        "200": {description: Já existia com o mesmo conteúdo (idempotente), content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /skills/imports:
+    get:
+      tags: [skills]
+      summary: Trilha de importações (inclusive as rejeitadas, sem o conteúdo do pacote)
+      responses:
+        "200":
+          description: Importações, da mais recente para a mais antiga
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/SkillImport"}}}
+        "401": {$ref: "#/components/responses/Error"}
+  /skills/import:
+    post:
+      tags: [skills]
+      summary: Importa um pacote (tar.gz ou zip) ou um SKILL.md avulso; o conteúdo é tratado como dado e nada é executado
+      description: >
+        Recusa travessia de caminho, links, arquivos acima dos limites (200 arquivos, 1 MiB cada, 5 MiB no total, 8 MiB compactado)
+        e scripts fora da política. Mesmo nome com o mesmo conteúdo é idempotente; conteúdo diferente exige `replace=true`.
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [tar.gz, zip, md]}}
+        - {name: replace, in: query, schema: {type: boolean}}
+        - {name: ref, in: query, schema: {type: string, maxLength: 300}, description: "Rótulo da origem (ex.: nome do arquivo)"}
+      requestBody:
+        required: true
+        content: {application/octet-stream: {schema: {type: string, format: binary}}}
+      responses:
+        "201": {description: Skill importada, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}
+        "200": {description: Já existia com o mesmo conteúdo, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "413": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /skills/import-git:
+    post:
+      tags: [skills]
+      summary: Importação por Git (UNSUPPORTED até o adaptador GitHub, T15-01)
+      responses:
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "501": {$ref: "#/components/responses/Error"}
+  /skills/{id}:
+    get:
+      tags: [skills]
+      summary: Lê uma skill com a lista de arquivos (caminho, hash e tamanho)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /agents:
+    get:
+      tags: [agentes]
+      summary: Lista o catálogo global de agentes
+      responses:
+        "200":
+          description: Agentes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/Agent"}}}
+        "401": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [agentes]
+      summary: Cadastra um agente (conta por referência de conexão, nunca o segredo)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/AgentInput"}}}
+      responses:
+        "201": {description: Agente criado, content: {application/json: {schema: {$ref: "#/components/schemas/Agent"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /agents/{id}:
+    get:
+      tags: [agentes]
+      summary: Lê um agente
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Agente, content: {application/json: {schema: {$ref: "#/components/schemas/Agent"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+    put:
+      tags: [agentes]
+      summary: Altera o agente com controle otimista de versão
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/AgentUpdate"}}}
+      responses:
+        "200": {description: Agente atualizado, content: {application/json: {schema: {$ref: "#/components/schemas/Agent"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /workflows/{id}/nodes/{node}/effective:
+    get:
+      tags: [agentes]
+      summary: Configuração efetiva de um nó de agente (base do catálogo + sobrescritas do nó), sem segredos
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: node, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: Configuração efetiva, content: {application/json: {schema: {$ref: "#/components/schemas/EffectiveAgent"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /workflows/validate:
+    post:
+      tags: [workflows]
+      summary: Valida um grafo sem salvar (problemas com nó e campo)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [graph]
+              additionalProperties: false
+              properties: {graph: {$ref: "#/components/schemas/WorkflowGraph"}}
+      responses:
+        "200":
+          description: Problemas encontrados (lista vazia = válido)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [issues]
+                properties: {issues: {type: array, items: {$ref: "#/components/schemas/WorkflowIssue"}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /workflows:
+    get:
+      tags: [workflows]
+      summary: Lista rascunhos de workflow com contagem de nós e problemas
+      responses:
+        "200":
+          description: Workflows
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/WorkflowSummary"}}}
+        "401": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [workflows]
+      summary: Cria um rascunho com o grafo inicial (início ligado a fim)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/NewWorkflow"}}}
+      responses:
+        "201": {description: Rascunho criado, content: {application/json: {schema: {$ref: "#/components/schemas/Workflow"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /workflows/{id}:
+    get:
+      tags: [workflows]
+      summary: Lê o rascunho com os problemas de validação (nó e campo)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Workflow, content: {application/json: {schema: {$ref: "#/components/schemas/Workflow"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+    put:
+      tags: [workflows]
+      summary: Salva o rascunho (controle otimista); grafo inválido é aceito e devolve `issues`
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/SaveWorkflow"}}}
+      responses:
+        "200": {description: Rascunho salvo, content: {application/json: {schema: {$ref: "#/components/schemas/Workflow"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+security:
+  - sessionCookie: []
+components:
+  securitySchemes:
+    sessionCookie: {type: apiKey, in: cookie, name: lf_session}
+  responses:
+    Error:
+      description: Falha. `correlation_id` repete o cabeçalho X-Request-ID.
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorBody"}}}
+  schemas:
+    Status:
+      type: object
+      required: [status]
+      properties: {status: {type: string}}
+    ErrorBody:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, correlation_id]
+          properties:
+            code: {type: string, description: "Código legível por máquina", example: unauthorized}
+            message: {type: string}
+            action: {type: string, description: "Ação sugerida"}
+            correlation_id: {type: string}
+    Session:
+      type: object
+      required: [id, admin_id, username, expires_at, csrf_token, totp_reset_required]
+      properties:
+        id: {type: string, format: uuid}
+        admin_id: {type: string, format: uuid}
+        username: {type: string}
+        expires_at: {type: string, format: date-time}
+        csrf_token: {type: string, description: "Enviar em X-CSRF-Token nas requisições que alteram estado"}
+        reauth_until: {type: string, format: date-time, description: "Ausente = ações sensíveis exigem reautenticação"}
+        totp_reset_required: {type: boolean, description: "Entrou com código de recuperação: substitua o 2FA"}
+    LoginRequest:
+      type: object
+      required: [username, password]
+      additionalProperties: false
+      properties:
+        username: {type: string}
+        password: {type: string, format: password}
+    CodeRequest:
+      type: object
+      required: [code]
+      additionalProperties: false
+      properties:
+        code: {type: string, example: "123456", description: "Código TOTP de 6 dígitos"}
+    RecoveryRequest:
+      type: object
+      required: [recovery_code]
+      additionalProperties: false
+      properties:
+        recovery_code: {type: string, example: "ABCD-EFGH-IJKL-MNOP"}
+    ReauthRequest:
+      type: object
+      required: [password, code]
+      additionalProperties: false
+      properties:
+        password: {type: string, format: password}
+        code: {type: string}
+    LoginStage:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [totp_required, totp_enrollment_required]}
+    Enrollment:
+      type: object
+      required: [secret, otpauth_uri]
+      properties:
+        secret: {type: string, description: "Segredo em base32 para entrada manual"}
+        otpauth_uri: {type: string, description: "URI otpauth:// para QR code"}
+    RecoveryCodes:
+      type: object
+      required: [recovery_codes]
+      properties:
+        recovery_codes: {type: array, items: {type: string}, description: "Mostrados uma única vez; uso único"}
+    SessionWithRecoveryCodes:
+      allOf:
+        - $ref: "#/components/schemas/Session"
+        - $ref: "#/components/schemas/RecoveryCodes"
+    SessionInfo:
+      type: object
+      required: [id, created_at, expires_at, ip, user_agent, auth_method, current]
+      properties:
+        id: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        ip: {type: string}
+        user_agent: {type: string}
+        auth_method: {type: string, enum: [totp, recovery]}
+        current: {type: boolean}
+    SessionList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/SessionInfo"}}
+    RevokedCount:
+      type: object
+      required: [revoked]
+      properties:
+        revoked: {type: integer}
+    AuthEvent:
+      type: object
+      required: [id, type, ip, user_agent, detail, created_at]
+      properties:
+        id: {type: integer}
+        type: {type: string, example: login_success}
+        ip: {type: string}
+        user_agent: {type: string}
+        detail: {type: object}
+        created_at: {type: string, format: date-time}
+    AuthEventList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/AuthEvent"}}
+    ConnectionKind:
+      type: string
+      enum: [github, jira, clickup, cli, api, mcp]
+    NewConnection:
+      type: object
+      required: [kind, name, secret]
+      additionalProperties: false
+      properties:
+        kind: {$ref: "#/components/schemas/ConnectionKind"}
+        name: {type: string, minLength: 1, maxLength: 80}
+        target: {type: string, maxLength: 200, description: "Destino não secreto (URL do site, organização)"}
+        scopes: {type: string, maxLength: 200, description: "Escopos mínimos declarados (documentação)"}
+        secret: {type: string, format: password, maxLength: 8192, description: "Somente escrita; nunca devolvido"}
+    RotateConnection:
+      type: object
+      required: [secret, expected_version]
+      additionalProperties: false
+      properties:
+        secret: {type: string, format: password, maxLength: 8192}
+        expected_version: {type: integer, minimum: 1}
+    Connection:
+      type: object
+      required: [id, kind, name, target, scopes, state, secret_version, last_test_status, last_test_detail, version, created_at, updated_at]
+      description: Nunca inclui o segredo.
+      properties:
+        id: {type: string, format: uuid, description: "Estável: referência de uso é `connection:<id>`"}
+        kind: {$ref: "#/components/schemas/ConnectionKind"}
+        name: {type: string}
+        target: {type: string}
+        scopes: {type: string}
+        state: {type: string, enum: [active, revoked]}
+        secret_version: {type: integer}
+        rotated_at: {type: string, format: date-time}
+        revoked_at: {type: string, format: date-time}
+        last_test_at: {type: string, format: date-time}
+        last_test_status: {type: string, enum: [ok, failed, not_run]}
+        last_test_detail: {type: string}
+        version: {type: integer, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ConnectionList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/Connection"}}
+    ProjectState:
+      type: string
+      enum: [draft, active, paused, archived]
+    WizardStep:
+      type: string
+      enum: [basics, repository, source, review]
+    Repository:
+      type: object
+      required: [owner, name, base_branch, connection_id]
+      properties:
+        owner: {type: string, description: "Usuário ou organização GitHub; vazio = não preenchido"}
+        name: {type: string}
+        base_branch: {type: string}
+        connection_id: {type: [string, "null"], format: uuid, description: "Referência de conexão GitHub (nunca o segredo)"}
+    Source:
+      type: object
+      required: [kind, connection_id, container, eligibility_marker, eligible_statuses, priority_map, access]
+      properties:
+        kind: {type: string, enum: ["", jira, clickup]}
+        connection_id: {type: [string, "null"], format: uuid}
+        container: {type: string, description: "Chave do projeto Jira ou ID da lista ClickUp"}
+        eligibility_marker: {type: string, maxLength: 50, description: "Rótulo (Jira) ou tag (ClickUp) que marca o item como elegível"}
+        eligible_statuses: {type: array, maxItems: 30, items: {type: string}, description: "Estados da origem dos quais o item pode ser tomado"}
+        priority_map:
+          type: object
+          maxProperties: 20
+          additionalProperties: {type: integer, minimum: 0, maximum: 4}
+          description: "Prioridade da origem (minúsculas) para a faixa 0..4 da fábrica"
+        access: {type: string, enum: [read, read_write]}
+    SourceStep:
+      type: object
+      required: [id, label, status, detail]
+      properties:
+        id: {type: string, enum: [credential, container, statuses, priorities, items, write]}
+        label: {type: string}
+        status: {type: string, enum: [ok, failed, skipped]}
+        detail: {type: string}
+    PreviewItem:
+      type: object
+      required: [key, title, status, priority, mapped_priority, subtask, url]
+      properties:
+        key: {type: string}
+        title: {type: string}
+        status: {type: string}
+        priority: {type: string}
+        mapped_priority: {type: [integer, "null"], minimum: 0, maximum: 4}
+        subtask: {type: boolean}
+        url: {type: string}
+    ProjectOverview:
+      type: object
+      required: [project, controls, counts, items, executions]
+      properties:
+        project: {type: object, additionalProperties: true}
+        controls:
+          type: object
+          required: [global, project]
+          properties:
+            global: {$ref: "#/components/schemas/ControlState"}
+            project: {$ref: "#/components/schemas/ControlState"}
+        counts: {type: object, additionalProperties: {type: integer}}
+        items: {type: array, items: {$ref: "#/components/schemas/QueueItemView"}}
+        executions: {type: array, items: {type: object, required: [id, feature_id, state, attempt, last_seq], properties: {id: {type: string}, feature_id: {type: string}, state: {type: string}, attempt: {type: integer}, last_seq: {type: integer}}}}
+        last_sync: {oneOf: [{$ref: "#/components/schemas/SyncResult"}, {type: "null"}]}
+    ControlState:
+      type: object
+      required: [scope, mode, reason, version]
+      properties:
+        scope: {type: string, enum: [global, project]}
+        project_id: {type: string}
+        mode: {type: string, enum: [active, draining, suspended]}
+        reason: {type: string}
+        version: {type: integer}
+    QueueItemView:
+      type: object
+      required: [id, feature_id, task_key, kind, priority, state, enqueued_at, seconds]
+      properties:
+        id: {type: string}
+        feature_id: {type: string}
+        task_key: {type: string}
+        kind: {type: string, enum: [task, pr_fix]}
+        priority: {type: integer}
+        state: {type: string, enum: [queued, running, waiting, done, cancelled]}
+        wait_reason: {type: string}
+        wait_ref: {type: string}
+        blocked: {type: string, description: "causa do bloqueio em linguagem do painel"}
+        execution_id: {type: string}
+        enqueued_at: {type: string, format: date-time}
+        started_at: {type: [string, "null"], format: date-time}
+        finished_at: {type: [string, "null"], format: date-time}
+        seconds: {type: integer}
+    ExecutionEvents:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {type: object, required: [seq, type, payload, created_at], properties: {seq: {type: integer}, type: {type: string}, payload: {}, created_at: {type: string, format: date-time}}}}
+        next_cursor: {type: integer}
+    PlanCriterion:
+      type: object
+      required: [text, check]
+      properties:
+        text: {type: string}
+        check: {type: string, enum: [command, test, file, review]}
+        command: {type: string}
+        target: {type: string}
+        path: {type: string}
+        evidence: {type: string}
+    PlanTask:
+      type: object
+      required: [key, title, criteria, risk, depends_on]
+      properties:
+        key: {type: string, pattern: "^[a-z0-9][a-z0-9_-]{0,39}$"}
+        title: {type: string}
+        description: {type: string}
+        criteria: {type: array, items: {$ref: "#/components/schemas/PlanCriterion"}}
+        risk: {type: string, enum: [low, medium, high]}
+        depends_on: {type: array, items: {type: string}}
+        order: {type: integer, minimum: 0}
+        paths: {type: array, items: {type: string}}
+    Plan:
+      type: object
+      required: [tasks]
+      properties:
+        summary: {type: string}
+        tasks: {type: array, items: {$ref: "#/components/schemas/PlanTask"}}
+    PlanProblem:
+      type: object
+      required: [field, message]
+      properties: {task: {type: string}, field: {type: string}, message: {type: string}}
+    PlanStored:
+      type: object
+      required: [id, version, status, content_hash, plan, problems, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        version: {type: integer}
+        status: {type: string, enum: [current, superseded, rejected]}
+        content_hash: {type: string}
+        plan: {$ref: "#/components/schemas/Plan"}
+        problems: {type: array, items: {$ref: "#/components/schemas/PlanProblem"}}
+        created_at: {type: string, format: date-time}
+    PlanOutcome:
+      type: object
+      required: [accepted, unchanged, stored, problems]
+      properties:
+        accepted: {type: boolean}
+        unchanged: {type: boolean}
+        stored: {$ref: "#/components/schemas/PlanStored"}
+        problems: {type: array, items: {$ref: "#/components/schemas/PlanProblem"}}
+    PlanRejected:
+      type: object
+      required: [error, problems, version]
+      properties:
+        error: {type: object, additionalProperties: true}
+        problems: {type: array, items: {$ref: "#/components/schemas/PlanProblem"}}
+        version: {type: integer}
+    PlanView:
+      type: object
+      required: [current, tasks, versions]
+      properties:
+        current: {oneOf: [{$ref: "#/components/schemas/PlanStored"}, {type: "null"}]}
+        tasks: {type: array, items: {type: object, additionalProperties: true}}
+        versions: {type: array, items: {$ref: "#/components/schemas/PlanStored"}}
+    ProjectDiscovery:
+      type: object
+      required: [stack, commands, services, secret_names, inspected, skipped]
+      properties:
+        stack: {type: array, items: {type: string}}
+        commands: {type: array, items: {type: object, required: [name, value, source], properties: {name: {type: string}, value: {type: string}, source: {type: string}}}}
+        services: {type: array, items: {type: string}}
+        secret_names: {type: array, items: {type: string}}
+        inspected: {type: array, items: {type: string}}
+        skipped: {type: array, items: {type: string}}
+    ProjectProfile:
+      type: object
+      required: [project_id, commands, services, secret_refs, version]
+      properties:
+        project_id: {type: string, format: uuid}
+        commands: {type: object, additionalProperties: {type: object, properties: {value: {type: string}, source: {type: string}}}}
+        services: {type: array, items: {type: string}}
+        secret_refs: {type: object, additionalProperties: {type: string}}
+        discovery: {oneOf: [{$ref: "#/components/schemas/ProjectDiscovery"}, {type: "null"}]}
+        discovered_at: {type: [string, "null"], format: date-time}
+        version: {type: integer}
+    ProjectProfileInput:
+      type: object
+      required: [expected_version]
+      properties:
+        expected_version: {type: integer, minimum: 0}
+        commands: {type: object, additionalProperties: {type: string}}
+        services: {type: array, items: {type: string}}
+        secret_refs: {type: object, additionalProperties: {type: string}}
+    ProjectResourceInput:
+      type: object
+      required: [kind, ref]
+      properties:
+        kind: {type: string, enum: [workflow, agent, skill, tool, model]}
+        ref: {type: string}
+        override: {type: object, additionalProperties: true}
+    ProjectResources:
+      type: object
+      required: [resources]
+      properties:
+        resources: {type: array, items: {type: object, required: [kind, ref, name, override], properties: {kind: {type: string}, ref: {type: string}, name: {type: string}, override: {type: object, additionalProperties: true}, effective: {type: object, additionalProperties: true}}}}
+    ProjectReadiness:
+      type: object
+      required: [ready, problems]
+      properties:
+        ready: {type: boolean}
+        problems: {type: array, items: {type: string}}
+        target: {type: object, properties: {workflow_id: {type: string}, subflow_id: {type: string}}}
+    SyncChange:
+      type: object
+      required: [remote_id, key, kind, fields, before_version, after_version]
+      properties:
+        remote_id: {type: string}
+        key: {type: string}
+        kind: {type: string, enum: [new, changed, gone, reappeared, conflict]}
+        fields: {type: object, additionalProperties: {type: object, properties: {from: {}, to: {}}}}
+        before_version: {type: string}
+        after_version: {type: string}
+        detail: {type: string}
+    SyncResult:
+      type: object
+      required: [sync_id, trigger, outcome, read, new, changed, gone, conflicts, changes, started_at, finished_at]
+      properties:
+        sync_id: {type: string, format: uuid}
+        trigger: {type: string, enum: [manual, preflight]}
+        outcome: {type: string, enum: [ok, failed]}
+        error: {type: string}
+        retryable: {type: boolean}
+        read: {type: integer}
+        new: {type: integer}
+        changed: {type: integer}
+        gone: {type: integer}
+        conflicts: {type: integer}
+        changes: {type: array, items: {$ref: "#/components/schemas/SyncChange"}}
+        snapshot_hash: {type: string}
+        started_at: {type: string, format: date-time}
+        finished_at: {type: string, format: date-time}
+    SyncItem:
+      type: object
+      required: [remote_id, key, title, status, category, priority, eligible, version, state, content_hash]
+      properties:
+        remote_id: {type: string}
+        key: {type: string}
+        title: {type: string}
+        description: {type: string}
+        status: {type: string}
+        category: {type: string}
+        priority: {type: string}
+        mapped_priority: {type: [integer, "null"]}
+        labels: {type: array, items: {type: string}}
+        dependencies: {type: array, items: {type: string}}
+        subtask: {type: boolean}
+        eligible: {type: boolean}
+        version: {type: string}
+        url: {type: string}
+        state: {type: string, enum: [active, gone]}
+        local_priority: {type: [integer, "null"]}
+        conflict: {type: [object, "null"], properties: {field: {type: string}, local: {type: integer}, remote: {type: [integer, "null"]}}}
+        content_hash: {type: string}
+    ProjectWorkflow:
+      type: object
+      required: [workflow_id, name, version, created, published, issues]
+      properties:
+        workflow_id: {type: string, format: uuid}
+        name: {type: string}
+        version: {type: integer}
+        created: {type: boolean}
+        published: {type: boolean}
+        issues:
+          type: array
+          items:
+            type: object
+            required: [node, field, code, message]
+            properties:
+              node: {type: string}
+              field: {type: string}
+              code: {type: string}
+              message: {type: string}
+    StatusMap:
+      type: object
+      required: [source, remote, moves, version]
+      properties:
+        source: {type: string, enum: [jira, clickup]}
+        remote: {type: object, additionalProperties: {type: string}}
+        moves: {type: object, additionalProperties: {type: string}}
+        version: {type: integer}
+    StatusMapInput:
+      type: object
+      required: [version, source, remote, moves]
+      properties:
+        version: {type: integer, description: "0 cria; senão a versão lida"}
+        source: {type: string, enum: [jira, clickup]}
+        remote: {type: object, additionalProperties: {type: string}}
+        moves: {type: object, additionalProperties: {type: string}}
+    StatusMapView:
+      type: object
+      required: [map, codes]
+      properties:
+        map: {oneOf: [{$ref: "#/components/schemas/StatusMap"}, {type: "null"}]}
+        codes: {type: array, items: {type: string}}
+    IssueRecord:
+      type: object
+      required: [id, source, remote_id, key, title, raw_status, status_code, revision, kind]
+      properties:
+        id: {type: string}
+        source: {type: string}
+        remote_id: {type: string}
+        key: {type: string}
+        title: {type: string}
+        raw_status: {type: string}
+        status_code: {type: string}
+        revision: {type: string}
+        kind: {type: string, enum: [feature, correction]}
+        local_priority: {type: integer}
+    IssueSyncRun:
+      type: object
+      required: [id, trigger, scope, outcome, read, new, updated, ignored, started_at, finished_at]
+      properties:
+        id: {type: integer}
+        trigger: {type: string, enum: [daily, manual, targeted]}
+        scope: {type: string}
+        outcome: {type: string, enum: [ok, partial, failed]}
+        read: {type: integer}
+        new: {type: integer}
+        updated: {type: integer}
+        ignored: {type: integer}
+        error: {type: string}
+        started_at: {type: string, format: date-time}
+        finished_at: {type: string, format: date-time}
+    ProjectionPending:
+      type: object
+      required: [issue, version, target, reason, detail, attempts, updated_at]
+      properties:
+        issue: {type: string}
+        version: {type: integer}
+        target: {type: string}
+        reason: {type: string, enum: [mapping, conflict, write, unregistered, uncertain]}
+        detail: {type: string}
+        attempts: {type: integer}
+        updated_at: {type: string, format: date-time}
+    GuidanceItem:
+      type: object
+      required: [id, seq, author, body, mode, state, created_at]
+      properties:
+        id: {type: string}
+        seq: {type: integer}
+        author: {type: string}
+        body: {type: string}
+        mode: {type: string, enum: [immediate, next_safe_point, none]}
+        state: {type: string, enum: [queued, sent, acknowledged, uncertain, undeliverable]}
+        detail: {type: string}
+        created_at: {type: string, format: date-time}
+    GuidanceList:
+      type: object
+      required: [items, live]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/GuidanceItem"}}
+        live: {type: boolean, description: Há um executor vivo registrado para a execução}
+    ExecutionMonitor:
+      type: object
+      required: [events, cursor, summary]
+      properties:
+        events:
+          type: array
+          items:
+            type: object
+            required: [seq, kind, at]
+            properties:
+              seq: {type: integer}
+              kind: {type: string}
+              at: {type: string, format: date-time}
+              text: {type: string}
+              tool: {type: string}
+              subagent: {type: string}
+              progress: {type: integer, nullable: true}
+        cursor: {type: integer}
+        summary:
+          type: object
+          required: [elapsed_seconds, done, tool_calls, errors, dropped, subagents]
+          properties:
+            started_at: {type: string, format: date-time, nullable: true}
+            last_event_at: {type: string, format: date-time, nullable: true}
+            elapsed_seconds: {type: integer}
+            done: {type: boolean}
+            tool_calls: {type: integer}
+            errors: {type: integer}
+            dropped: {type: integer}
+            progress: {type: integer, nullable: true}
+            subagents:
+              type: array
+              items:
+                type: object
+                required: [name, events, state]
+                properties:
+                  name: {type: string}
+                  events: {type: integer}
+                  state: {type: string, enum: [running, done]}
+                  progress: {type: integer, nullable: true}
+    PullRequestSyncReport:
+      type: object
+      required: [polled, rounds, issues, merged]
+      properties:
+        polled: {type: integer}
+        rounds: {type: integer}
+        issues: {type: integer}
+        merged: {type: integer}
+        pending: {type: array, items: {type: string}}
+    PRRound:
+      type: object
+      required: [seq, key, status, closing_kind, closed_by, comments, incorporated]
+      properties:
+        seq: {type: integer}
+        key: {type: string}
+        status: {type: string, enum: [pending_issue, issue_created, ambiguous]}
+        detail: {type: string}
+        closing_kind: {type: string, enum: [review, command]}
+        closed_by: {type: string}
+        issue_key: {type: string}
+        comments: {type: integer}
+        published_head: {type: string}
+        incorporated: {type: boolean}
+    PullRequestWatch:
+      type: object
+      required: [pr_number, issue_key, state, draft, head_sha, needs_decision, rounds, pending]
+      properties:
+        pr_number: {type: integer}
+        issue_key: {type: string}
+        state: {type: string, enum: [open, merged, closed]}
+        draft: {type: boolean}
+        head_sha: {type: string}
+        merge_sha: {type: string}
+        needs_decision: {type: boolean}
+        last_error: {type: string}
+        last_polled_at: {type: string, format: date-time, nullable: true}
+        rounds: {type: array, items: {$ref: "#/components/schemas/PRRound"}}
+        pending: {type: array, items: {type: string}}
+    PullRequestsView:
+      type: object
+      required: [pull_requests]
+      properties:
+        pull_requests: {type: array, items: {$ref: "#/components/schemas/PullRequestWatch"}}
+    IssuesView:
+      type: object
+      required: [issues, runs, pending]
+      properties:
+        issues: {type: array, items: {$ref: "#/components/schemas/IssueRecord"}}
+        runs: {type: array, items: {$ref: "#/components/schemas/IssueSyncRun"}}
+        pending: {type: array, items: {$ref: "#/components/schemas/ProjectionPending"}}
+        progress:
+          type: object
+          description: Avanço interno por Issue (chave → visão), com trilhas, bloqueios, vínculos e diferença para a projeção na origem.
+          additionalProperties: {$ref: "#/components/schemas/IssueProgress"}
+    IssueProgress:
+      type: object
+      required: [key, internal_status, tracks, blocking, commits, evidence, publications, projection]
+      properties:
+        key: {type: string}
+        internal_status: {type: string}
+        aggregate_status: {type: string}
+        held_by: {type: string, description: Trilha que segura o avanço (etapa obrigatória mais atrasada)}
+        tracks:
+          type: array
+          items:
+            type: object
+            required: [track, stage]
+            properties:
+              track: {type: string, enum: [FRONTEND, BACKEND]}
+              stage: {type: string, enum: [none, implementing, implemented, reviewed]}
+        blocking: {type: array, items: {type: string}}
+        commits: {type: array, items: {type: string}}
+        evidence:
+          type: array
+          items:
+            type: object
+            required: [track, revision]
+            properties: {track: {type: string}, revision: {type: string}}
+        publications:
+          type: array
+          items:
+            type: object
+            required: [kind, head, state]
+            properties: {kind: {type: string}, head: {type: string}, pr_url: {type: string}, state: {type: string}}
+        projection:
+          type: object
+          required: [internal, external, in_sync]
+          properties:
+            internal: {type: string}
+            external: {type: string}
+            in_sync: {type: boolean}
+            pending: {type: string}
+    SyncView:
+      type: object
+      required: [last, items]
+      properties:
+        last: {oneOf: [{$ref: "#/components/schemas/SyncResult"}, {type: "null"}]}
+        items: {type: array, items: {$ref: "#/components/schemas/SyncItem"}}
+    SourceCheck:
+      type: object
+      required: [ok, steps, items, has_more, checked_at]
+      properties:
+        ok: {type: boolean}
+        steps: {type: array, items: {$ref: "#/components/schemas/SourceStep"}}
+        items: {type: array, items: {$ref: "#/components/schemas/PreviewItem"}}
+        has_more: {type: boolean}
+        checked_at: {type: string, format: date-time}
+    Project:
+      type: object
+      required: [id, slug, name, description, state, priority, wizard_step, repository, source, version, activated_at, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        slug: {type: string}
+        name: {type: string}
+        description: {type: string}
+        state: {$ref: "#/components/schemas/ProjectState"}
+        priority: {type: integer, minimum: 0, maximum: 4}
+        wizard_step: {$ref: "#/components/schemas/WizardStep"}
+        repository: {$ref: "#/components/schemas/Repository"}
+        source: {$ref: "#/components/schemas/Source"}
+        version: {type: integer, minimum: 1}
+        activated_at: {type: [string, "null"], format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    NewProject:
+      type: object
+      required: [slug, name]
+      additionalProperties: false
+      properties:
+        slug: {type: string, pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", maxLength: 63}
+        name: {type: string, minLength: 1, maxLength: 120}
+        description: {type: string, maxLength: 500}
+        priority: {type: integer, minimum: 0, maximum: 4, description: "Padrão 2"}
+    ProjectPatch:
+      type: object
+      required: [expected_version]
+      additionalProperties: false
+      properties:
+        expected_version: {type: integer, minimum: 1}
+        name: {type: string}
+        description: {type: string}
+        priority: {type: integer, minimum: 0, maximum: 4}
+        wizard_step: {$ref: "#/components/schemas/WizardStep"}
+        repository: {$ref: "#/components/schemas/Repository"}
+        source: {$ref: "#/components/schemas/Source"}
+    ExpectedVersion:
+      type: object
+      required: [expected_version]
+      additionalProperties: false
+      properties: {expected_version: {type: integer, minimum: 1}}
+    ValidationCheck:
+      type: object
+      required: [id, area, label, status]
+      properties:
+        id: {type: string, example: "repository.connection"}
+        area: {type: string, enum: [basics, repository, source]}
+        label: {type: string}
+        status: {type: string, enum: [ok, pending]}
+        action: {type: string, description: "Ação concreta para resolver a pendência"}
+    ValidationReport:
+      type: object
+      required: [ok, checks, not_verified]
+      properties:
+        ok: {type: boolean, description: "Verdadeiro só quando todos os itens obrigatórios estão atendidos"}
+        checks: {type: array, items: {$ref: "#/components/schemas/ValidationCheck"}}
+        not_verified: {type: array, items: {type: string}, description: "O que este relatório ainda não avalia (T05-02, T05-03)"}
+    ProjectChange:
+      type: object
+      required: [id, action, detail, created_at]
+      properties:
+        id: {type: integer}
+        action: {type: string, enum: [created, updated, source_changed, source_checked, activated, suspended, resumed]}
+        detail: {type: object, additionalProperties: true, description: "Só nomes de campos e referências; nunca segredos"}
+        created_at: {type: string, format: date-time}
+    ProjectPage:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/Project"}}
+        next_cursor: {type: string}
+    FieldSpec:
+      type: object
+      required: [name, label, kind, required]
+      properties:
+        name: {type: string}
+        label: {type: string}
+        kind: {type: string, enum: [text, textarea, int, enum]}
+        required: {type: boolean}
+        options: {type: array, items: {type: string}}
+        min: {type: integer}
+        max: {type: integer}
+        hint: {type: string}
+    NodeType:
+      type: object
+      required: [type, label, category, inputs, outputs, multi_in, fields]
+      properties:
+        type: {type: string}
+        label: {type: string}
+        category: {type: string, enum: [fluxo, execução, controle]}
+        inputs: {type: [array, "null"], items: {type: string}}
+        outputs: {type: array, items: {type: string}}
+        multi_in: {type: boolean}
+        fields: {type: [array, "null"], items: {$ref: "#/components/schemas/FieldSpec"}}
+    WorkflowNode:
+      type: object
+      required: [id, type, x, y, props]
+      properties:
+        id: {type: string, pattern: "^[A-Za-z0-9_-]{1,64}$"}
+        type: {type: string}
+        x: {type: number}
+        y: {type: number}
+        props: {type: object, additionalProperties: true}
+    WorkflowEdge:
+      type: object
+      required: [id, from, from_port, to, to_port]
+      properties:
+        id: {type: string}
+        from: {type: string}
+        from_port: {type: string}
+        to: {type: string}
+        to_port: {type: string}
+    WorkflowGraph:
+      type: object
+      required: [nodes, edges]
+      properties:
+        nodes: {type: array, maxItems: 200, items: {$ref: "#/components/schemas/WorkflowNode"}}
+        edges: {type: array, maxItems: 400, items: {$ref: "#/components/schemas/WorkflowEdge"}}
+    WorkflowIssue:
+      type: object
+      required: [node, field, code, message]
+      properties:
+        node: {type: string, description: "Vazio = problema do grafo inteiro"}
+        field: {type: string, description: "Propriedade ou porta"}
+        code: {type: string}
+        message: {type: string}
+    Workflow:
+      type: object
+      required: [id, name, kind, description, graph, version, issues, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        kind: {type: string, enum: [feature, subflow]}
+        description: {type: string}
+        graph: {$ref: "#/components/schemas/WorkflowGraph"}
+        version: {type: integer, minimum: 1}
+        issues: {type: array, items: {$ref: "#/components/schemas/WorkflowIssue"}}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    WorkflowSummary:
+      type: object
+      required: [id, name, kind, description, version, nodes, issues, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        kind: {type: string, enum: [feature, subflow]}
+        description: {type: string}
+        version: {type: integer}
+        nodes: {type: integer}
+        issues: {type: integer}
+        updated_at: {type: string, format: date-time}
+    NewWorkflow:
+      type: object
+      required: [name, kind]
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 120}
+        kind: {type: string, enum: [feature, subflow]}
+        description: {type: string, maxLength: 500}
+    SaveWorkflow:
+      type: object
+      required: [expected_version, name, graph]
+      additionalProperties: false
+      properties:
+        expected_version: {type: integer, minimum: 1}
+        name: {type: string, minLength: 1, maxLength: 120}
+        description: {type: string, maxLength: 500}
+        graph: {$ref: "#/components/schemas/WorkflowGraph"}
+    FallbackStep:
+      type: object
+      required: [connection_id, model]
+      properties:
+        connection_id: {type: string, format: uuid}
+        model: {type: string}
+    AgentInput:
+      type: object
+      required: [name, instructions, provider]
+      additionalProperties: false
+      properties:
+        name: {type: string, pattern: "^[a-z0-9][a-z0-9_-]{0,63}$"}
+        description: {type: string, maxLength: 500}
+        instructions: {type: string, minLength: 1, maxLength: 20000}
+        provider: {type: string, enum: [claude, codex, api]}
+        connection_id: {type: [string, "null"], format: uuid}
+        model: {type: string, maxLength: 80}
+        skills: {type: array, maxItems: 50, items: {type: string}}
+        tools: {type: array, maxItems: 50, items: {type: string}}
+        fallback: {type: array, maxItems: 5, items: {$ref: "#/components/schemas/FallbackStep"}}
+        timeout_minutes: {type: integer, minimum: 1, maximum: 720}
+    AgentUpdate:
+      allOf:
+        - $ref: "#/components/schemas/AgentInput"
+        - type: object
+          required: [expected_version]
+          properties: {expected_version: {type: integer, minimum: 1}}
+    Agent:
+      type: object
+      required: [id, name, description, instructions, provider, connection_id, model, skills, tools, fallback, timeout_minutes, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        instructions: {type: string}
+        provider: {type: string, enum: [claude, codex, api]}
+        connection_id: {type: [string, "null"], format: uuid}
+        model: {type: string}
+        skills: {type: array, items: {type: string}}
+        tools: {type: array, items: {type: string}}
+        fallback: {type: array, items: {$ref: "#/components/schemas/FallbackStep"}}
+        timeout_minutes: {type: integer}
+        version: {type: integer}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    EffectiveAgent:
+      type: object
+      required: [agent_id, agent_name, agent_version, provider, connection_id, model, instructions, prompt, skills, tools, fallback, timeout_minutes, sources, model_check]
+      properties:
+        model_check: {$ref: "#/components/schemas/ModelVerdict"}
+        agent_id: {type: string, format: uuid}
+        agent_name: {type: string}
+        agent_version: {type: integer}
+        provider: {type: string}
+        connection_id: {type: [string, "null"], format: uuid}
+        model: {type: string}
+        instructions: {type: string}
+        prompt: {type: string}
+        skills: {type: array, items: {type: string}}
+        tools: {type: array, items: {type: string}}
+        fallback: {type: array, items: {$ref: "#/components/schemas/FallbackStep"}}
+        timeout_minutes: {type: integer}
+        sources:
+          type: object
+          description: "Origem de cada valor: agent (base do catálogo) ou node (sobrescrito pelo nó)"
+          additionalProperties: {type: string, enum: [agent, node]}
+    SkillStep:
+      type: object
+      required: [type]
+      properties:
+        type: {type: string, enum: [ai, script, deterministic]}
+        command: {type: string}
+        op: {type: string, enum: [set, template, assert]}
+        key: {type: string}
+        value: {type: string}
+        expression: {type: string}
+    SkillManifest:
+      type: object
+      required: [name, description, executor, permissions, resources, commands, steps]
+      properties:
+        name: {type: string}
+        description: {type: string}
+        executor: {type: string, enum: [ai, script, deterministic, hybrid]}
+        permissions: {type: array, items: {type: string}}
+        resources: {type: array, items: {type: string}}
+        commands: {type: array, items: {type: string}}
+        steps: {type: array, items: {$ref: "#/components/schemas/SkillStep"}}
+    SkillInput:
+      type: object
+      required: [name, executor]
+      additionalProperties: false
+      properties:
+        name: {type: string, pattern: "^[a-z0-9][a-z0-9_-]{0,63}$"}
+        description: {type: string, maxLength: 500}
+        executor: {type: string, enum: [ai, script, deterministic, hybrid]}
+        instructions: {type: string, maxLength: 60000}
+        permissions: {type: array, items: {type: string}}
+        resources: {type: array, items: {type: string}}
+        commands: {type: array, maxItems: 30, items: {type: string}}
+        steps: {type: array, maxItems: 30, items: {$ref: "#/components/schemas/SkillStep"}}
+    SkillFile:
+      type: object
+      required: [path, sha256, size]
+      properties:
+        path: {type: string}
+        sha256: {type: string}
+        size: {type: integer}
+    Skill:
+      type: object
+      required: [id, name, description, executor, source_kind, source_ref, revision, content_hash, body, manifest, needs_approval, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        executor: {type: string, enum: [ai, script, deterministic, hybrid]}
+        source_kind: {type: string, enum: [manual, file, package, git]}
+        source_ref: {type: string}
+        revision: {type: string}
+        content_hash: {type: string, description: "SHA-256 do conteúdo (arquivos, manifesto e instruções)"}
+        body: {type: string}
+        manifest: {$ref: "#/components/schemas/SkillManifest"}
+        needs_approval: {type: boolean, description: "Algum comando é sensível e exigirá aprovação ao rodar"}
+        version: {type: integer}
+        files: {type: array, items: {$ref: "#/components/schemas/SkillFile"}}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    SkillImport:
+      type: object
+      required: [id, name, source_kind, source_ref, outcome, reason, content_hash, created_at]
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        source_kind: {type: string}
+        source_ref: {type: string}
+        outcome: {type: string, enum: [imported, unchanged, replaced, rejected]}
+        reason: {type: string}
+        content_hash: {type: string}
+        created_at: {type: string, format: date-time}
+    ToolField:
+      type: object
+      required: [name, type, required]
+      properties:
+        name: {type: string}
+        type: {type: string, enum: [string, int, bool, path, enum, list]}
+        required: {type: boolean}
+        description: {type: string}
+        max: {type: integer}
+        min: {type: integer}
+        options: {type: array, items: {type: string}}
+        pattern: {type: string}
+    Tool:
+      type: object
+      required: [name, kind, description, input, output, permissions, limits]
+      properties:
+        name: {type: string, pattern: "^[a-z][a-z0-9_]{1,47}$"}
+        kind: {type: string, enum: [native, script, integration]}
+        description: {type: string}
+        input: {type: array, items: {$ref: "#/components/schemas/ToolField"}}
+        output: {type: array, items: {$ref: "#/components/schemas/ToolField"}}
+        permissions: {type: array, items: {type: string, enum: [read, write, exec, git, api]}}
+        limits:
+          type: object
+          required: [timeout_seconds, max_output_bytes]
+          properties:
+            timeout_seconds: {type: integer, minimum: 1, maximum: 3600}
+            max_output_bytes: {type: integer, minimum: 1, maximum: 4194304}
+        command: {type: string, description: "Script: roda com os parâmetros em PARAM_<nome>"}
+        operation: {type: string, description: "Integração: operação do conector"}
+        requires: {type: array, items: {type: string}}
+        version: {type: integer}
+    DecisionOption:
+      type: object
+      required: [id, label, description]
+      properties:
+        id: {type: string}
+        label: {type: string}
+        description: {type: string}
+    DecisionEvidence:
+      type: object
+      required: [label, text]
+      properties:
+        label: {type: string}
+        text: {type: string, description: "Já redigido: sem segredos"}
+    AuthorizationView:
+      type: object
+      required: [id, project_id, execution_id, tool, operation, max_uses, uses, expires_at, state, status, remaining, in_flight, expires_in_seconds]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        execution_id: {type: string, format: uuid}
+        node_id: {type: string}
+        decision_id: {type: string, format: uuid, nullable: true}
+        tool: {type: string}
+        operation: {type: string}
+        resource: {type: string}
+        target: {type: string}
+        params_hash: {type: string}
+        max_uses: {type: integer}
+        uses: {type: integer}
+        expires_at: {type: string, format: date-time}
+        state: {type: string, enum: [active, revoked]}
+        revoked_at: {type: string, format: date-time, nullable: true}
+        revoke_reason: {type: string}
+        version: {type: integer}
+        created_at: {type: string, format: date-time}
+        status: {type: string, enum: [active, expired, exhausted, revoked], description: "Situação calculada pelo servidor"}
+        remaining: {type: integer}
+        in_flight: {type: integer}
+        expires_in_seconds: {type: integer, description: "Negativo = já venceu"}
+    DeliverySettings:
+      type: object
+      required: [review_authors, status_map, version]
+      properties:
+        review_authors: {type: array, items: {type: string}}
+        status_map: {type: object, additionalProperties: {type: string}}
+        version: {type: integer}
+    Delivery:
+      type: object
+      required: [id, feature_id, feature_key, attempt, branch, state, pr_url, projection, comments]
+      properties:
+        id: {type: string, format: uuid}
+        feature_id: {type: string, format: uuid}
+        feature_key: {type: string}
+        feature_title: {type: string}
+        attempt: {type: integer}
+        branch: {type: string}
+        revision: {type: string}
+        state: {type: string, enum: [blocked, draft_open, merged, closed, cancelled]}
+        reasons: {type: array, items: {type: string}}
+        pr_url: {type: string}
+        merge_sha: {type: string}
+        projection: {type: string, enum: [none, pending, done, failed]}
+        projection_error: {type: string}
+        observed_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+        comments: {type: object, additionalProperties: {type: integer}}
+    PRComment:
+      type: object
+      required: [id, comment_id, author, body, state]
+      properties:
+        id: {type: integer}
+        comment_id: {type: integer}
+        author: {type: string}
+        body: {type: string}
+        state: {type: string, enum: [queued, held, fixed, dismissed]}
+        queue_item_id: {type: string}
+        handled_at: {type: string, format: date-time, nullable: true}
+    MemoryRecord:
+      type: object
+      required: [id, project_id, key, kind, content, source, evidence, revision, confidence, state]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        feature_id: {type: string, format: uuid}
+        branch: {type: string}
+        pr_url: {type: string}
+        key: {type: string}
+        kind: {type: string, enum: [fact, decision, constraint, lesson]}
+        content: {type: string}
+        source: {type: string}
+        evidence: {type: array, items: {type: object, required: [label, ref], properties: {label: {type: string}, ref: {type: string}}}}
+        revision: {type: string}
+        confidence: {type: string, enum: [low, medium, high]}
+        state: {type: string, enum: [pending, official, invalidated]}
+        promoted_revision: {type: string}
+        promoted_at: {type: string, format: date-time, nullable: true}
+        invalid_reason: {type: string}
+        version: {type: integer}
+    DecisionRequest:
+      type: object
+      required: [id, project_id, execution_id, node_id, kind, title, problem, impact, evidence, options, state, execution_version, resolution_option, resolution_note, resolved_at, version, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        execution_id: {type: string, format: uuid}
+        node_id: {type: string}
+        kind: {type: string, enum: [conflict, missing_requirement, sensitive_operation, uncertain_result, pr_closed, other]}
+        title: {type: string}
+        problem: {type: string}
+        impact: {type: string}
+        evidence: {type: array, items: {$ref: "#/components/schemas/DecisionEvidence"}}
+        options: {type: array, minItems: 2, maxItems: 6, items: {$ref: "#/components/schemas/DecisionOption"}}
+        state: {type: string, enum: [pending, resolved, stale]}
+        execution_version: {type: integer}
+        resolution_option: {type: string}
+        resolution_note: {type: string}
+        resolved_at: {type: [string, "null"], format: date-time}
+        version: {type: integer}
+        created_at: {type: string, format: date-time}
+    PublishProblem:
+      type: object
+      required: [code, message]
+      properties:
+        node: {type: string}
+        code: {type: string}
+        message: {type: string}
+    WorkflowVersion:
+      type: object
+      required: [id, workflow_id, number, draft_version, name, kind, content_hash, published_at]
+      properties:
+        id: {type: string, format: uuid}
+        workflow_id: {type: string, format: uuid}
+        number: {type: integer}
+        draft_version: {type: integer}
+        name: {type: string}
+        kind: {type: string, enum: [feature, subflow]}
+        description: {type: string}
+        graph: {type: object}
+        flat_graph: {type: object}
+        subflows: {type: object, additionalProperties: {type: string}}
+        effective: {type: array, items: {type: object}}
+        content_hash: {type: string}
+        published_at: {type: string, format: date-time}
+        unchanged: {type: boolean}
+    SelectionConfig:
+      type: object
+      required: [rules]
+      properties:
+        rules:
+          type: array
+          items:
+            type: object
+            required: [name, conditions, workflow_id, enabled]
+            properties:
+              id: {type: string}
+              position: {type: integer}
+              name: {type: string}
+              workflow_id: {type: string, format: uuid}
+              subflow_id: {type: string}
+              enabled: {type: boolean}
+              conditions:
+                type: array
+                items:
+                  type: object
+                  required: [field, op, values]
+                  properties:
+                    field: {type: string, enum: [platform, type, priority, title, labels, components]}
+                    op: {type: string, enum: [eq, in, prefix, contains, has_any, has_all]}
+                    values: {type: array, items: {type: string}}
+        default:
+          type: [object, "null"]
+          properties:
+            workflow_id: {type: string, format: uuid}
+            subflow_id: {type: string}
+    Budget:
+      type: object
+      required: [id, scope, agent_id, period, limit_micros, state, version]
+      properties:
+        id: {type: string, format: uuid}
+        scope: {type: string, enum: [global, agent]}
+        agent_id: {type: [string, "null"], format: uuid}
+        period: {type: string, enum: [day, month]}
+        limit_micros: {type: integer, description: "micro-USD (1e-6)"}
+        state: {type: string, enum: [active, disabled]}
+        version: {type: integer}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    BudgetStatus:
+      allOf:
+        - {$ref: "#/components/schemas/Budget"}
+        - type: object
+          required: [spent_micros, reserved_micros, remaining_micros]
+          properties:
+            spent_micros: {type: integer}
+            reserved_micros: {type: integer}
+            remaining_micros: {type: integer}
+    ProviderView:
+      type: object
+      required: [connection_id, name, kind, target, state, health, quota]
+      properties:
+        connection_id: {type: string, format: uuid}
+        name: {type: string}
+        kind: {type: string, enum: [cli, api]}
+        target: {type: string}
+        state: {type: string, enum: [active, revoked]}
+        health:
+          type: object
+          required: [connection_id, state, source, reason, consecutive_failures]
+          properties:
+            connection_id: {type: string}
+            state: {type: string, enum: [available, auth, quota, unavailable, billing]}
+            source: {type: string, enum: [official, history]}
+            reason: {type: string}
+            until: {type: [string, "null"], format: date-time}
+            consecutive_failures: {type: integer}
+        quota:
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [used, limit, unit, source, observed_at]
+              properties:
+                used: {type: integer}
+                limit: {type: integer}
+                unit: {type: string}
+                resets_at: {type: [string, "null"], format: date-time}
+                source: {type: string}
+                observed_at: {type: string, format: date-time}
+    UsageReport:
+      type: object
+      required: [api, subscription]
+      properties:
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+        api:
+          type: object
+          required: [spent_micros, reserved_micros, by_source, by_agent, overrun_micros]
+          properties:
+            spent_micros: {type: integer}
+            reserved_micros: {type: integer}
+            overrun_micros: {type: integer}
+            by_source: {type: object, additionalProperties: {type: integer}}
+            by_agent: {type: object, additionalProperties: {type: integer}}
+        subscription:
+          type: array
+          items:
+            type: object
+            required: [connection_id, unit, units, calls]
+            properties:
+              connection_id: {type: string}
+              unit: {type: string}
+              units: {type: integer}
+              calls: {type: integer}
+    ModelParams:
+      type: object
+      properties:
+        temperature: {type: number, minimum: 0, maximum: 2}
+        top_p: {type: number, minimum: 0, maximum: 1}
+        max_tokens: {type: integer, minimum: 1}
+    ModelInput:
+      type: object
+      required: [provider, name]
+      additionalProperties: false
+      properties:
+        provider: {type: string, enum: [claude, codex, api]}
+        gateway: {type: string, enum: ["", openrouter, vercel]}
+        name: {type: string}
+        label: {type: string}
+        supports_tools: {type: boolean}
+        supports_streaming: {type: boolean}
+        context_window: {type: integer, minimum: 0}
+        max_output_tokens: {type: integer, minimum: 0}
+        params: {$ref: "#/components/schemas/ModelParams"}
+        input_micros_per_mtok: {type: [integer, "null"], minimum: 0, description: "Preço de entrada em micro-USD por milhão de tokens (com output e a fonte)"}
+        output_micros_per_mtok: {type: [integer, "null"], minimum: 0}
+        price_source: {type: string}
+    Model:
+      type: object
+      required: [id, provider, gateway, name, supports_tools, supports_streaming, context_window, max_output_tokens, params, state, version]
+      properties:
+        id: {type: string, format: uuid}
+        provider: {type: string}
+        gateway: {type: string}
+        name: {type: string}
+        label: {type: string}
+        supports_tools: {type: boolean}
+        supports_streaming: {type: boolean}
+        context_window: {type: integer}
+        max_output_tokens: {type: integer}
+        params: {$ref: "#/components/schemas/ModelParams"}
+        input_micros_per_mtok: {type: [integer, "null"]}
+        output_micros_per_mtok: {type: [integer, "null"]}
+        price_source: {type: string}
+        state: {type: string, enum: [active, disabled]}
+        version: {type: integer}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ModelVerdict:
+      type: object
+      required: [ok, problems]
+      properties:
+        ok: {type: boolean}
+        model: {$ref: "#/components/schemas/Model"}
+        problems: {type: array, items: {type: string}}
+    McpServer:
+      type: object
+      required: [id, name, url, connection_id, protocol, server_name, server_version, discovered_at, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        url: {type: string}
+        connection_id: {type: [string, "null"], format: uuid}
+        protocol: {type: string}
+        server_name: {type: string}
+        server_version: {type: string}
+        discovered_at: {type: [string, "null"], format: date-time}
+        created_at: {type: string, format: date-time}
+    McpTool:
+      type: object
+      required: [server_id, name, description, input_schema, schema_hash, status]
+      properties:
+        server_id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string, description: "Dado do servidor (não confiável)"}
+        input_schema: {type: object, additionalProperties: true}
+        schema_hash: {type: string}
+        status: {type: string, enum: [active, removed]}
+    McpGrant:
+      type: object
+      required: [agent_id, server_id, tool, schema_hash, current]
+      properties:
+        agent_id: {type: string, format: uuid}
+        server_id: {type: string, format: uuid}
+        tool: {type: string}
+        schema_hash: {type: string}
+        current: {type: boolean, description: "O hash aprovado ainda é o do esquema vigente"}
+    McpGrantInput:
+      type: object
+      required: [server_id, tool, schema_hash]
+      additionalProperties: false
+      properties:
+        server_id: {type: string, format: uuid}
+        tool: {type: string}
+        schema_hash: {type: string}

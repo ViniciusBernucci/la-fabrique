@@ -1,15 +1,26 @@
+# Dependências e build
 node_modules/
 dist/
 coverage/
+*.tsbuildinfo
+/bin/
+/tmp/
+
+# Segredos e ambiente local: só os modelos .example vão para o Git
 .env
 .env.*
 !.env.example
 !.env.production.example
+
+# Dados e saídas locais
+apps/web/e2e/.results/
+apps/web/playwright-report/
+apps/web/test-results/
 *.log
 .artifacts/
+backups/
+
+# Editores e sistema
 .DS_Store
 .idea/
 .vscode/
-apps/api/src/generated/
-*.tsbuildinfo
-*.tsbuildinfo

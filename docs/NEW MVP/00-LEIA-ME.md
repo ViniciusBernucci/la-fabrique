@@ -11,6 +11,7 @@
 | [Arquitetura e contratos](01-ARQUITETURA.md) | Estrutura do repositório, ambientes, serviços, dados, estados e protocolos entre componentes |
 | [Épicos detalhados](02-EPICOS.md) | Escopo, requisitos, regras, dependências, entregáveis, critérios de aceite e testes |
 | [Backlog de implementação](03-BACKLOG.md) | Features e tickets com ordem técnica, dependências e critérios executáveis |
+| [Checklist do backlog](07-CHECKLIST.md) | Estado de cada ticket (atualizar sempre) |
 | [Matriz das decisões D01–D95](04-RASTREABILIDADE.md) | Decisão, vigência e vínculo com épico e ticket |
 | [Aceite integral e piloto real](05-ACEITE-E-PILOTO.md) | Preparação, roteiros, evidências e condição de lançamento |
 | [Fontes e precedência](06-FONTES.md) | Referência à entrevista e inventário dos 14 arquivos históricos |

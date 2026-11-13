@@ -1,0 +1,20 @@
+# Imagem do painel web: build estático servido por nginx; /api vai para a API.
+ARG NODE_VERSION=24
+ARG NGINX_VERSION=1.29
+
+# Desenvolvimento: Vite com hot reload; o código vem de bind mount.
+FROM node:${NODE_VERSION}-alpine AS dev
+WORKDIR /app
+
+FROM node:${NODE_VERSION}-alpine AS build
+WORKDIR /app
+COPY apps/web/package.json apps/web/package-lock.json ./
+RUN npm ci
+COPY apps/web/ ./
+RUN npm run build
+
+FROM nginx:${NGINX_VERSION}-alpine AS runtime
+COPY infra/proxy/nginx.conf /etc/nginx/nginx.conf
+COPY infra/proxy/security-headers.conf /etc/nginx/security-headers.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 8080

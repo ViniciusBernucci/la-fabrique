@@ -1,0 +1,52 @@
+/* Tokens de design do La fabrique — visual "Novo" (sóbrio), que é o padrão
+   estabelecido. Origem: theme-hud.css (nomes dos tokens) + theme-sobrio.css
+   (valores). Mantidos os nomes --hud-* para não quebrar a linguagem visual
+   herdada; novos componentes devem usar apenas estes tokens, nunca cores fixas. */
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap");
+
+:root {
+  /* superfícies */
+  --hud-bg: #0b0d12;
+  --hud-surface: #12151c;
+  --hud-surface-2: #151922;
+  --hud-surface-solid: #12151c;
+  --hud-chrome: #0d1015;
+  --hud-line: #232834;
+  --hud-line-soft: #1d212b;
+  --hud-line-strong: #2e3442;
+  /* texto */
+  --hud-text: #e7e9ee;
+  --hud-text-strong: #f4f6f9;
+  --hud-text-muted: #a3aab8;
+  --hud-text-dim: #848c9a;
+  /* acentos / estados */
+  --hud-cyan: #6e9bff; /* acento principal */
+  --hud-teal: #4cc38a; /* sucesso / online */
+  --hud-blue: #7da6ff; /* info */
+  --hud-violet: #ae9ef7;
+  --hud-amber: #e3a946; /* atenção */
+  --hud-rose: #f07a7a; /* erro / ação humana */
+  --hud-idle: #959ca9; /* ocioso / desabilitado */
+  /* tipografia */
+  --hud-font-ui: "Geist", system-ui, sans-serif;
+  --hud-font-display: "Geist", system-ui, sans-serif;
+  --hud-font-mono: "Geist Mono", ui-monospace, monospace;
+  /* forma */
+  --hud-radius-sm: 6px;
+  --hud-radius: 8px;
+  --hud-radius-lg: 10px;
+  --hud-radius-xl: 10px;
+  --hud-radius-pill: 99px;
+  --hud-focus-color: #6e9bff;
+  /* utilitários */
+  --hud-ink: #0b0d12;
+  --hud-danger-text: #f59a9a;
+  --hud-backdrop: rgba(5, 6, 9, 0.72);
+  --hud-hover: #151922;
+  --hud-selected: #1a1f2a;
+  --hud-button-surface: #171b24;
+  --hud-input-line: #2a303c;
+  --hud-input-focus: rgba(110, 155, 255, 0.18);
+  --layout-sidebar-width: 226px;
+  color-scheme: dark;
+}

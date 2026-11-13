@@ -1,0 +1,14 @@
+{
+  "issues": [
+    {"id": "10003", "key": "ABC-3", "fields": {
+      "summary": "Relatório mensal", "issuetype": {"name": "Task", "subtask": false},
+      "description": null, "status": {"name": "Done", "statusCategory": {"key": "done"}},
+      "priority": null, "labels": ["lf-ready"], "parent": null,
+      "updated": "2026-11-11T08:00:00.000+0000",
+      "issuelinks": [
+        {"type": {"name": "Blocks"}, "inwardIssue": {"id": "10001", "key": "ABC-1"}},
+        {"type": {"name": "Relates"}, "inwardIssue": {"id": "10002", "key": "ABC-2"}},
+        {"type": {"name": "Blocks"}, "outwardIssue": {"id": "10009", "key": "ABC-9"}}]}}
+  ],
+  "isLast": true
+}

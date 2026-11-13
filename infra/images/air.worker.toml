@@ -1,0 +1,10 @@
+root = "."
+tmp_dir = "/go/air-worker"
+
+[build]
+  cmd = "go build -o /go/air-worker/worker ./cmd/worker"
+  bin = "/go/air-worker/worker"
+  include_ext = ["go", "sql"]
+  exclude_dir = ["apps", "docs", "skills", ".git", "tests"]
+  delay = 300
+  stop_on_error = true

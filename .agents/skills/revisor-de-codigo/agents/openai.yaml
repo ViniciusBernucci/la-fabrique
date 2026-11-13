@@ -1,0 +1,6 @@
+interface:
+  display_name: "Revisor de Código"
+  short_description: "Revisa spec e riscos do diff e corrige o que for médio, alto ou crítico em um ciclo"
+  default_prompt: "Use $revisor-de-codigo para revisar e corrigir esta branch contra a base e a spec indicadas."
+policy:
+  allow_implicit_invocation: true

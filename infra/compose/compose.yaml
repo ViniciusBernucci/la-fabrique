@@ -1,0 +1,139 @@
+# Base compartilhada (dev e VPS). Não publica portas: isso é feito pelos
+# overlays compose.dev.yaml e compose.prod.yaml.
+# Use sempre via Makefile (`make up`, `make up-prod`) a partir da raiz, pois os
+# caminhos são relativos à raiz do repositório (--project-directory .).
+name: le-fabrique
+
+x-hardening: &hardening
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  restart: unless-stopped
+
+x-go-env: &go-env
+  APP_ENV: ${APP_ENV:-development}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  DATABASE_URL: postgres://${POSTGRES_USER:-le_fabrique}:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}@postgres:5432/${POSTGRES_DB:-le_fabrique}?sslmode=disable
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    <<: *hardening
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-le_fabrique}
+      POSTGRES_USER: ${POSTGRES_USER:-le_fabrique}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [private]
+    mem_limit: ${LIMIT_POSTGRES_MEM:-1g}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  migrate:
+    build:
+      context: .
+      dockerfile: infra/images/Dockerfile.backend
+      args: {CMD: migrate}
+    image: le-fabrique/migrate:local
+    <<: *hardening
+    restart: "no"
+    command: ["up"]
+    environment: *go-env
+    depends_on:
+      postgres: {condition: service_healthy}
+    networks: [private]
+    read_only: true
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/images/Dockerfile.backend
+      args: {CMD: api}
+    image: le-fabrique/api:local
+    <<: *hardening
+    environment:
+      <<: *go-env
+      API_ADDR: 0.0.0.0:8480
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      # Chave AES-256 do cofre e do segredo TOTP: fora do banco, só no .env (openssl rand -base64 32).
+      VAULT_KEY: ${VAULT_KEY:?defina VAULT_KEY no .env (openssl rand -base64 32)}
+      VAULT_KEY_ID: ${VAULT_KEY_ID:-k1}
+      # A API só é alcançável pelo proxy do painel (nginx/Vite): confia no X-Forwarded-*.
+      TRUST_PROXY: "true"
+      # Vazio = padrão da API (ligado em produção).
+      REQUIRE_HTTPS: ${REQUIRE_HTTPS:-}
+    depends_on:
+      postgres: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+    networks: [private, egress]
+    read_only: true
+    tmpfs: [/tmp]
+    mem_limit: ${LIMIT_API_MEM:-512m}
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8480/api/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
+  worker:
+    build:
+      context: .
+      dockerfile: infra/images/Dockerfile.backend
+      args: {CMD: worker}
+    image: le-fabrique/worker:local
+    <<: *hardening
+    environment:
+      <<: *go-env
+      WORKER_HEALTH_ADDR: 0.0.0.0:8481
+    depends_on:
+      postgres: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+    networks: [private, egress]
+    read_only: true
+    tmpfs: [/tmp]
+    mem_limit: ${LIMIT_WORKER_MEM:-1g}
+    pids_limit: 512
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8481/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/images/Dockerfile.web
+    image: le-fabrique/web:local
+    <<: *hardening
+    cap_add: [CHOWN, SETGID, SETUID]
+    depends_on:
+      api: {condition: service_healthy}
+    networks: [private, edge]
+    read_only: true
+    tmpfs: [/var/cache/nginx, /var/run, /tmp]
+    mem_limit: ${LIMIT_WEB_MEM:-128m}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+networks:
+  # Sem saída para fora: banco, migrações e a comunicação interna.
+  private:
+    internal: true
+  # Único segmento com porta publicada (apenas o web).
+  edge:
+  # Saída para APIs externas (GitHub, Jira, ClickUp, provedores de IA) no futuro.
+  egress:
+
+volumes:
+  postgres_data:

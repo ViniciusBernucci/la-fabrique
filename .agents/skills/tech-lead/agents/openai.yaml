@@ -1,0 +1,6 @@
+interface:
+  display_name: "Tech Lead"
+  short_description: "Especificação canônica, tickets, critérios e perfil de risco"
+  default_prompt: "Use $tech-lead para transformar estes requisitos em especificação e tickets com critérios de aceite."
+policy:
+  allow_implicit_invocation: true

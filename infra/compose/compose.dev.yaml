@@ -1,0 +1,75 @@
+# Overlay de desenvolvimento: hot reload e portas em loopback. Use `make up`.
+services:
+  postgres:
+    # Portas só são publicadas para containers em rede não-internal; por isso o
+    # Postgres entra na rede edge apenas em dev (na VPS ele não é publicado).
+    networks: [private, edge]
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5442}:5432"
+
+  api:
+    build:
+      target: dev
+      args: {CMD: api}
+    image: le-fabrique/api:dev
+    read_only: false
+    command: ["air", "-c", "/src/infra/images/air.api.toml"]
+    working_dir: /src
+    volumes:
+      - .:/src
+      - go_mod_cache:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
+    user: "0:0"
+    cap_drop: []
+    security_opt: []
+    ports:
+      - "127.0.0.1:${API_PORT:-8480}:8480"
+
+  worker:
+    build:
+      target: dev
+      args: {CMD: worker}
+    image: le-fabrique/worker:dev
+    read_only: false
+    command: ["air", "-c", "/src/infra/images/air.worker.toml"]
+    working_dir: /src
+    volumes:
+      - .:/src
+      - go_mod_cache:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
+    user: "0:0"
+    cap_drop: []
+    security_opt: []
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/images/Dockerfile.web
+      target: dev
+    image: le-fabrique/web:dev
+    read_only: false
+    tmpfs: []
+    user: "0:0"
+    cap_drop: []
+    cap_add: []
+    security_opt: []
+    working_dir: /app
+    command: ["sh", "-c", "npm ci && npm run dev -- --host 0.0.0.0 --port 5173"]
+    environment:
+      API_PROXY_TARGET: http://api:8480
+    volumes:
+      - ./apps/web:/app
+      - web_node_modules:/app/node_modules
+    ports:
+      - "127.0.0.1:${WEB_PORT:-5180}:5173"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5173/"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+volumes:
+  go_mod_cache:
+  go_build_cache:
+  web_node_modules:

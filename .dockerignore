@@ -1,9 +1,14 @@
 .git
-.env*
-node_modules
+.env
+.env.*
+!.env.example
 **/node_modules
 **/dist
-coverage
-documentacoes
-lessons
+apps/web/coverage
+docs
+skills
+.agent
+.agents
+.claude
+Claude outputs
 *.md

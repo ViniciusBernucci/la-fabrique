@@ -1,0 +1,10 @@
+root = "."
+tmp_dir = "/go/air-api"
+
+[build]
+  cmd = "go build -o /go/air-api/api ./cmd/api"
+  bin = "/go/air-api/api"
+  include_ext = ["go", "sql"]
+  exclude_dir = ["apps", "docs", "skills", ".git", "tests"]
+  delay = 300
+  stop_on_error = true
