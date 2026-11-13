@@ -17,6 +17,14 @@ const triggerLabel: Record<IssueSyncRun["trigger"], string> = {
   targeted: "Correções pendentes",
 };
 
+const reasonLabel: Record<string, string> = {
+  mapping: "Mapeamento ausente",
+  conflict: "Conflito na origem",
+  write: "Falha de escrita",
+  unregistered: "Issue fora do registro",
+  uncertain: "Resultado incerto",
+};
+
 const when = (iso: string) => new Date(iso).toLocaleString("pt-BR");
 
 /** Issues da origem oficial: o que foi importado, em que estado e o histórico de sincronização. */
@@ -27,7 +35,10 @@ export function IssuesPage() {
   const items = projects.state.status === "ready" ? projects.state.data.items : [];
   const projectId = chosen || items[0]?.id || "";
   const view = useResource(
-    (s) => (projectId ? api.listIssues(projectId, s) : Promise.resolve({ issues: [], runs: [] })),
+    (s) =>
+      projectId
+        ? api.listIssues(projectId, s)
+        : Promise.resolve({ issues: [], runs: [], pending: [] }),
     `issues-${projectId}`,
     expire,
   );
@@ -141,6 +152,34 @@ export function IssuesPage() {
                 </ul>
               ))}
           </section>
+
+          {view.state.status === "ready" && view.state.data.pending.length > 0 && (
+            <section className="panel" aria-label="Projeção pendente">
+              <div className="panel-head">
+                <h2>Projeção de status pendente</h2>
+              </div>
+              <ul className="item-list">
+                {view.state.data.pending.map((p) => (
+                  <li key={`${p.issue}-${p.version}`}>
+                    <div className="item-link">
+                      <span>
+                        <strong>
+                          {p.issue} → {p.target}
+                        </strong>
+                        <small>
+                          {p.detail || "aguardando confirmação"} · {p.attempts} tentativa(s) ·{" "}
+                          {when(p.updated_at)}
+                        </small>
+                      </span>
+                      <span className="badge badge--paused">
+                        {reasonLabel[p.reason] ?? p.reason}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <section className="panel" aria-label="Histórico de sincronização">
             <div className="panel-head">

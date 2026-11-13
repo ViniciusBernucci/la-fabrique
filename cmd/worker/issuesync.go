@@ -8,9 +8,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ViniciusBernucci/le-fabrique/internal/config"
+	"github.com/ViniciusBernucci/le-fabrique/internal/effects"
 	"github.com/ViniciusBernucci/le-fabrique/internal/flow"
 	"github.com/ViniciusBernucci/le-fabrique/internal/integrations"
 	"github.com/ViniciusBernucci/le-fabrique/internal/issuesync"
+	"github.com/ViniciusBernucci/le-fabrique/internal/projection"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
 	"github.com/ViniciusBernucci/le-fabrique/internal/sentinel"
@@ -61,5 +63,12 @@ func registerIssueSync(sch *sentinel.Scheduler, pool *pgxpool.Pool, cfg config.W
 	if err := sch.Register(sy.Routine(resolve, sentinel.DailyAt{Hour: cfg.IssueSyncHour, Loc: loc})); err != nil {
 		return err
 	}
-	return sch.Register(sy.TargetedRoutine(resolve, cfg.CorrectionsPollInterval))
+	if err := sch.Register(sy.TargetedRoutine(resolve, cfg.CorrectionsPollInterval)); err != nil {
+		return err
+	}
+	pr := &projection.Projector{DB: pool, Ledger: &effects.Ledger{DB: pool}}
+	return sch.Register(pr.Routine(func(ctx context.Context, projectID string) (integrations.Tracker, flow.ProjectMap, error) {
+		src, tr, err := resolve(ctx, projectID)
+		return tr, src.Map, err
+	}, time.Minute))
 }

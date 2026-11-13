@@ -165,9 +165,20 @@ export interface IssueSyncRun {
   finished_at: string;
 }
 
+export interface ProjectionPending {
+  issue: string;
+  version: number;
+  target: string;
+  reason: "mapping" | "conflict" | "write" | "unregistered" | "uncertain";
+  detail: string;
+  attempts: number;
+  updated_at: string;
+}
+
 export interface IssuesView {
   issues: IssueRecord[];
   runs: IssueSyncRun[];
+  pending: ProjectionPending[];
 }
 
 export interface ProjectPage {

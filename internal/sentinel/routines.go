@@ -18,6 +18,7 @@ const (
 	RoutineCorrections = "corrections.poll"  // correções aguardando liberação
 	RoutinePRs         = "prs.poll"          // PRs vinculadas
 	RoutineMaintenance = "maintenance.sweep" // agentes inativos, timeouts, órfãos
+	RoutineProjection  = "status.projection" // projeção de status na origem
 )
 
 // DailyAt é um horário diário no fuso do projeto.

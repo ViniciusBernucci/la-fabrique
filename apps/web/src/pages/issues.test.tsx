@@ -46,6 +46,17 @@ const view = (over: Partial<IssuesView> = {}): IssuesView => ({
       finished_at: "2026-11-13T10:00:02Z",
     },
   ],
+  pending: [
+    {
+      issue: "ABC-1",
+      version: 2,
+      target: "PRD-DOC-CONCLUIDO",
+      reason: "mapping",
+      detail: "sem status ou transição remota mapeada para PRD-DOC-CONCLUIDO",
+      attempts: 1,
+      updated_at: "2026-11-13T10:00:05Z",
+    },
+  ],
   ...over,
 });
 
@@ -99,13 +110,16 @@ describe("página Issues", () => {
     expect(screen.getByText("PRD-DOC")).toBeTruthy();
     expect(screen.getByText("Parcial")).toBeTruthy();
     expect(screen.getByText(/limite de requisições/)).toBeTruthy();
+    expect(screen.getByText("Mapeamento ausente")).toBeTruthy();
+    expect(screen.getByText(/ABC-1 → PRD-DOC-CONCLUIDO/)).toBeTruthy();
   });
 
   it("sincroniza agora e recarrega a lista", async () => {
     let synced = false;
     stub({
       ...base,
-      "GET /projects/p1/issues": () => json(synced ? view() : view({ issues: [], runs: [] })),
+      "GET /projects/p1/issues": () =>
+        json(synced ? view() : view({ issues: [], runs: [], pending: [] })),
       "POST /projects/p1/issues/sync": () => {
         synced = true;
         return json({
@@ -132,7 +146,7 @@ describe("página Issues", () => {
   it("mostra o erro da API ao sincronizar sem mapa de status", async () => {
     stub({
       ...base,
-      "GET /projects/p1/issues": () => json(view({ issues: [], runs: [] })),
+      "GET /projects/p1/issues": () => json(view({ issues: [], runs: [], pending: [] })),
       "POST /projects/p1/issues/sync": () =>
         json(
           {

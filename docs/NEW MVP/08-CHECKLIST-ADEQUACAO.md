@@ -1,9 +1,9 @@
 # Checklist do backlog de adequação (LF-AJ)
 Acompanhamento dos 35 tickets de [Le-Fabrique-Adequacao.md](Le-Fabrique-Adequacao.md). **Fonte de verdade do estado da adequação**: atualize ao concluir ou alterar um ticket (marcar `[x]` só com evidência real). Fica separado do [07-CHECKLIST.md](07-CHECKLIST.md) porque a matriz de aceite do MVP é derivada dele.
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
-_Última atualização: 2026-11-13 — AJ01-03._
+_Última atualização: 2026-11-13 — AJ01-04._
 ## Resumo
-**8 feitos · 2 parciais · 25 pendentes** de 35 tickets.
+**9 feitos · 2 parciais · 24 pendentes** de 35 tickets.
 
 ## LF-AJ-01 — Sincronização e gerenciamento de Issues
 - [x] **AJ01-01** — Leitura Jira/ClickUp: descobrir Issues elegíveis e atualizar conhecidas por ID · dep.: AJ02-01 · aceite: CT01.
@@ -12,7 +12,8 @@ _Última atualização: 2026-11-13 — AJ01-03._
   - Rotina matinal `issues.sync` por fuso (uma vez por janela, backoff e erro/último sucesso por escopo) + sync manual `POST /projects/{id}/issues/sync` que usa a mesma função; falha paginada vira `partial` com progresso preservado; página **Issues** no painel (lista, status canônico, histórico, botão Sincronizar agora); rotas de mapa de status. PASS: integração `TestMorningIssueSync…`, `TestIssueSyncKeepsProgressWhenAPageFails`, `TestIssuesAPI…`, vitest `issues.test.tsx`, contrato OpenAPI. O worker só registra o sync com `SENTINEL_ISSUE_SYNC=true` (exige `VAULT_KEY` no worker; decisão de implantação, desligado por padrão).
 - [x] **AJ01-03** — Consulta por ID das correções aguardando liberação · dep.: AJ01-01, AJ03-01 · aceite: CT02.
   - `Syncer.Targeted`: consulta POR ID só as correções em REPROVADO_PR aguardando liberação (nunca lista a origem), atualiza o registro e encaminha à Sentinela a observação de CORRECAO_PR (liberação humana + vínculo à feature/PR); a chave é a revisão observada, então consulta direcionada, sync geral e reentregas concorrentes viram uma só liberação; encaminha antes de atualizar o registro (falha mantém o item em espera). Rotina `corrections.poll` com intervalo próprio (`CORRECTIONS_POLL_INTERVAL`, dentro do opt-in do worker). PASS: integração `TestTargetedPollReleasesCorrectionsOnlyForPendingIDs` (CT02: alias legado converge, 3 goroutines + sync geral = 1 liberação).
-- [ ] **AJ01-04** — Projeção Jira/ClickUp e pendências de mapeamento/conflito/escrita · dep.: AJ01-01, AJ02-02, AJ03-02 · aceite: CT01, CT15.
+- [x] **AJ01-04** — Projeção Jira/ClickUp e pendências de mapeamento/conflito/escrita · dep.: AJ01-01, AJ02-02, AJ03-02 · aceite: CT01, CT15.
+  - `internal/projection` sobre o `effects.Ledger`: uma única transição de status por intenção (campo humano intacto), timeout após gravação remota reconciliado por leitura sem novo envio, intenção antiga superada pela mais nova, conflito/mapeamento/escrita viram pendência (migration 00049) exposta em `GET /issues` e na página Issues; rotina `status.projection`. PASS: integração `TestProjection…` (3 cenários), contrato OpenAPI, vitest.
 
 ## LF-AJ-02 — Catálogo de status e transições
 - [x] **AJ02-01** — Catálogo, mapeamento por projeto e migração do alias · dep.: E03, E06 · aceite: CT02, CT16.

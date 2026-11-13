@@ -2162,12 +2162,24 @@ components:
         error: {type: string}
         started_at: {type: string, format: date-time}
         finished_at: {type: string, format: date-time}
+    ProjectionPending:
+      type: object
+      required: [issue, version, target, reason, detail, attempts, updated_at]
+      properties:
+        issue: {type: string}
+        version: {type: integer}
+        target: {type: string}
+        reason: {type: string, enum: [mapping, conflict, write, unregistered, uncertain]}
+        detail: {type: string}
+        attempts: {type: integer}
+        updated_at: {type: string, format: date-time}
     IssuesView:
       type: object
-      required: [issues, runs]
+      required: [issues, runs, pending]
       properties:
         issues: {type: array, items: {$ref: "#/components/schemas/IssueRecord"}}
         runs: {type: array, items: {$ref: "#/components/schemas/IssueSyncRun"}}
+        pending: {type: array, items: {$ref: "#/components/schemas/ProjectionPending"}}
     SyncView:
       type: object
       required: [last, items]
