@@ -17,6 +17,7 @@ export const navigation: { name: string; to: string; icon: IconName; end?: boole
   { name: "Ferramentas", to: "/tools", icon: "workflow" },
   { name: "Workflows", to: "/workflows", icon: "workflow" },
   { name: "Decisões", to: "/decisions", icon: "decisions" },
+  { name: "Consumo", to: "/usage", icon: "home" },
   { name: "Conexões", to: "/connections", icon: "key" },
   { name: "Segurança", to: "/security", icon: "shield" },
 ];

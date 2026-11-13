@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E12 (T12-04)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E16 (T16-03)._
 
 ## Resumo
 
-**19 feitos · 27 parciais · 21 pendentes** de 67 tickets.
+**19 feitos · 28 parciais · 20 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -166,7 +166,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E12 (T12-04)._
 
 - [ ] **[T16-01](03-BACKLOG.md#t16-01)** — Exibir status, controle e logs em tempo real · dep.: T03-03, T10-04, T12-03.
 - [ ] **[T16-02](03-BACKLOG.md#t16-02)** — Consolidar Central e auditoria operacional · dep.: T13-03, T13-05, T15-04, T16-01.
-- [ ] **[T16-03](03-BACKLOG.md#t16-03)** — Exibir consumo, orçamento e provedores · dep.: T09-03, T09-04, T03-03.
+- [~] **[T16-03](03-BACKLOG.md#t16-03)** — Exibir consumo, orçamento e provedores · dep.: T09-03, T09-04, T03-03.
+  - PASS (PostgreSQL real + vitest + Biome/tsc): tela `/usage` com tetos, gasto, reservas e disponível; gasto em API por origem (reportado, estimado, reconciliação) separado do consumo de assinatura; cota só quando observada (senão "não observada"/"sem limite observado", nunca zero); disponibilidade por conta com causa, sinal e retorno; "Bloqueia novas chamadas" no teto esgotado e aviso sem teto global. **Parcial:** somente leitura (sem editar teto nem período), sem verificação em navegador real, provedores reais NOT_RUN. Revisão independente NOT_RUN. Entrega: [E16 consumo](../entregas/2026-11-12-E16-consumo-e-provedores.md).
 - [ ] **[T16-04](03-BACKLOG.md#t16-04)** — Automatizar retenção com integridade · dep.: T12-01, T16-01.
 
 ## E17 — Piloto e aceite

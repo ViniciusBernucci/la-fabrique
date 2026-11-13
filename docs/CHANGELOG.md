@@ -1,3 +1,6 @@
+## 2026-11-12 — E16: consumo, orçamento e provedores (T16-03)
+Tela de consumo com tetos e reservas, gasto em API por origem do valor, assinatura em unidades próprias, disponibilidade por conta e cota observada (ou "não observada"), e o bloqueio de novas chamadas visível. Navegador real e provedores reais NOT_RUN. [Entrega](entregas/2026-11-12-E16-consumo-e-provedores.md) · [ADR-0037](adr/0037-painel-de-consumo-e-provedores.md).
+
 ## 2026-11-12 — E12: retomada seletiva e reconciliação de insumos (T12-04)
 Retomada num nó pelo grafo congelado: valida checkpoint, versão e efeitos, incorpora mudanças compatíveis, abre decisão no conflito sem alterar nada e refaz só o conjunto afetado (dependentes só se a saída mudar). Worker, Git real e tela NOT_RUN. [Entrega](entregas/2026-11-12-E12-retomada-seletiva.md) · [ADR-0036](adr/0036-retomada-seletiva-e-reconciliacao.md).
 

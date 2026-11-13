@@ -414,6 +414,59 @@ export type DecisionKind =
   | "pr_closed"
   | "other";
 
+// Consumo, orçamento e provedores (T16-03). Valores em micro-USD (1e-6).
+export interface BudgetStatus {
+  id: string;
+  scope: "global" | "agent";
+  agent_id: string | null;
+  period: "day" | "month";
+  limit_micros: number;
+  state: "active" | "disabled";
+  version: number;
+  spent_micros: number;
+  reserved_micros: number;
+  remaining_micros: number;
+}
+
+export interface UsageReport {
+  From: string;
+  To: string;
+  api: {
+    spent_micros: number;
+    reserved_micros: number;
+    by_source: Record<string, number>;
+    by_agent: Record<string, number>;
+    overrun_micros: number;
+  };
+  subscription: { connection_id: string; unit: string; units: number; calls: number }[];
+}
+
+export type ProviderState = "available" | "auth" | "quota" | "unavailable" | "billing";
+
+export interface ProviderView {
+  connection_id: string;
+  name: string;
+  kind: "cli" | "api";
+  target: string;
+  state: "active" | "revoked";
+  health: {
+    connection_id: string;
+    state: ProviderState;
+    source: "official" | "history";
+    reason: string;
+    until?: string | null;
+    consecutive_failures: number;
+  };
+  quota: {
+    used: number;
+    limit: number;
+    unit: string;
+    resets_at?: string | null;
+    source: string;
+    observed_at: string;
+  } | null;
+}
+
 export interface DecisionRequest {
   id: string;
   project_id: string;
@@ -550,6 +603,12 @@ export const api = {
   ) => put<Workflow>(`/workflows/${encodeURIComponent(id)}`, input),
   validateWorkflowGraph: (graph: WorkflowGraph, signal?: AbortSignal) =>
     post<{ issues: WorkflowIssue[] }>("/workflows/validate", { graph }, signal),
+
+  // Consumo, orçamento e provedores.
+  listBudgets: (signal?: AbortSignal) => request<{ items: BudgetStatus[] }>("/budgets", { signal }),
+  usageReport: (signal?: AbortSignal) => request<UsageReport>("/usage", { signal }),
+  listProviders: (signal?: AbortSignal) =>
+    request<{ items: ProviderView[] }>("/providers", { signal }),
 
   // Central de decisões.
   listDecisions: (state: "pending" | "resolved" | "stale", signal?: AbortSignal) =>

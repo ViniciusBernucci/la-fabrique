@@ -16,6 +16,7 @@ import { ProjectsPage } from "./pages/ProjectsPage";
 import { SecurityPage } from "./pages/SecurityPage";
 import { SkillsPage } from "./pages/SkillsPage";
 import { ToolsPage } from "./pages/ToolsPage";
+import { UsagePage } from "./pages/UsagePage";
 import { WorkflowEditorPage } from "./pages/WorkflowEditorPage";
 import { WorkflowsPage } from "./pages/WorkflowsPage";
 
@@ -64,6 +65,7 @@ export function App() {
         <Route path="workflows" element={<WorkflowsPage />} />
         <Route path="workflows/:id" element={<WorkflowEditorPage />} />
         <Route path="decisions" element={<DecisionsPage />} />
+        <Route path="usage" element={<UsagePage />} />
         <Route path="connections" element={<ConnectionsPage />} />
         <Route path="security" element={<SecurityPage />} />
         <Route path="*" element={<NotFoundPage />} />

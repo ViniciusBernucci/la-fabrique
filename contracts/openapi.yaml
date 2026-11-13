@@ -744,6 +744,16 @@ paths:
         "200": {description: Relatório, content: {application/json: {schema: {$ref: "#/components/schemas/UsageReport"}}}}
         "400": {$ref: "#/components/responses/Error"}
         "401": {$ref: "#/components/responses/Error"}
+  /providers:
+    get:
+      tags: [orcamento]
+      summary: Contas de IA (assinatura/CLI e API) com disponibilidade e a última cota OBSERVADA
+      description: >
+        Disponibilidade combina o sinal oficial e o histórico de falhas (autenticação, cota, indisponibilidade, financeiro).
+        `quota` é null quando nenhuma cota foi observada: o painel mostra "não observada". Sem segredos.
+      responses:
+        "200": {description: Contas, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/ProviderView"}}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
   /models:
     get:
       tags: [models]
@@ -2072,6 +2082,37 @@ components:
             spent_micros: {type: integer}
             reserved_micros: {type: integer}
             remaining_micros: {type: integer}
+    ProviderView:
+      type: object
+      required: [connection_id, name, kind, target, state, health, quota]
+      properties:
+        connection_id: {type: string, format: uuid}
+        name: {type: string}
+        kind: {type: string, enum: [cli, api]}
+        target: {type: string}
+        state: {type: string, enum: [active, revoked]}
+        health:
+          type: object
+          required: [connection_id, state, source, reason, consecutive_failures]
+          properties:
+            connection_id: {type: string}
+            state: {type: string, enum: [available, auth, quota, unavailable, billing]}
+            source: {type: string, enum: [official, history]}
+            reason: {type: string}
+            until: {type: [string, "null"], format: date-time}
+            consecutive_failures: {type: integer}
+        quota:
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [used, limit, unit, source, observed_at]
+              properties:
+                used: {type: integer}
+                limit: {type: integer}
+                unit: {type: string}
+                resets_at: {type: [string, "null"], format: date-time}
+                source: {type: string}
+                observed_at: {type: string, format: date-time}
     UsageReport:
       type: object
       required: [api, subscription]

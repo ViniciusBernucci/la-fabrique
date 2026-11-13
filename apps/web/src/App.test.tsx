@@ -120,6 +120,7 @@ describe("com sessão", () => {
       ["Ferramentas", "/tools"],
       ["Workflows", "/workflows"],
       ["Decisões", "/decisions"],
+      ["Consumo", "/usage"],
       ["Conexões", "/connections"],
       ["Segurança", "/security"],
     ]);

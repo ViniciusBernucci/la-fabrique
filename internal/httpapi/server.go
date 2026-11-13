@@ -151,6 +151,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/budgets", s.protected(s.listBudgets))
 	mux.HandleFunc("POST /api/budgets", s.sensitive(s.setBudget))
 	mux.HandleFunc("GET /api/usage", s.protected(s.usageReport))
+	mux.HandleFunc("GET /api/providers", s.protected(s.listProviders))
 	mux.HandleFunc("GET /api/models", s.protected(s.listModels))
 	mux.HandleFunc("POST /api/models", s.protected(s.createModel))
 	mux.HandleFunc("POST /api/models/check", s.protected(s.checkModel))
