@@ -9,22 +9,22 @@ import (
 )
 
 func TestOriginPolicyBlocksProductionHostAndOtherTargets(t *testing.T) {
-	app, err := ParseOrigin("http://app:3000")
+	app, err := ParseOrigin("http://webapp:3000")
 	if err != nil {
 		t.Fatal(err)
 	}
 	allowed := []Origin{app}
-	for _, ok := range []string{"http://app:3000/", "http://app:3000/login?x=1"} {
+	for _, ok := range []string{"http://webapp:3000/", "http://webapp:3000/login?x=1"} {
 		if err := CheckURL(allowed, ok); err != nil {
 			t.Fatalf("%s: %v", ok, err)
 		}
 	}
-	for _, bad := range []string{"https://app.producao.com/", "http://localhost:3000", "http://169.254.169.254/latest/meta-data", "http://host.docker.internal:8480", "http://app:3001", "https://app:3000", "http://user:pw@app:3000", "file:///etc/passwd", "http://other-exec-app:3000"} {
+	for _, bad := range []string{"https://app.producao.com/", "http://localhost:3000", "http://169.254.169.254/latest/meta-data", "http://host.docker.internal:8480", "http://webapp:3001", "https://webapp:3000", "http://user:pw@webapp:3000", "file:///etc/passwd", "http://other-exec-app:3000"} {
 		if err := CheckURL(allowed, bad); !errors.Is(err, ErrForbiddenURL) {
 			t.Fatalf("%s deveria ser bloqueado: %v", bad, err)
 		}
 	}
-	for _, bad := range []string{"http://127.0.0.1:3000", "http://prod.example.com", "http://app:3000/path", "ftp://app", "http://u:p@app"} {
+	for _, bad := range []string{"http://127.0.0.1:3000", "http://prod.example.com", "http://webapp:3000/path", "ftp://webapp", "http://u:p@webapp", "http://app:3000"} {
 		if _, err := ParseOrigin(bad); err == nil {
 			t.Fatalf("origem autorizada inválida aceita: %s", bad)
 		}
@@ -79,13 +79,13 @@ func (fakeDriver) ConsoleLogs(context.Context) ([]string, error) {
 }
 
 func spec() Spec {
-	return Spec{ProjectID: "p1", ExecutionID: "e1", Image: "chromium-mcp:1", Allowed: []string{"http://app:3000"}}
+	return Spec{ProjectID: "p1", ExecutionID: "e1", Image: "chromium-mcp:1", Allowed: []string{"http://webapp:3000"}}
 }
 
 func TestReviewApprovesWithEvidenceAndAlwaysCleansUp(t *testing.T) {
 	rt := &fakeRT{}
 	rv, ev := RunReview(context.Background(), rt, spec(), "rev1", time.Second, func(*Env) Driver { return fakeDriver{} }, func(tl *Tools) (bool, error) {
-		if err := tl.Navigate(context.Background(), "http://app:3000/"); err != nil {
+		if err := tl.Navigate(context.Background(), "http://webapp:3000/"); err != nil {
 			return false, err
 		}
 		_ = tl.Screenshot(context.Background(), "home")
@@ -133,7 +133,7 @@ func TestBrowserFailureLeavesGatePendingAndStillCleans(t *testing.T) {
 	}
 	rt2 := &fakeRT{}
 	rv, ev := RunReview(context.Background(), rt2, spec(), "rev1", time.Second, func(*Env) Driver { return fakeDriver{failNav: true} }, func(tl *Tools) (bool, error) {
-		return true, tl.Navigate(context.Background(), "http://app:3000/")
+		return true, tl.Navigate(context.Background(), "http://webapp:3000/")
 	})
 	if rv.Approved || !rv.Pending || len(ev) == 0 {
 		t.Fatalf("falha do MCP deixa o gate pendente: %+v", rv)

@@ -62,6 +62,7 @@ type Spec struct {
 	Pids        int
 	Allowed     []string // origens autorizadas (http://app:3000) acessíveis na rede interna da execução
 	Command     []string // comando do container (padrão: o da imagem)
+	Entrypoint  string   // substitui o entrypoint da imagem (ex.: manter o container vivo para o servidor MCP por exec)
 }
 
 var idPat = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
@@ -92,6 +93,11 @@ func ParseOrigin(raw string) (Origin, error) {
 	h := u.Hostname()
 	if ip := net.ParseIP(h); ip != nil {
 		return Origin{}, fmt.Errorf("%w: endereço IP direto não é permitido (%s)", ErrForbiddenURL, h)
+	}
+	// Chromium força HTTPS em nomes que coincidem com TLDs da lista HSTS pré-carregada (.app, .dev, .page): um
+	// serviço chamado "app" nunca abre por http. Exigimos outro nome para o alias da aplicação.
+	if h == "app" || h == "dev" || h == "page" {
+		return Origin{}, fmt.Errorf("%w: o nome %q é um TLD com HTTPS forçado no Chromium; use outro nome de serviço (ex.: webapp)", ErrForbiddenURL, h)
 	}
 	if h == "localhost" || strings.HasSuffix(h, ".localhost") || strings.Contains(h, ".") {
 		return Origin{}, fmt.Errorf("%w: use o nome da aplicação na rede interna da execução (%s)", ErrForbiddenURL, h)
@@ -158,7 +164,10 @@ func Provision(ctx context.Context, rt Runtime, s Spec) (*Env, error) {
 	}
 	run := append([]string{"run", "-d", "--name", container, "--network", network, "--read-only", "--cap-drop", "ALL",
 		"--security-opt", "no-new-privileges", "--memory", fmt.Sprintf("%dm", mem), "--cpus", fmt.Sprintf("%.1f", cpus), "--pids-limit", fmt.Sprintf("%d", pids),
-		"--tmpfs", "/tmp:rw,size=256m", "--user", "10001"}, labels(s)...)
+		"--tmpfs", "/tmp:rw,size=512m", "--shm-size", "512m", "--env", "HOME=/tmp", "--user", "10001"}, labels(s)...)
+	if s.Entrypoint != "" {
+		run = append(run, "--entrypoint", s.Entrypoint)
+	}
 	run = append(run, s.Image)
 	run = append(run, s.Command...)
 	if _, err := rt.Run(ctx, run...); err != nil {

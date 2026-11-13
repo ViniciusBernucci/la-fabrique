@@ -19,7 +19,7 @@ func TestRealDockerIsolationAndCleanup(t *testing.T) {
 		t.Skip("imagem alpine:3.22 ausente")
 	}
 	mk := func(id string) *Env {
-		s := Spec{ProjectID: "p-real", ExecutionID: id, Image: "alpine:3.22", Command: []string{"sleep", "300"}, Allowed: []string{"http://app:3000"}, MemoryMB: 64}
+		s := Spec{ProjectID: "p-real", ExecutionID: id, Image: "alpine:3.22", Command: []string{"sleep", "300"}, Allowed: []string{"http://webapp:3000"}, MemoryMB: 64}
 		e, err := Provision(ctx, rt, s)
 		if err != nil {
 			t.Fatal(err)
