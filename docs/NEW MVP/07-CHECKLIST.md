@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E14 (T14-04)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E14 (T14-03)._
 
 ## Resumo
 
-**19 feitos · 37 parciais · 11 pendentes** de 67 tickets.
+**19 feitos · 38 parciais · 10 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -157,7 +157,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E14 (T14-04)._
   - PASS (unitário + PostgreSQL real + Docker real, `-race`): checks por revisão (baseline e candidata) com assinatura da falha, trecho redigido e truncado, hash e duração; regressão (passava, ou falha nova) bloqueia; falha anterior comprovada (mesma assinatura no baseline) registrada em `known_failures` e reconhecida depois, sem bloquear; origem desconhecida (sem baseline utilizável) fica em investigação, bloqueia e nunca vira baseline por suposição (resolução como anterior exige a prova de uma execução de baseline com a mesma assinatura); evidência vale só para a revisão exata; erro de infraestrutura/tempo limite é inconclusivo. **Parcial:** sem preparo automático do baseline (checkout da revisão anterior), sem montar os checks a partir do perfil do projeto, sem rotas/tela; assinatura é heurística textual. Revisão independente NOT_RUN. Entrega: [E14 checks](../entregas/2026-11-12-E14-checks-e-baseline.md).
 - [~] **[T14-02](03-BACKLOG.md#t14-02)** — Classificar e reavaliar risco · dep.: T10-01, T14-01.
   - PASS (unitário + PostgreSQL real, `-race`): nível final = máximo entre a sugestão da IA e pisos determinísticos por caminho (migrations, SQL, autenticação, segurança, segredos, CI, containers → alto; dependências e configuração → médio) e por tamanho do diff; só eleva (fixture de arquivo crítico eleva apesar de sugestão baixa; alta não é reduzida); sugestão inválida → alta; reavaliação com o diff real após implementação e correção (pode cair se o diff não tocou o previsto); razões e arquivos gravados com histórico; política por projeto validada; os três níveis escolhem verificações (básicas; + revisão; + segurança, revisão independente e E2E) e apontam as não aplicáveis. **Parcial:** sem geração do diff (git) nem ligação ao ciclo de execução, sem rotas/tela, checks de segurança só como nomes (execução em T14-01/T14-03). Revisão independente NOT_RUN. Entrega: [E14 risco](../entregas/2026-11-12-E14-risco.md).
-- [ ] **[T14-03](03-BACKLOG.md#t14-03)** — Executar revisão independente e correções · dep.: T07-03, T09-04, T14-02, T12-03.
+- [~] **[T14-03](03-BACKLOG.md#t14-03)** — Executar revisão independente e correções · dep.: T07-03, T09-04, T14-02, T12-03.
+  - PASS (PostgreSQL real, `-race`): revisor e fallback por projeto com limite padrão de 2 rodadas; primeira rodada independente do implementador (também garantida por restrição do banco); achados críticos e relevantes bloqueiam, baixa severidade fica registrada (sem segredo); correção (pelo próprio revisor) só aceita com os checks da NOVA revisão aprovados (T14-01) e abre a rodada de revalidação; aprovação presa à revisão do código; esgotamento com achado bloqueante suspende a tarefa na fila com checkpoint seguro (vaga devolvida, dono antigo sem gravar) e abre decisão humana, e sem checkpoint seguro não suspende às cegas. **Parcial:** o agente revisor (que lê o diff e produz os achados), o checkpointer real e a escolha de disponibilidade ligada a T09-04 não existem (injetados); sem rotas/tela. Revisão independente NOT_RUN. Entrega: [E14 revisão](../entregas/2026-11-12-E14-revisao-independente.md).
 - [~] **[T14-04](03-BACKLOG.md#t14-04)** — Criar testes e rodar E2E por impacto · dep.: T14-01, T14-02.
   - PASS (unitário + PostgreSQL real + Docker real, `-race`): orientação de testes por arquivo alterado (Go/TS/Python; bloqueia em risco alto, orienta nos demais); E2E exigido por risco e impacto na UI; jornada só em ambiente isolado (recusa o não isolado antes de rodar), registrada pelos checks, com fixtures, navegador declarado e capturas com SHA-256 presas à revisão (evidência de outra revisão não vale; falha e ausência bloqueiam); caso inaplicável exige justificativa e evidência alternativa EXISTENTE na mesma revisão (check aprovado, captura ou revisão). **Parcial:** o navegador real (Playwright/Chromium) NOT_RUN — nenhuma imagem de sandbox traz navegador, e a execução real no Docker isolado foi provada com uma jornada simulada; heurística de testes por nome/diretório; sem comandos E2E do perfil, rotas ou tela. Revisão independente NOT_RUN. Entrega: [E14 testes e E2E](../entregas/2026-11-12-E14-testes-e-e2e.md).
 

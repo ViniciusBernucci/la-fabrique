@@ -1,3 +1,6 @@
+## 2026-11-12 — E14: revisão independente e correções (T14-03)
+Revisor por projeto com fallback e primeira rodada independente (garantida no banco), achados com severidade (crítico e relevante bloqueiam, baixo fica registrado), correção só com checks aprovados e rodada de revalidação, limite padrão de duas rodadas e esgotamento que suspende a tarefa com checkpoint seguro e abre decisão. Agente revisor real e tela NOT_RUN. [Entrega](entregas/2026-11-12-E14-revisao-independente.md) · [ADR-0047](adr/0047-revisao-independente-e-correcoes.md).
+
 ## 2026-11-12 — E14: testes e E2E por impacto (T14-04)
 Orientação de testes por arquivo alterado (bloqueia em risco alto), E2E exigido por nível e impacto na UI, jornada em ambiente isolado com fixtures e capturas com hash presas à revisão, e justificativa de inaplicabilidade com evidência alternativa existente. Navegador real NOT_RUN. [Entrega](entregas/2026-11-12-E14-testes-e-e2e.md) · [ADR-0046](adr/0046-testes-e-e2e-por-impacto.md).
 

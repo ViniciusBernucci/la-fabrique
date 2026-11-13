@@ -354,3 +354,24 @@ func (q *Queue) requeue(ctx context.Context, itemID string) (Item, error) {
 	})
 	return out, err
 }
+
+// SuspendOne suspende UM item em execução com um checkpoint seguro já feito (íntegro, da execução do
+// item, sandbox quieto): devolve a vaga, perde a lease e sobe a geração. É o que o esgotamento
+// da revisão usa; ResumeScope (ou o escopo do projeto) o devolve à fila depois da decisão.
+func (q *Queue) SuspendOne(ctx context.Context, itemID, checkpointID string, quiescent bool) (Item, error) {
+	it, err := scanItem(q.DB.QueryRow(ctx, `SELECT `+cols+` FROM queue_items WHERE id = $1`, itemID))
+	if err != nil {
+		return Item{}, err
+	}
+	if it.State != StateRunning {
+		return Item{}, fmt.Errorf("%w: só um item em execução é suspenso (estado %s)", ErrBadState, it.State)
+	}
+	safe, err := q.safeCheckpoint(ctx, it, checkpointID, quiescent)
+	if err != nil {
+		return Item{}, err
+	}
+	if !safe {
+		return Item{}, fmt.Errorf("%w: sem checkpoint seguro", ErrNotSafe)
+	}
+	return q.suspendItem(ctx, itemID, checkpointID)
+}
