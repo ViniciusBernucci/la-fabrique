@@ -260,3 +260,73 @@ func PRNumberFromURL(u string) (int, bool) {
 	}
 	return n, n > 0
 }
+
+// Comment é um comentário de revisão ou de conversa da PR.
+type Comment struct {
+	ID     int64
+	Author string
+	Body   string
+	Review bool // comentário de linha de revisão (e não da conversa)
+}
+
+type ghComment struct {
+	ID   int64  `json:"id"`
+	Body string `json:"body"`
+	User struct {
+		Login string `json:"login"`
+	} `json:"user"`
+}
+
+// ListComments lê os comentários da conversa e da revisão da PR (até 100 de cada, os mais
+// recentes primeiro não são garantidos: o chamador deduplica por identificador).
+func (a *GitHubAPI) ListComments(ctx context.Context, owner, name string, number int) ([]Comment, error) {
+	if !ownerPattern.MatchString(owner) || !namePattern.MatchString(name) || number < 1 {
+		return nil, ErrInvalidRepo
+	}
+	var out []Comment
+	for _, src := range []struct {
+		path   string
+		review bool
+	}{{"issues", false}, {"pulls", true}} {
+		var list []ghComment
+		if err := a.get(ctx, fmt.Sprintf("/repos/%s/%s/%s/%d/comments?per_page=100", owner, name, src.path, number), &list); err != nil {
+			return nil, err
+		}
+		for _, c := range list {
+			out = append(out, Comment{ID: c.ID, Author: c.User.Login, Body: c.Body, Review: src.review})
+		}
+	}
+	return out, nil
+}
+
+// ReopenPR reabre uma PR fechada sem merge. É idempotente (reabrir uma aberta não muda nada).
+func (a *GitHubAPI) ReopenPR(ctx context.Context, owner, name string, number int) error {
+	if !ownerPattern.MatchString(owner) || !namePattern.MatchString(name) || number < 1 {
+		return ErrInvalidRepo
+	}
+	body, _ := json.Marshal(map[string]any{"state": "open"})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, fmt.Sprintf("%s/repos/%s/%s/pulls/%d", a.Base, owner, name, number), bytes.NewReader(body))
+	if err != nil {
+		return ErrInvalidRepo
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	req.Header.Set("Authorization", "Bearer "+a.Token.Reveal())
+	resp, err := a.HTTP.Do(req)
+	if err != nil {
+		return fmt.Errorf("%w: API do GitHub indisponível", ErrGit)
+	}
+	defer resp.Body.Close()
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		return ErrAuth
+	case resp.StatusCode == http.StatusNotFound:
+		return ErrNotFound
+	case resp.StatusCode == http.StatusUnprocessableEntity:
+		return fmt.Errorf("%w: o GitHub recusou reabrir a PR (a branch pode ter sido apagada)", ErrRejected)
+	case resp.StatusCode != http.StatusOK:
+		return fmt.Errorf("%w: API do GitHub respondeu %d", ErrGit, resp.StatusCode)
+	}
+	return nil
+}

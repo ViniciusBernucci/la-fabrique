@@ -1,3 +1,6 @@
+## 2026-11-12 — E15: revisão externa e PR fechada (T15-04)
+Comentários de autores autorizados descobertos sob demanda viram um só item de correção (o mesmo comentário não duplica trabalho); PR fechada conserva artefatos e oferece cancelar, reabrir (conferida no GitHub) e nova tentativa limitada, com histórico e decisão respeitada. GitHub real e execução da correção pelo worker NOT_RUN. [Entrega](entregas/2026-11-12-E15-revisao-externa-e-pr-fechada.md) · [ADR-0052](adr/0052-revisao-externa-e-pr-fechada.md).
+
 ## 2026-11-12 — E15: confirmar merge e propagar conclusão (T15-03)
 Consulta da PR sob demanda: aberta ou fechada sem merge não libera nada; merge com SHA conclui o item na origem pelo ledger e devolve à fila o que esperava; falha ao projetar o status fica visível e reconcilia sem duplicar. GitHub real e acionamento pelo worker NOT_RUN. [Entrega](entregas/2026-11-12-E15-merge.md) · [ADR-0051](adr/0051-observacao-do-merge-e-propagacao.md).
 

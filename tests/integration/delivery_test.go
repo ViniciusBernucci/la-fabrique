@@ -30,6 +30,9 @@ type fakeGH struct {
 	bodies   []string
 	gets     int
 	getFails bool
+	comments map[string][]map[string]any // "issues/<n>" e "pulls/<n>"
+	reopens  int
+	noReopen bool
 }
 
 func newFakeGH(t *testing.T) *fakeGH {
@@ -52,6 +55,27 @@ func newFakeGH(t *testing.T) *fakeGH {
 				}
 			}
 			_ = json.NewEncoder(w).Encode(out)
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/comments"):
+			key := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/repos/org/app/"), "/comments")
+			out := g.comments[key]
+			if out == nil {
+				out = []map[string]any{}
+			}
+			_ = json.NewEncoder(w).Encode(out)
+		case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/repos/org/app/pulls/"):
+			g.reopens++
+			if g.noReopen {
+				w.WriteHeader(422)
+				return
+			}
+			n := r.URL.Path[len("/repos/org/app/pulls/"):]
+			for _, p := range g.prs {
+				if fmtNum(p["number"]) == n && p["merged"] != true {
+					p["state"] = "open"
+				}
+			}
+			w.WriteHeader(200)
+			_, _ = w.Write([]byte(`{}`))
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/repos/org/app/pulls/"):
 			g.gets++
 			if g.getFails {
@@ -317,4 +341,21 @@ func (g *fakeGH) setPR(number int, state string, merged bool, sha string) {
 			p["state"], p["merged"], p["merge_commit_sha"] = state, merged, sha
 		}
 	}
+}
+
+// addComment simula um comentário na PR (conversa ou revisão).
+func (g *fakeGH) addComment(kind string, pr int, id int64, login, body string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.comments == nil {
+		g.comments = map[string][]map[string]any{}
+	}
+	key := kind + "/" + strconv.Itoa(pr)
+	for i, c := range g.comments[key] {
+		if c["id"] == id {
+			g.comments[key][i]["body"] = body
+			return
+		}
+	}
+	g.comments[key] = append(g.comments[key], map[string]any{"id": id, "body": body, "user": map[string]any{"login": login}})
 }

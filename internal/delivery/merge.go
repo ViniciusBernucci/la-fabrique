@@ -202,7 +202,7 @@ func (c *Completer) Status(ctx context.Context, deliveryID string) (Observation,
 	if err := c.DB.QueryRow(ctx, `SELECT state, merge_sha, projection, projection_error FROM deliveries WHERE id::text = $1`, deliveryID).Scan(&state, &o.MergeSHA, &o.Projection, &o.ProjectionError); err != nil {
 		return o, persistence.MapError(err)
 	}
-	o.Outcome = map[string]string{"merged": "merged", "closed": "closed", "draft_open": "open"}[state]
+	o.Outcome = map[string]string{"merged": "merged", "closed": "closed", "draft_open": "open", "cancelled": "cancelled"}[state]
 	if o.Outcome == "" {
 		o.Outcome = "unknown"
 	}

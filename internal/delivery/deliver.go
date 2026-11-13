@@ -153,6 +153,9 @@ func (d *Deliverer) Deliver(ctx context.Context, req Request) (Outcome, error) {
 	if strings.TrimSpace(req.Revision) == "" || strings.TrimSpace(req.Title) == "" {
 		return out, &FieldError{"request", "revisão e título são obrigatórios"}
 	}
+	if err := d.attemptAllowed(ctx, req); err != nil {
+		return out, err
+	}
 	path, doc, err := d.Document(ctx, req.ProjectID, req.FeatureID, req.Revision, req.Branch)
 	if err != nil {
 		return out, err
@@ -227,8 +230,47 @@ func (d *Deliverer) record(ctx context.Context, req Request, docPath, doc, state
 	err := d.DB.QueryRow(ctx, `INSERT INTO deliveries (project_id, feature_id, attempt, branch, revision, state, reasons, doc_path, doc_hash, pr_number, pr_url, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12)
 		ON CONFLICT (feature_id, attempt) DO UPDATE SET branch = $4, revision = $5, state = $6, reasons = $7::jsonb, doc_path = $8, doc_hash = $9, pr_number = $10, pr_url = $11, updated_at = $12
+		WHERE deliveries.state IN ('blocked', 'draft_open')
 		RETURNING id`, req.ProjectID, req.FeatureID, req.Attempt, req.Branch, req.Revision, state, reasons, docPath, sum, pr, url, d.now()).Scan(&id)
+	if errors.Is(persistence.MapError(err), persistence.ErrNotFound) {
+		return "", &FieldError{"attempt", "esta tentativa de entrega já foi encerrada (integrada, fechada ou cancelada): use outra tentativa"}
+	}
 	return id, persistence.MapError(err)
+}
+
+// attemptAllowed respeita a decisão humana: depois de uma PR fechada ou cancelada, a tentativa
+// seguinte só é entregue se alguém escolheu "nova tentativa" para a anterior.
+func (d *Deliverer) attemptAllowed(ctx context.Context, req Request) error {
+	var cur string
+	if err := d.DB.QueryRow(ctx, `SELECT state FROM deliveries WHERE feature_id = $1 AND attempt = $2`, req.FeatureID, req.Attempt).Scan(&cur); err == nil {
+		if cur == "merged" || cur == "closed" || cur == "cancelled" {
+			return &FieldError{"attempt", "esta tentativa de entrega já foi encerrada (integrada, fechada ou cancelada): use outra tentativa"}
+		}
+	} else if !errors.Is(persistence.MapError(err), persistence.ErrNotFound) {
+		return persistence.MapError(err)
+	}
+	if req.Attempt <= 1 {
+		return nil
+	}
+	var id, state string
+	err := d.DB.QueryRow(ctx, `SELECT id::text, state FROM deliveries WHERE feature_id = $1 AND attempt = $2`, req.FeatureID, req.Attempt-1).Scan(&id, &state)
+	if errors.Is(persistence.MapError(err), persistence.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return persistence.MapError(err)
+	}
+	if state != "closed" && state != "cancelled" {
+		return nil
+	}
+	var n int
+	if err := d.DB.QueryRow(ctx, `SELECT count(*) FROM delivery_actions WHERE delivery_id::text = $1 AND action = 'retry'`, id).Scan(&n); err != nil {
+		return persistence.MapError(err)
+	}
+	if n == 0 {
+		return &FieldError{"attempt", "a tentativa anterior foi fechada sem merge: escolha \"nova tentativa\" antes de entregar de novo"}
+	}
+	return nil
 }
 
 func (d *Deliverer) prBody(ctx context.Context, req Request, docPath string) string {
