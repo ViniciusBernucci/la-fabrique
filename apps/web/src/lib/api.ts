@@ -545,6 +545,45 @@ export interface DecisionRequest {
   created_at: string;
 }
 
+export type AuthorizationStatus = "active" | "expired" | "exhausted" | "revoked";
+
+export interface AuthorizationView {
+  id: string;
+  project_id: string;
+  execution_id: string;
+  node_id: string;
+  decision_id: string | null;
+  tool: string;
+  operation: string;
+  resource: string;
+  target: string;
+  max_uses: number;
+  uses: number;
+  expires_at: string;
+  state: "active" | "revoked";
+  revoked_at: string | null;
+  revoke_reason: string;
+  status: AuthorizationStatus;
+  remaining: number;
+  in_flight: number;
+  expires_in_seconds: number;
+}
+
+export interface SequenceEntry {
+  at: string;
+  source: "execution" | "decision" | "authorization" | "recovery" | "resume";
+  type: string;
+  detail: Record<string, unknown>;
+}
+
+export interface RevokeResult {
+  authorization: AuthorizationView;
+  in_flight: number;
+  halted: boolean;
+  halt_failed: boolean;
+  already_revoked: boolean;
+}
+
 const BASE = "/api";
 
 /** Token CSRF da sessão atual (memória; o servidor o devolve em /session e no login). */
@@ -682,6 +721,17 @@ export const api = {
     request<{ items: DecisionRequest[] }>(`/decisions?state=${state}`, { signal }),
   resolveDecision: (id: string, option: string, note: string) =>
     post<DecisionRequest>(`/decisions/${encodeURIComponent(id)}/resolve`, { option, note }),
+
+  refuseDecision: (id: string, note: string) =>
+    post<DecisionRequest>(`/decisions/${encodeURIComponent(id)}/refuse`, { note }),
+  listAuthorizations: (status: AuthorizationStatus | "all", signal?: AbortSignal) =>
+    request<{ items: AuthorizationView[] }>(`/authorizations?status=${status}`, { signal }),
+  revokeAuthorization: (id: string, reason: string) =>
+    post<RevokeResult>(`/authorizations/${encodeURIComponent(id)}/revoke`, { reason }),
+  executionSequence: (executionId: string, signal?: AbortSignal) =>
+    request<{ items: SequenceEntry[] }>(`/executions/${encodeURIComponent(executionId)}/sequence`, {
+      signal,
+    }),
 
   // Catálogo de ferramentas (leitura; o cadastro de personalizadas é por API).
   listTools: (signal?: AbortSignal) => request<{ items: Tool[] }>("/tools", { signal }),

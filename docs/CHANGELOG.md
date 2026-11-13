@@ -1,3 +1,6 @@
+## 2026-11-12 — E16: Central e auditoria operacional (T16-02)
+Recusar pedido, listar autorizações com validade e uso, revogar (ação sensível, idempotente) e ver a sequência do incidente e da retomada pelo painel, com evento, estado e auditoria no servidor e sem notificação externa. Navegador real e parada segura real NOT_RUN. [Entrega](entregas/2026-11-12-E16-central-e-auditoria.md) · [ADR-0054](adr/0054-central-e-auditoria-operacional.md).
+
 ## 2026-11-12 — E15: memória técnica pendente e oficial (T15-05)
 Registros de memória com evidência, deduplicação e escopo por projeto; pendentes só na própria branch; só o merge confirmado promove, e só o que vale para a revisão integrada (duplicata soma evidência, fato mudado substitui o oficial); lições extraídas de achados de revisão corrigidos. Ligação ao contexto/worker e telas NOT_RUN. [Entrega](entregas/2026-11-12-E15-memoria-tecnica.md) · [ADR-0053](adr/0053-memoria-tecnica-pendente-e-oficial.md).
 

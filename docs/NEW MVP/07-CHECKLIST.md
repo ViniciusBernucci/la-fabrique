@@ -4,11 +4,11 @@ Acompanhamento de todos os tickets de [03-BACKLOG.md](03-BACKLOG.md). **Fonte de
 
 Legenda: `[x]` feito e verificado · `[~]` parcial (ver nota) · `[ ]` pendente.
 
-_Última atualização: 2026-11-12 (UTC-03:00) — E15 (T15-05)._
+_Última atualização: 2026-11-12 (UTC-03:00) — E16 (T16-02)._
 
 ## Resumo
 
-**19 feitos · 44 parciais · 4 pendentes** de 67 tickets.
+**19 feitos · 45 parciais · 3 pendentes** de 67 tickets.
 
 
 ## E01 — Bootstrap e monorepo
@@ -179,7 +179,8 @@ _Última atualização: 2026-11-12 (UTC-03:00) — E15 (T15-05)._
 
 - [~] **[T16-01](03-BACKLOG.md#t16-01)** — Exibir status, controle e logs em tempo real · dep.: T03-03, T10-04, T12-03.
   - PASS (PostgreSQL real + vitest + Biome/tsc): resumo do projeto com controles persistidos (global e do projeto, com motivo), contagem e lista de tarefas com estado, tempo e a CAUSA do bloqueio (espera por merge/provedor/decisão/suspensão e motivos de a fila não iniciar), execuções com cursor e última sincronização; histórico de eventos pesquisável e paginado; SSE real com `id` por evento, ao vivo, reconexão por `Last-Event-ID` e `?after=` sem perder nem repetir, heartbeat, encerramento por tempo máximo, segredo redigido e escopo por projeto; painel no detalhe do projeto com o hook que reabre pelo cursor (e ignora eventos já vistos). **Parcial:** nenhum executor grava `execution_events` ainda (o painel mostra "Nenhum evento ainda"); o painel só EXIBE os controles (as ações são T10-04, sem rotas); não mostra agente, tentativas, checkpoints e artefatos; sem navegador real com a API ao vivo. Revisão independente NOT_RUN. Entrega: [E16 execução ao vivo](../entregas/2026-11-12-E16-execucao-ao-vivo.md).
-- [ ] **[T16-02](03-BACKLOG.md#t16-02)** — Consolidar Central e auditoria operacional · dep.: T13-03, T13-05, T15-04, T16-01.
+- [~] **[T16-02](03-BACKLOG.md#t16-02)** — Consolidar Central e auditoria operacional · dep.: T13-03, T13-05, T15-04, T16-01.
+  - PASS (PostgreSQL real, `-race`, contrato OpenAPI, vitest): aprovar, recusar (alternativa de recusa declarada pelo pedido) e revogar autorização pelo HTTP produzem evento de domínio, estado verificável e auditoria do administrador, repetir é idempotente, revogação e pedido sensível exigem reautenticação, mutações exigem CSRF, nenhum efeito externo é criado; autorizações listadas com situação (vigente/vencida/esgotada/revogada), usos, restante e validade; sequência do incidente e da retomada em ordem de tempo (eventos, pedidos, autorizações, recuperação, retomada); painel com Recusar, aba Autorizações e sequência sob demanda. **Parcial:** navegador real NOT_RUN; parada segura na revogação com uso em andamento depende do executor (sem ele, `halt_failed`); ordem da sequência é por horário, não causal; sem filtro por projeto/paginação; recusa exige que o pedido declare a alternativa. Revisão independente NOT_RUN. Entrega: [E16 Central](../entregas/2026-11-12-E16-central-e-auditoria.md).
 - [~] **[T16-03](03-BACKLOG.md#t16-03)** — Exibir consumo, orçamento e provedores · dep.: T09-03, T09-04, T03-03.
   - PASS (PostgreSQL real + vitest + Biome/tsc): tela `/usage` com tetos, gasto, reservas e disponível; gasto em API por origem (reportado, estimado, reconciliação) separado do consumo de assinatura; cota só quando observada (senão "não observada"/"sem limite observado", nunca zero); disponibilidade por conta com causa, sinal e retorno; "Bloqueia novas chamadas" no teto esgotado e aviso sem teto global. **Parcial:** somente leitura (sem editar teto nem período), sem verificação em navegador real, provedores reais NOT_RUN. Revisão independente NOT_RUN. Entrega: [E16 consumo](../entregas/2026-11-12-E16-consumo-e-provedores.md).
 - [~] **[T16-04](03-BACKLOG.md#t16-04)** — Automatizar retenção com integridade · dep.: T12-01, T16-01.

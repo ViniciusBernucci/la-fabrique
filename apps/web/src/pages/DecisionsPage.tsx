@@ -2,7 +2,14 @@ import { type FormEvent, useState } from "react";
 import { FormError, toApiError } from "../components/AuthParts";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../components/States";
-import { type ApiError, api, type DecisionKind, type DecisionRequest } from "../lib/api";
+import {
+  type ApiError,
+  type AuthorizationView,
+  api,
+  type DecisionKind,
+  type DecisionRequest,
+  type SequenceEntry,
+} from "../lib/api";
 import { useReauth } from "../lib/reauth";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
@@ -16,12 +23,22 @@ const kindLabel: Record<DecisionKind, string> = {
   other: "Outro",
 };
 
-type Tab = "pending" | "resolved" | "stale";
+type Tab = "pending" | "resolved" | "stale" | "authorizations";
 const tabLabel: Record<Tab, string> = {
   pending: "Pendentes",
   resolved: "Resolvidas",
   stale: "Obsoletas",
+  authorizations: "Autorizações",
 };
+
+const statusLabel: Record<AuthorizationView["status"], string> = {
+  active: "Vigente",
+  expired: "Vencida",
+  exhausted: "Esgotada",
+  revoked: "Revogada",
+};
+
+const refusalIds = ["refuse", "deny", "reject"];
 
 const when = (iso: string) => new Date(iso).toLocaleString("pt-BR");
 
@@ -30,7 +47,7 @@ export function DecisionsPage() {
   const { expire } = useSession();
   const [tab, setTab] = useState<Tab>("pending");
   const { state, reload } = useResource(
-    (s) => api.listDecisions(tab, s),
+    (s) => (tab === "authorizations" ? Promise.resolve({ items: [] }) : api.listDecisions(tab, s)),
     `decisions:${tab}`,
     expire,
   );
@@ -57,7 +74,12 @@ export function DecisionsPage() {
           </button>
         ))}
       </div>
-      <section className="panel" aria-label={`Decisões ${tabLabel[tab].toLowerCase()}`}>
+      {tab === "authorizations" && <AuthorizationsPanel />}
+      <section
+        className="panel"
+        aria-label={`Decisões ${tabLabel[tab].toLowerCase()}`}
+        hidden={tab === "authorizations"}
+      >
         {state.status === "loading" && <LoadingState label="Carregando decisões…" />}
         {state.status === "error" && <ErrorState error={state.error} onRetry={reload} />}
         {state.status === "ready" && state.data.items.length === 0 && (
@@ -98,6 +120,20 @@ function DecisionCard({ decision: d, onDone }: { decision: DecisionRequest; onDo
     }
   }
 
+  async function refuse() {
+    setBusy(true);
+    setError(null);
+    try {
+      await runSensitive(() => api.refuseDecision(d.id, note));
+      onDone();
+    } catch (e) {
+      setError(toApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const refusal = d.options.find((o) => refusalIds.includes(o.id));
   const chosen = d.options.find((o) => o.id === d.resolution_option);
   return (
     <article className="panel panel--pad decision" aria-label={d.title}>
@@ -153,6 +189,11 @@ function DecisionCard({ decision: d, onDone }: { decision: DecisionRequest; onDo
             <button type="submit" disabled={busy || option === ""}>
               Registrar decisão
             </button>
+            {refusal && (
+              <button type="button" className="btn-secondary" disabled={busy} onClick={refuse}>
+                Recusar
+              </button>
+            )}
           </div>
         </form>
       )}
@@ -168,6 +209,156 @@ function DecisionCard({ decision: d, onDone }: { decision: DecisionRequest; onDo
           Obsoleta: a execução mudou depois do pedido e a decisão não foi aplicada.
         </p>
       )}
+      <SequenceView executionId={d.execution_id} />
     </article>
+  );
+}
+
+const seqText = (e: SequenceEntry) => {
+  const d = e.detail;
+  const extra = [d.title, d.option, d.reason, d.note].find((v) => typeof v === "string" && v);
+  return `${e.source} · ${e.type}${extra ? ` — ${String(extra)}` : ""}`;
+};
+
+/** Sequência do incidente e da retomada da execução (lida do servidor, sob demanda). */
+function SequenceView({ executionId }: { executionId: string }) {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<SequenceEntry[] | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  async function toggle() {
+    const next = !open;
+    setOpen(next);
+    if (next && items === null) {
+      try {
+        setItems((await api.executionSequence(executionId)).items);
+      } catch (e) {
+        setError(toApiError(e));
+      }
+    }
+  }
+
+  return (
+    <div>
+      <button type="button" className="btn-secondary" aria-expanded={open} onClick={toggle}>
+        {open ? "Ocultar sequência" : "Ver sequência"}
+      </button>
+      {open && (
+        <section aria-label="Sequência do incidente e da retomada">
+          <FormError error={error} />
+          {items?.length === 0 && <p className="muted">Nenhum registro para esta execução.</p>}
+          <ol className="timeline">
+            {items?.map((e) => (
+              <li key={`${e.at}-${e.source}-${e.type}-${JSON.stringify(e.detail)}`}>
+                <small className="muted">{when(e.at)}</small> {seqText(e)}
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+    </div>
+  );
+}
+
+/** Autorizações: validade, uso e revogação (ação sensível). */
+function AuthorizationsPanel() {
+  const { expire } = useSession();
+  const { runSensitive } = useReauth();
+  const { state, reload } = useResource(
+    (s) => api.listAuthorizations("all", s),
+    "authorizations",
+    expire,
+  );
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<ApiError | null>(null);
+  const [notice, setNotice] = useState("");
+
+  async function revoke(a: AuthorizationView) {
+    setError(null);
+    setNotice("");
+    try {
+      const out = await runSensitive(() => api.revokeAuthorization(a.id, reason));
+      setNotice(
+        out.halt_failed
+          ? "Revogada, mas a parada segura da execução falhou: verifique a execução."
+          : "Autorização revogada.",
+      );
+      reload();
+    } catch (e) {
+      setError(toApiError(e));
+    }
+  }
+
+  return (
+    <section className="panel panel--pad" aria-label="Autorizações">
+      {state.status === "loading" && <LoadingState label="Carregando autorizações…" />}
+      {state.status === "error" && <ErrorState error={state.error} onRetry={reload} />}
+      {state.status === "ready" && state.data.items.length === 0 && (
+        <EmptyState title="Nenhuma autorização">
+          As aprovações de operações sensíveis geram autorizações com prazo e número de usos.
+        </EmptyState>
+      )}
+      {state.status === "ready" && state.data.items.length > 0 && (
+        <label>
+          Motivo da revogação (opcional)
+          <input value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
+        </label>
+      )}
+      <FormError error={error} />
+      {notice && (
+        <p className="callout" role="status">
+          {notice}
+        </p>
+      )}
+      {state.status === "ready" &&
+        state.data.items.map((a) => (
+          <article key={a.id} className="decision" aria-label={`${a.tool} ${a.operation}`}>
+            <header className="actions">
+              <h2 className="form-title">
+                {a.tool} · {a.operation}
+              </h2>
+              <span
+                className={a.status === "active" ? "badge badge--active" : "badge badge--archived"}
+              >
+                {statusLabel[a.status]}
+              </span>
+            </header>
+            <dl className="facts">
+              <div>
+                <dt>Alvo</dt>
+                <dd>{a.target || a.resource || "—"}</dd>
+              </div>
+              <div>
+                <dt>Usos</dt>
+                <dd>
+                  {a.uses} de {a.max_uses} ({a.remaining} restantes
+                  {a.in_flight > 0 ? `, ${a.in_flight} em andamento` : ""})
+                </dd>
+              </div>
+              <div>
+                <dt>Validade</dt>
+                <dd>{when(a.expires_at)}</dd>
+              </div>
+              {a.revoked_at && (
+                <div>
+                  <dt>Revogação</dt>
+                  <dd>
+                    {when(a.revoked_at)}
+                    {a.revoke_reason && ` — ${a.revoke_reason}`}
+                  </dd>
+                </div>
+              )}
+            </dl>
+            {a.status === "active" && (
+              <div className="actions">
+                <button type="button" onClick={() => revoke(a)}>
+                  Revogar
+                </button>
+              </div>
+            )}
+            <SequenceView executionId={a.execution_id} />
+          </article>
+        ))}
+    </section>
   );
 }

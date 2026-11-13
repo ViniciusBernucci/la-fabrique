@@ -1002,6 +1002,115 @@ paths:
         "403": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
         "409": {$ref: "#/components/responses/Error"}
+  /decisions/{id}/refuse:
+    post:
+      tags: [decisões]
+      summary: Recusa o pedido usando a alternativa de recusa que ele declara (`refuse`, `deny` ou `reject`)
+      description: >
+        Equivale a resolver com a alternativa de recusa: mesmo evento, mesma retomada e mesma auditoria. Pedido sem
+        alternativa de recusa → 422 `no_refusal_option`. Operação sensível exige reautenticação (403 `reauth_required`).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                note: {type: string, maxLength: 500}
+      responses:
+        "200": {description: Pedido recusado, content: {application/json: {schema: {$ref: "#/components/schemas/DecisionRequest"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /authorizations:
+    get:
+      tags: [decisões]
+      summary: Autorizações com situação, validade, uso em andamento e o que resta
+      parameters:
+        - {name: status, in: query, schema: {type: string, enum: [active, expired, exhausted, revoked, all]}, description: "Vazio = todas"}
+      responses:
+        "200":
+          description: Autorizações, da mais recente para a mais antiga (até 200)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: {items: {type: array, items: {$ref: "#/components/schemas/AuthorizationView"}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+  /authorizations/{id}/revoke:
+    post:
+      tags: [decisões]
+      summary: Revoga a autorização (imediato; ação sensível)
+      description: >
+        A revogação vale a partir do commit: nenhum uso novo passa. Com uso em andamento, dispara a parada segura;
+        se ela falhar, `halt_failed` é verdadeiro e a revogação continua valendo. Repetir é idempotente
+        (`already_revoked`). Exige reautenticação (403 `reauth_required`).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reason: {type: string, maxLength: 500}
+      responses:
+        "200":
+          description: Resultado da revogação
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authorization, in_flight, halted, halt_failed, already_revoked]
+                properties:
+                  authorization: {$ref: "#/components/schemas/AuthorizationView"}
+                  in_flight: {type: integer}
+                  halted: {type: boolean}
+                  halt_failed: {type: boolean}
+                  already_revoked: {type: boolean}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /executions/{id}/sequence:
+    get:
+      tags: [decisões]
+      summary: Sequência do incidente e da retomada da execução (eventos, decisões, autorizações, recuperação e retomada)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Linhas em ordem de tempo (até 500), já redigidas
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [execution_id, project_id, items]
+                properties:
+                  execution_id: {type: string, format: uuid}
+                  project_id: {type: string, format: uuid}
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [at, source, type, detail]
+                      properties:
+                        at: {type: string, format: date-time}
+                        source: {type: string, enum: [execution, decision, authorization, recovery, resume]}
+                        type: {type: string}
+                        detail: {type: object, additionalProperties: true}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
   /tools:
     get:
       tags: [ferramentas]
@@ -2078,6 +2187,32 @@ components:
       properties:
         label: {type: string}
         text: {type: string, description: "Já redigido: sem segredos"}
+    AuthorizationView:
+      type: object
+      required: [id, project_id, execution_id, tool, operation, max_uses, uses, expires_at, state, status, remaining, in_flight, expires_in_seconds]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        execution_id: {type: string, format: uuid}
+        node_id: {type: string}
+        decision_id: {type: string, format: uuid, nullable: true}
+        tool: {type: string}
+        operation: {type: string}
+        resource: {type: string}
+        target: {type: string}
+        params_hash: {type: string}
+        max_uses: {type: integer}
+        uses: {type: integer}
+        expires_at: {type: string, format: date-time}
+        state: {type: string, enum: [active, revoked]}
+        revoked_at: {type: string, format: date-time, nullable: true}
+        revoke_reason: {type: string}
+        version: {type: integer}
+        created_at: {type: string, format: date-time}
+        status: {type: string, enum: [active, expired, exhausted, revoked], description: "Situação calculada pelo servidor"}
+        remaining: {type: integer}
+        in_flight: {type: integer}
+        expires_in_seconds: {type: integer, description: "Negativo = já venceu"}
     DecisionRequest:
       type: object
       required: [id, project_id, execution_id, node_id, kind, title, problem, impact, evidence, options, state, execution_version, resolution_option, resolution_note, resolved_at, version, created_at]

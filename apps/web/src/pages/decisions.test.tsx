@@ -190,4 +190,139 @@ describe("Central de Decisões", () => {
     await userEvent.click(screen.getByRole("tab", { name: "Obsoletas" }));
     expect(await screen.findByText(/a execução mudou depois do pedido/)).toBeInTheDocument();
   });
+
+  it("recusa pelo botão Recusar quando o pedido declara a alternativa de recusa", async () => {
+    let done = false;
+    const calls = stub({
+      "GET /session": () => json(session),
+      "GET /decisions?state=pending": () =>
+        json({
+          items: done
+            ? []
+            : [
+                decision({
+                  options: [
+                    { id: "approve", label: "Aprovar", description: "" },
+                    { id: "refuse", label: "Recusar", description: "" },
+                  ],
+                }),
+              ],
+        }),
+      [`POST /decisions/${ID}/refuse`]: () => {
+        done = true;
+        return json(decision({ state: "resolved", resolution_option: "refuse" }));
+      },
+    });
+    renderAt("/decisions");
+    await userEvent.type(await screen.findByLabelText("Observação (opcional)"), "fora do escopo");
+    await userEvent.click(screen.getByRole("button", { name: "Recusar" }));
+    expect(await screen.findByText("Nenhuma decisão pendente")).toBeInTheDocument();
+    const post = calls.find((c) => c.url.endsWith("/refuse"));
+    expect(post?.body).toEqual({ note: "fora do escopo" });
+    expect(post?.csrf).toBe("csrf-1");
+  });
+
+  it("não mostra Recusar quando o pedido não tem alternativa de recusa", async () => {
+    stub({
+      "GET /session": () => json(session),
+      "GET /decisions?state=pending": () => json({ items: [decision()] }),
+    });
+    renderAt("/decisions");
+    await screen.findByText("Duas tarefas pedem comportamentos incompatíveis.");
+    expect(screen.queryByRole("button", { name: "Recusar" })).not.toBeInTheDocument();
+  });
+
+  it("carrega a sequência do incidente sob demanda", async () => {
+    const calls = stub({
+      "GET /session": () => json(session),
+      "GET /decisions?state=pending": () => json({ items: [decision()] }),
+      "GET /executions/e/sequence": () =>
+        json({
+          items: [
+            {
+              at: "2026-11-12T10:00:00Z",
+              source: "decision",
+              type: "decision_requested",
+              detail: { title: "Conflito de requisitos" },
+            },
+            { at: "2026-11-12T10:05:00Z", source: "resume", type: "resumed", detail: {} },
+          ],
+        }),
+    });
+    renderAt("/decisions");
+    await screen.findByText("Duas tarefas pedem comportamentos incompatíveis.");
+    expect(calls.some((c) => c.url.includes("/sequence"))).toBe(false);
+    await userEvent.click(screen.getByRole("button", { name: "Ver sequência" }));
+    expect(
+      await screen.findByText(/decision_requested — Conflito de requisitos/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/resume · resumed/)).toBeInTheDocument();
+  });
+
+  it("lista as autorizações com validade e usos, revoga e mostra o resultado", async () => {
+    const auth = {
+      id: "99999999-9999-4999-8999-999999999999",
+      project_id: "p",
+      execution_id: "e",
+      node_id: "git",
+      decision_id: null,
+      tool: "git",
+      operation: "push",
+      resource: "refs/heads/lf/x",
+      target: "github.com",
+      max_uses: 2,
+      uses: 1,
+      expires_at: "2026-11-12T16:00:00Z",
+      state: "active",
+      revoked_at: null,
+      revoke_reason: "",
+      status: "active",
+      remaining: 1,
+      in_flight: 0,
+      expires_in_seconds: 3600,
+    };
+    let revoked = false;
+    const calls = stub({
+      "GET /session": () => json(session),
+      "GET /decisions?state=pending": () => json({ items: [] }),
+      "GET /authorizations?status=all": () =>
+        json({
+          items: [
+            revoked
+              ? {
+                  ...auth,
+                  state: "revoked",
+                  status: "revoked",
+                  remaining: 0,
+                  revoked_at: "2026-11-12T15:00:00Z",
+                  revoke_reason: "escopo mudou",
+                }
+              : auth,
+          ],
+        }),
+      [`POST /authorizations/${auth.id}/revoke`]: () => {
+        revoked = true;
+        return json({
+          authorization: auth,
+          in_flight: 0,
+          halted: false,
+          halt_failed: false,
+          already_revoked: false,
+        });
+      },
+    });
+    renderAt("/decisions");
+    await screen.findByText("Nenhuma decisão pendente");
+    await userEvent.click(screen.getByRole("tab", { name: "Autorizações" }));
+    expect(await screen.findByText(/1 de 2 \(1 restantes\)/)).toBeInTheDocument();
+    expect(screen.getByText("Vigente")).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Motivo da revogação (opcional)"), "escopo mudou");
+    await userEvent.click(screen.getByRole("button", { name: "Revogar" }));
+    expect(await screen.findByText("Autorização revogada.")).toBeInTheDocument();
+    expect(await screen.findByText("Revogada")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Revogar" })).not.toBeInTheDocument();
+    const post = calls.find((c) => c.url.endsWith("/revoke"));
+    expect(post?.body).toEqual({ reason: "escopo mudou" });
+    expect(post?.csrf).toBe("csrf-1");
+  });
 });
