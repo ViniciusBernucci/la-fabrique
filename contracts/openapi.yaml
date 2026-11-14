@@ -325,6 +325,20 @@ paths:
         "403": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
         "409": {$ref: "#/components/responses/Error"}
+    delete:
+      tags: [projetos]
+      summary: Apaga um projeto em rascunho ou suspenso (exige reautenticação recente)
+      description: >
+        Remove o projeto e seus vínculos e trilha. Projeto ativo devolve 409 `invalid_state`;
+        projeto com execuções registradas devolve 409 `project_has_history` (suspenda em vez de apagar).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "204": {description: Projeto apagado}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
   /projects/{id}/validation:
     get:
       tags: [projetos]

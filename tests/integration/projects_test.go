@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"testing"
@@ -413,5 +414,41 @@ func TestProjectWritesRequireSessionAndCSRF(t *testing.T) {
 	c.expect(c.get("/api/projects/"+p.ID), 200).JSON(&got)
 	if got.Name != p.Name {
 		t.Fatalf("requisição forjada alterou o projeto: %+v", got)
+	}
+}
+
+// Apagar projeto: só rascunho ou suspenso, sem histórico de execução; ativo e com histórico são recusados,
+// exige sessão com reautenticação recente e CSRF.
+func TestDeleteProjectRules(t *testing.T) {
+	e, c, _ := newProjectEnv(t)
+
+	draft := createProject(t, c, "apagar-rascunho")
+	c.expect(c.delete("/api/projects/"+draft.ID), 204)
+	c.expect(c.get("/api/projects/"+draft.ID), 404)
+	c.expect(c.delete("/api/projects/"+draft.ID), 404)
+
+	// Projeto com histórico (feature): FK RESTRICT vira 409 project_has_history e o projeto permanece.
+	kept := createProject(t, c, "apagar-historico")
+	if _, err := e.db.Pool.Exec(context.Background(),
+		`INSERT INTO features (project_id, external_id, title) VALUES ($1, 'X-1', 'f')`, kept.ID); err != nil {
+		t.Fatal(err)
+	}
+	if resp := c.delete("/api/projects/" + kept.ID); resp.StatusCode != 409 || resp.ErrCode() != "project_has_history" {
+		t.Errorf("com histórico: %d %s", resp.StatusCode, resp.Body)
+	}
+	c.expect(c.get("/api/projects/"+kept.ID), 200)
+
+	// Projeto ativo não é apagado.
+	gh := conn(t, c, "github", "gh-del")
+	jira := conn(t, c, "jira", "jira-del")
+	cur := completeConfig(t, c, createProject(t, c, "apagar-ativo"), gh, jira)
+	c.expect(c.post("/api/projects/"+cur.ID+"/activate", map[string]any{"expected_version": cur.Version}), 200)
+	if resp := c.delete("/api/projects/" + cur.ID); resp.StatusCode != 409 || resp.ErrCode() != "invalid_state" {
+		t.Errorf("ativo: %d %s", resp.StatusCode, resp.Body)
+	}
+
+	// Sem sessão não apaga.
+	if resp := e.newClient().delete("/api/projects/" + cur.ID); resp.StatusCode != 401 {
+		t.Errorf("sem sessão: %d %s", resp.StatusCode, resp.Body)
 	}
 }

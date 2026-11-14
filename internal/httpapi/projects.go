@@ -202,6 +202,20 @@ func (s *Server) resumeProject() http.HandlerFunc {
 	})
 }
 
+func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.projectID(w, r)
+	if !ok {
+		return
+	}
+	p, err := projects.Delete(r.Context(), s.db, id)
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	s.auth.Audit(r.Context(), s.adminID(r), "project_deleted", s.meta(r), map[string]any{"project_id": p.ID, "name": p.Name, "state": p.State})
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) listProjectChanges(w http.ResponseWriter, r *http.Request) {
 	id, ok := s.projectID(w, r)
 	if !ok {

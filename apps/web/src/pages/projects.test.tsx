@@ -367,6 +367,48 @@ describe("detalhe do projeto", () => {
       expect(calls.find((c) => c.url.endsWith("/suspend"))?.body).toEqual({ expected_version: 5 }),
     );
   });
+
+  it("pede confirmação antes de apagar e só então chama a API", async () => {
+    const calls = stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(project({ state: "draft", version: 2 })),
+      "GET /connections": () => json(connections),
+      [`GET /projects/${ID}/validation`]: () => json(pendingReport),
+      [`GET /projects/${ID}/changes`]: () => json({ items: [] }),
+      [`DELETE /projects/${ID}`]: () => new Response(null, { status: 204 }),
+      "GET /projects?limit=100": () => json({ items: [], next_cursor: null }),
+    });
+    renderAt(`/projects/${ID}`);
+    await userEvent.click(await screen.findByRole("button", { name: "Apagar projeto" }));
+    const alert = await screen.findByRole("alertdialog");
+    expect(within(alert).getByText(/permanente e não pode ser desfeita/)).toBeInTheDocument();
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+
+    await userEvent.click(within(alert).getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+
+    await userEvent.click(screen.getByRole("button", { name: "Apagar projeto" }));
+    await userEvent.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", {
+        name: "Apagar definitivamente",
+      }),
+    );
+    await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
+    expect(await screen.findByText("Nenhum projeto cadastrado")).toBeInTheDocument();
+  });
+
+  it("não oferece apagar projeto ativo", async () => {
+    stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(project({ state: "active", version: 5 })),
+      "GET /connections": () => json(connections),
+      [`GET /projects/${ID}/changes`]: () => json({ items: [] }),
+    });
+    renderAt(`/projects/${ID}`);
+    await screen.findByRole("button", { name: "Suspender" });
+    expect(screen.queryByRole("button", { name: "Apagar projeto" })).not.toBeInTheDocument();
+  });
 });
 
 describe("verificação da origem", () => {

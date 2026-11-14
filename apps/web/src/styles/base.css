@@ -142,3 +142,13 @@ textarea::placeholder {
   font-size: 14px;
   font-weight: 600;
 }
+.danger-action {
+  color: var(--hud-danger-text);
+  border: 1px solid color-mix(in srgb, var(--hud-rose) 50%, transparent);
+  background: transparent;
+}
+.danger-action:hover {
+  color: var(--hud-text-strong);
+  background: color-mix(in srgb, var(--hud-rose) 22%, transparent);
+  border-color: var(--hud-rose);
+}

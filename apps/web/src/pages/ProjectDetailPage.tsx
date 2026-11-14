@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { FormError, toApiError } from "../components/AuthParts";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../components/States";
 import { type ApiError, api, type Connection, type Project, type ProjectChange } from "../lib/api";
+import { useReauth } from "../lib/reauth";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
 import { DeliveryPanel } from "./DeliveryPanel";
@@ -78,6 +79,9 @@ function ProjectDetail({ project, reload }: { project: Project; reload: () => vo
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const { runSensitive } = useReauth();
+  const navigate = useNavigate();
   const names = connections.state.status === "ready" ? connections.state.data.items : [];
 
   async function run(action: () => Promise<unknown>) {
@@ -89,6 +93,19 @@ function ProjectDetail({ project, reload }: { project: Project; reload: () => vo
     } catch (e) {
       setError(toApiError(e));
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    setBusy(true);
+    setError(null);
+    try {
+      await runSensitive(() => api.deleteProject(project.id));
+      navigate("/projects");
+    } catch (e) {
+      setConfirmingDelete(false);
+      setError(toApiError(e));
       setBusy(false);
     }
   }
@@ -125,11 +142,52 @@ function ProjectDetail({ project, reload }: { project: Project; reload: () => vo
           </button>
         </>
       )}
+      {project.state !== "active" && (
+        <button
+          type="button"
+          className="danger-action"
+          disabled={busy}
+          onClick={() => setConfirmingDelete(true)}
+        >
+          Apagar projeto
+        </button>
+      )}
     </div>
   );
 
   return (
     <div className="page">
+      {confirmingDelete && (
+        <div className="dialog-backdrop">
+          <div
+            className="dialog panel"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-title"
+            aria-describedby="delete-desc"
+          >
+            <h2 id="delete-title">Apagar “{project.name}”?</h2>
+            <p id="delete-desc" className="muted">
+              Atenção: esta ação é permanente e não pode ser desfeita. A configuração do projeto
+              (repositório, origem, recursos e histórico de alterações) será removida. Projetos com
+              execuções registradas não podem ser apagados. Será pedida sua senha e o código do 2FA.
+            </p>
+            <div className="actions">
+              <button
+                type="button"
+                className="secondary-action"
+                disabled={busy}
+                onClick={() => setConfirmingDelete(false)}
+              >
+                Cancelar
+              </button>
+              <button type="button" className="danger-action" disabled={busy} onClick={remove}>
+                Apagar definitivamente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <nav className="breadcrumb" aria-label="Trilha">
         <Link to="/projects">Projetos</Link>
         <span aria-hidden="true">/</span>

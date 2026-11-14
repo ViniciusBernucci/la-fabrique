@@ -807,7 +807,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
       action: "Verifique a conexão e tente novamente.",
     });
   }
-  if (response.ok) return (await response.json()) as T;
+  if (response.ok) return (response.status === 204 ? undefined : await response.json()) as T;
 
   let body: {
     error?: { code?: string; message?: string; action?: string; correlation_id?: string };
@@ -859,6 +859,9 @@ export const api = {
   getProject: (id: string, signal?: AbortSignal) =>
     request<Project>(`/projects/${encodeURIComponent(id)}`, { signal }),
   createProject: (input: NewProject) => post<Project>("/projects", input),
+  /** Apaga projeto em rascunho ou suspenso (ação sensível: pode exigir reautenticação). */
+  deleteProject: (id: string) =>
+    request<void>(`/projects/${encodeURIComponent(id)}`, { method: "DELETE" }),
   /** Persiste uma etapa do assistente com controle otimista de versão. */
   updateProject: (id: string, expected_version: number, changes: ProjectPatch) =>
     patch<Project>(`/projects/${encodeURIComponent(id)}`, { expected_version, ...changes }),
