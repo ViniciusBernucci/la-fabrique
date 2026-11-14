@@ -60,6 +60,8 @@ services:
       <<: *go-env
       API_ADDR: 0.0.0.0:8480
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      # Só dev (ADR-0059): a API recusa subir com true fora de APP_ENV=development.
+      AUTH_SKIP_TOTP: ${AUTH_SKIP_TOTP:-false}
       # Chave AES-256 do cofre e do segredo TOTP: fora do banco, só no .env (openssl rand -base64 32).
       VAULT_KEY: ${VAULT_KEY:?defina VAULT_KEY no .env (openssl rand -base64 32)}
       VAULT_KEY_ID: ${VAULT_KEY_ID:-k1}

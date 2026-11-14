@@ -78,6 +78,7 @@ func NewServer(cfg config.API, db Store, log *slog.Logger, opts ...Option) (*Ser
 		tester: integrations.NewTester(), trackers: integrations.NewTracker, policy: policy.DefaultPolicy(policy.Options{}),
 		auth: security.NewAuth(db, sealer, security.AuthConfig{
 			SessionTTL: cfg.SessionTTL,
+			SkipTOTP:   cfg.SkipTOTP,
 		}, log),
 	}
 	for _, o := range opts {

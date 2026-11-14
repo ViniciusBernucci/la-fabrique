@@ -1843,7 +1843,9 @@ components:
       type: object
       required: [status]
       properties:
-        status: {type: string, enum: [totp_required, totp_enrollment_required]}
+        status: {type: string, enum: [totp_required, totp_enrollment_required, authenticated]}
+        # `session` só vem com status=authenticated (AUTH_SKIP_TOTP, apenas em dev; ADR-0059).
+        session: {$ref: '#/components/schemas/Session'}
     Enrollment:
       type: object
       required: [secret, otpauth_uri]

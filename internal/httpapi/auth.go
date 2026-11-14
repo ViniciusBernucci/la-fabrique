@@ -54,6 +54,18 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
+	if s.cfg.SkipTOTP {
+		// Somente dev (AUTH_SKIP_TOTP): a senha abre a sessão, sem 2º fator.
+		token, sess, err := s.auth.LoginPasswordOnly(r.Context(), req.Username, req.Password, s.meta(r))
+		if err != nil {
+			s.writeDomainError(w, r, err)
+			return
+		}
+		s.clearChallengeCookie(w)
+		s.setSessionCookie(w, token)
+		writeJSON(w, http.StatusOK, map[string]any{"status": "authenticated", "session": sess})
+		return
+	}
 	tok, stage, err := s.auth.StartLogin(r.Context(), req.Username, req.Password, s.meta(r))
 	if err != nil {
 		s.writeDomainError(w, r, err)

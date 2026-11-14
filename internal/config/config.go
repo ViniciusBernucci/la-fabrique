@@ -45,6 +45,8 @@ type API struct {
 	// RequireHTTPS recusa requisições que o proxy não marcou como HTTPS
 	// (X-Forwarded-Proto) e envia HSTS. Padrão: ligado em produção.
 	RequireHTTPS bool
+	// SkipTOTP dispensa o 2º fator no login (somente APP_ENV=development; ADR-0059).
+	SkipTOTP bool
 	// TrustProxy confia em X-Forwarded-For/Host/Proto (API atrás do nginx do painel).
 	TrustProxy bool
 	// VaultKey é a chave AES-256 (32 bytes) do cofre e do segredo TOTP. Fica
@@ -230,6 +232,10 @@ func LoadAPI(lookup Lookup) (API, error) {
 		l.fail("DEV_AUTH_ENABLED foi removida no T04-01 (ADR-0005); crie a conta com `make create-admin`")
 	}
 	cfg.RequireHTTPS = l.boolean("REQUIRE_HTTPS", cfg.Env == Production)
+	cfg.SkipTOTP = l.boolean("AUTH_SKIP_TOTP", false)
+	if cfg.SkipTOTP && cfg.Env != Development {
+		l.fail("AUTH_SKIP_TOTP só é aceita com APP_ENV=development (ADR-0059)")
+	}
 	cfg.TrustProxy = l.boolean("TRUST_PROXY", false)
 	cfg.VaultKeyID = l.str("VAULT_KEY_ID", "k1")
 	cfg.VaultKey = l.vaultKey()

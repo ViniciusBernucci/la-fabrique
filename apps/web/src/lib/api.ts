@@ -255,7 +255,7 @@ export interface Session {
   totp_reset_required: boolean;
 }
 
-export type LoginStatus = "totp_required" | "totp_enrollment_required";
+export type LoginStatus = "totp_required" | "totp_enrollment_required" | "authenticated";
 
 export interface Enrollment {
   secret: string;
@@ -1027,7 +1027,7 @@ export const api = {
 
   // Login em duas etapas.
   login: (username: string, password: string) =>
-    post<{ status: LoginStatus }>("/auth/login", { username, password }),
+    post<{ status: LoginStatus; session?: Session }>("/auth/login", { username, password }),
   loginTotp: (code: string) => post<Session>("/auth/totp", { code }),
   loginRecover: (recovery_code: string) => post<Session>("/auth/recover", { recovery_code }),
   totpSetup: () => post<Enrollment>("/auth/totp/setup"),
