@@ -257,6 +257,7 @@
   flex: none;
   width: 36px;
   height: 36px;
+  padding: 0;
   border: 1px solid var(--hud-line);
   border-radius: var(--hud-radius);
   background: var(--hud-button-surface);
