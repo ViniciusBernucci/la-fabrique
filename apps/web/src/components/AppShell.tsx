@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { ReauthProvider } from "../lib/reauth";
 import { useCurrentSession } from "../lib/session";
+import { useTheme } from "../lib/theme";
 import { Icon, type IconName } from "./Icon";
 
 const COLLAPSE_KEY = "le-fabrique.menu-collapsed";
@@ -85,6 +86,8 @@ export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [theme, toggleTheme] = useTheme();
+  const themeLabel = theme === "light" ? "Usar tema escuro" : "Usar tema claro";
 
   // Em telas pequenas o menu abre recolhido a cada navegação.
   // biome-ignore lint/correctness/useExhaustiveDependencies: location.pathname é o gatilho.
@@ -137,6 +140,15 @@ export function AppShell() {
           {healthLabel[health]}
         </span>
         <Clock />
+        <button
+          type="button"
+          className="theme-toggle"
+          aria-label={themeLabel}
+          title={themeLabel}
+          onClick={toggleTheme}
+        >
+          <Icon name={theme === "light" ? "moon" : "sun"} />
+        </button>
         <div className="profile">
           <span className="avatar" aria-hidden="true">
             {session.username.slice(0, 1)}

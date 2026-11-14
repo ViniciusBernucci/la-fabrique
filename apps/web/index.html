@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0d12" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script>
+      // Aplica o tema antes da primeira pintura (evita flash). Espelha lib/theme.ts.
+      try {
+        var t = localStorage.getItem("le-fabrique.theme");
+        if (t !== "light" && t !== "dark")
+          t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+        document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
     <title>La fabrique</title>
   </head>
   <body>

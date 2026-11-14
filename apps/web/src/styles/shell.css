@@ -250,3 +250,20 @@
     padding: 20px 16px 32px;
   }
 }
+
+.theme-toggle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--hud-line);
+  border-radius: var(--hud-radius);
+  background: var(--hud-button-surface);
+  color: var(--hud-text-muted);
+  cursor: pointer;
+}
+.theme-toggle:hover {
+  background: var(--hud-hover);
+  color: var(--hud-text-strong);
+}
