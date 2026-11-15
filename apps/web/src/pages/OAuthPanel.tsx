@@ -99,33 +99,37 @@ export function OAuthPanel({ onConnected }: { onConnected: () => void }) {
 
   return (
     <section className="panel panel--pad" aria-label="Conectar com OAuth">
-      <h2>Conectar conta</h2>
+      <h2>GitHub</h2>
       <p className="muted">
-        Você autoriza no próprio site do serviço, com o seu acesso. Nenhuma senha ou token passa por
-        esta tela: o token vai direto para o cofre.
+        A fábrica age no GitHub com a conta que você conectar. Na sua máquina, rode{" "}
+        <code>make connect-github</code>: ele usa (ou abre o login do) GitHub CLI e guarda o acesso
+        no cofre, sem você digitar token. Se o app OAuth estiver configurado no <code>.env</code>,
+        também dá para conectar daqui.
       </p>
       {providers.state.status === "ready" &&
-        providers.state.data.items.map((p) => (
-          <div key={p.kind} className="form form--inline">
-            <label>
-              Nome da conexão ({providerLabel[p.kind]})
-              <input
-                value={name[p.kind] ?? ""}
-                maxLength={80}
-                placeholder={defaultName[p.kind]}
-                onChange={(e) => setName({ ...name, [p.kind]: e.target.value })}
-              />
-            </label>
-            <button
-              type="button"
-              disabled={busy || !p.available || device !== null}
-              onClick={() => start(p.kind)}
-            >
-              Conectar com {providerLabel[p.kind]}
-            </button>
-            {!p.available && <small className="muted">{p.hint}</small>}
-          </div>
-        ))}
+        providers.state.data.items
+          .filter((p) => p.available)
+          .map((p) => (
+            <div key={p.kind} className="form form--inline">
+              <label>
+                Nome da conexão ({providerLabel[p.kind]})
+                <input
+                  value={name[p.kind] ?? ""}
+                  maxLength={80}
+                  placeholder={defaultName[p.kind]}
+                  onChange={(e) => setName({ ...name, [p.kind]: e.target.value })}
+                />
+              </label>
+              <button
+                type="button"
+                disabled={busy || !p.available || device !== null}
+                onClick={() => start(p.kind)}
+              >
+                Conectar com {providerLabel[p.kind]}
+              </button>
+              {!p.available && <small className="muted">{p.hint}</small>}
+            </div>
+          ))}
       {device && (
         <div className="callout" role="status">
           <p>

@@ -505,17 +505,40 @@ describe("conexão por OAuth", () => {
     expect(
       await screen.findByText(/Conta conectada/, undefined, { timeout: 3000 }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Conectar com Jira" })).toBeDisabled();
-    expect(screen.getByText("Defina JIRA_OAUTH_CLIENT_ID")).toBeInTheDocument();
+    // Provedor sem app OAuth configurado não aparece (Jira usa token de API).
+    expect(screen.queryByRole("button", { name: "Conectar com Jira" })).not.toBeInTheDocument();
   });
 
-  it("não oferece colar token de GitHub, Jira ou ClickUp", async () => {
+  it("não oferece colar token de GitHub", async () => {
     stub({ ...base, "GET /oauth/providers": () => json({ items: [] }) });
     renderAt("/connections");
     const tipo = await screen.findByLabelText("Tipo");
     const options = within(tipo)
       .getAllByRole("option")
       .map((o) => o.textContent);
-    expect(options).toEqual(["CLI", "API", "MCP"]);
+    expect(options).toEqual(["Jira", "ClickUp", "CLI", "API", "MCP"]);
+  });
+
+  it("Jira pede site, e-mail e token e envia email:token ao cofre", async () => {
+    const calls = stub({
+      ...base,
+      "GET /oauth/providers": () => json({ items: [] }),
+      "POST /connections": () => json({ ...baseConn, kind: "jira" }, 201),
+    });
+    renderAt("/connections");
+    await userEvent.type(await screen.findByLabelText("Nome"), "Jira da empresa");
+    await userEvent.type(screen.getByLabelText("Destino"), "https://acme.atlassian.net");
+    await userEvent.type(screen.getByLabelText("E-mail da Atlassian"), "eu@acme.com");
+    await userEvent.type(screen.getByLabelText("Segredo"), "tok123");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar no cofre" }));
+    await waitFor(() =>
+      expect(
+        calls.find((c) => c.method === "POST" && c.url === "/connections")?.body,
+      ).toMatchObject({
+        kind: "jira",
+        target: "https://acme.atlassian.net",
+        secret: "eu@acme.com:tok123",
+      }),
+    );
   });
 });
