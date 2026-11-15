@@ -240,7 +240,7 @@ paths:
   /oauth/{kind}/start:
     post:
       tags: [conexoes]
-      summary: "[SENSÍVEL] Inicia a conexão por OAuth (github: device flow; clickup/jira: redirecionamento)"
+      summary: "Inicia a conexão por OAuth (github: device flow; clickup/jira: redirecionamento)"
       description: |
         Nenhuma senha ou token passa pela tela: o token vai direto ao cofre. 409 `oauth_unavailable`
         quando o app OAuth do provedor não está configurado no `.env`.

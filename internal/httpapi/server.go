@@ -151,7 +151,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Conexão por OAuth (ADR-0060). O callback é público: o state de uso único é a prova.
 	mux.HandleFunc("GET /api/oauth/providers", s.protected(s.oauthProviders))
-	mux.HandleFunc("POST /api/oauth/{kind}/start", s.sensitive(s.oauthStart))
+	mux.HandleFunc("POST /api/oauth/{kind}/start", s.protected(s.oauthStart))
 	mux.HandleFunc("GET /api/oauth/flows/{id}", s.protected(s.oauthFlow))
 	mux.HandleFunc("GET /api/oauth/callback", s.oauthCallback)
 

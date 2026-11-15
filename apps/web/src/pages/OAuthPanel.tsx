@@ -8,7 +8,6 @@ import {
   type OAuthStarted,
   type OAuthStatus,
 } from "../lib/api";
-import { useReauth } from "../lib/reauth";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
 
@@ -40,7 +39,6 @@ export function OAuthPanel({
   onRecheck: () => Promise<void>;
 }) {
   const { expire } = useSession();
-  const { runSensitive } = useReauth();
   const providers = useResource((s) => api.listOAuthProviders(s), "oauth-providers", expire);
   const [name, setName] = useState<Partial<Record<OAuthProvider["kind"], string>>>({});
   const [busy, setBusy] = useState(false);
@@ -106,9 +104,7 @@ export function OAuthPanel({
     setError(null);
     setResult(null);
     try {
-      const started = await runSensitive(() =>
-        api.startOAuth(kind, (name[kind] ?? "").trim() || defaultName[kind]),
-      );
+      const started = await api.startOAuth(kind, (name[kind] ?? "").trim() || defaultName[kind]);
       if (started.flow === "redirect" && started.authorize_url) {
         window.location.assign(started.authorize_url);
         return;
