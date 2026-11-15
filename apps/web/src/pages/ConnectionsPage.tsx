@@ -6,6 +6,7 @@ import { type ApiError, api, type Connection, type ConnectionKind } from "../lib
 import { useReauth } from "../lib/reauth";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
+import { OAuthPanel } from "./OAuthPanel";
 
 const kindLabel: Record<ConnectionKind, string> = {
   github: "GitHub",
@@ -24,6 +25,9 @@ const kindHint: Record<ConnectionKind, { target: string; secret: string }> = {
   api: { target: "URL base (opcional)", secret: "Chave de API" },
   mcp: { target: "Servidor MCP (nome ou URL)", secret: "Token do servidor MCP" },
 };
+
+// GitHub, Jira e ClickUp se conectam por OAuth; credencial colada só para CLI, API e MCP.
+const manualKinds: ConnectionKind[] = ["cli", "api", "mcp"];
 
 const testLabel = { ok: "Teste OK", failed: "Teste falhou", not_run: "Sem teste" } as const;
 
@@ -56,6 +60,7 @@ export function ConnectionsPage() {
         title="Conexões e credenciais"
         lead="Cofre de credenciais. O valor é cifrado com chave fora do banco e nunca volta para a tela; workflows e agentes usam apenas a referência."
       />
+      <OAuthPanel onConnected={reload} />
       <NewConnectionForm onCreated={reload} />
       <FormError error={error} />
       <section className="panel" aria-label="Lista de conexões">
@@ -89,7 +94,7 @@ export function ConnectionsPage() {
 
 function NewConnectionForm({ onCreated }: { onCreated: () => void }) {
   const { runSensitive } = useReauth();
-  const [kind, setKind] = useState<ConnectionKind>("github");
+  const [kind, setKind] = useState<ConnectionKind>("cli");
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
   const [scopes, setScopes] = useState("");
@@ -118,15 +123,17 @@ function NewConnectionForm({ onCreated }: { onCreated: () => void }) {
   return (
     <section className="panel panel--pad" aria-label="Nova conexão">
       <form className="form form--grid" onSubmit={submit}>
-        <h2>Nova conexão</h2>
+        <h2>Nova credencial manual (CLI, API, MCP)</h2>
         <label>
           Tipo
           <select value={kind} onChange={(e) => setKind(e.target.value as ConnectionKind)}>
-            {Object.entries(kindLabel).map(([k, label]) => (
-              <option key={k} value={k}>
-                {label}
-              </option>
-            ))}
+            {Object.entries(kindLabel)
+              .filter(([k]) => manualKinds.includes(k as ConnectionKind))
+              .map(([k, label]) => (
+                <option key={k} value={k}>
+                  {label}
+                </option>
+              ))}
           </select>
         </label>
         <label>

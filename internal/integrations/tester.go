@@ -31,8 +31,10 @@ type TestResult struct {
 type Tester struct {
 	Client *http.Client
 	// Bases substituíveis em testes.
-	GitHubBase  string
-	ClickUpBase string
+	GitHubBase string
+	// JiraOAuthBase substitui o gateway da Atlassian (testes).
+	JiraOAuthBase string
+	ClickUpBase   string
 	// AllowAnyTarget desliga a restrição de host do Jira (somente testes).
 	AllowAnyTarget bool
 }
@@ -142,6 +144,27 @@ func (t *Tester) clickup(ctx context.Context, secret security.Secret) TestResult
 
 // jira espera o segredo no formato "email:token" e o destino https://<site>.atlassian.net.
 func (t *Tester) jira(ctx context.Context, target string, secret security.Secret) TestResult {
+	if oa, ok := parseJiraOAuth(secret); ok {
+		base := t.JiraOAuthBase
+		if base == "" {
+			base = jiraOAuthBase
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(base, "/")+"/"+oa.CloudID+"/rest/api/3/myself", nil)
+		if err != nil {
+			return TestResult{Status: TestFailed, Detail: "Configuração do teste inválida."}
+		}
+		req.Header.Set("Authorization", "Bearer "+oa.AccessToken)
+		req.Header.Set("Accept", "application/json")
+		resp, bad := t.do(req)
+		if resp == nil {
+			return bad
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return statusResult(resp.StatusCode, "Jira")
+		}
+		return TestResult{Status: TestOK, Detail: "Credencial OAuth aceita pelo Jira."}
+	}
 	u, err := url.Parse(strings.TrimSpace(target))
 	if err != nil || u.Host == "" {
 		return TestResult{Status: TestFailed, Detail: "Informe o destino como https://<site>.atlassian.net."}

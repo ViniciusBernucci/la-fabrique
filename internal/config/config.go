@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/ViniciusBernucci/le-fabrique/internal/oauth"
 	"net"
 	"net/url"
 	"sort"
@@ -53,6 +54,8 @@ type API struct {
 	// fora do banco e nunca é logada.
 	VaultKey   []byte
 	VaultKeyID string
+	// OAuth configura as conexões por OAuth (ADR-0060).
+	OAuth oauth.Config
 }
 
 // Worker é a configuração do cmd/worker.
@@ -232,6 +235,7 @@ func LoadAPI(lookup Lookup) (API, error) {
 		l.fail("DEV_AUTH_ENABLED foi removida no T04-01 (ADR-0005); crie a conta com `make create-admin`")
 	}
 	cfg.RequireHTTPS = l.boolean("REQUIRE_HTTPS", cfg.Env == Production)
+	cfg.OAuth = oauth.FromEnv(lookup)
 	cfg.SkipTOTP = l.boolean("AUTH_SKIP_TOTP", false)
 	if cfg.SkipTOTP && cfg.Env != Development {
 		l.fail("AUTH_SKIP_TOTP só é aceita com APP_ENV=development (ADR-0059)")

@@ -234,7 +234,11 @@ const baseConn: Connection = {
 };
 
 describe("conexões (cofre)", () => {
-  const base = { "GET /session": () => json(session), "GET /readyz": ready };
+  const base = {
+    "GET /session": () => json(session),
+    "GET /readyz": ready,
+    "GET /oauth/providers": () => json({ items: [] }),
+  };
 
   it("lista sem segredo; criar envia o valor uma vez, limpa o campo e usa o CSRF", async () => {
     let items: Connection[] = [];
@@ -250,6 +254,7 @@ describe("conexões (cofre)", () => {
     renderAt("/connections");
     expect(await screen.findByText("Nenhuma conexão cadastrada")).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Nome"), "GitHub principal");
+    await userEvent.selectOptions(screen.getByLabelText("Tipo"), "api");
     await userEvent.type(screen.getByLabelText("Segredo"), "ghp_valor-super-secreto");
     await userEvent.click(screen.getByRole("button", { name: "Guardar no cofre" }));
     expect(await screen.findByText("GitHub principal")).toBeInTheDocument();
@@ -453,5 +458,64 @@ describe("segurança da conta", () => {
     await userEvent.click(header as HTMLElement);
     expect(await screen.findByRole("heading", { name: "Entrar" })).toBeInTheDocument();
     expect(calls.some((c) => c.url === "/auth/logout" && c.csrf === "csrf-1")).toBe(true);
+  });
+});
+
+describe("conexão por OAuth", () => {
+  const base = {
+    "GET /session": () => json(session),
+    "GET /readyz": ready,
+    "GET /connections": () => json({ items: [] }),
+  };
+
+  it("GitHub mostra o código do dispositivo e conclui quando autorizado", async () => {
+    let polls = 0;
+    const calls = stub({
+      ...base,
+      "GET /oauth/providers": () =>
+        json({
+          items: [
+            { kind: "github", flow: "device", available: true },
+            {
+              kind: "jira",
+              flow: "redirect",
+              available: false,
+              hint: "Defina JIRA_OAUTH_CLIENT_ID",
+            },
+          ],
+        }),
+      "POST /oauth/github/start": () =>
+        json({
+          flow_id: "f1",
+          flow: "device",
+          user_code: "ABCD-1234",
+          verification_uri: "https://github.com/login/device",
+          interval: 1,
+          expires_in: 900,
+        }),
+      "GET /oauth/flows/f1": () => {
+        polls += 1;
+        return json(polls < 1 ? { status: "pending" } : { status: "done", connection: baseConn });
+      },
+    });
+    renderAt("/connections");
+    await userEvent.click(await screen.findByRole("button", { name: "Conectar com GitHub" }));
+    expect(await screen.findByText("ABCD-1234")).toBeInTheDocument();
+    expect(calls.find((c) => c.url === "/oauth/github/start")?.body).toEqual({ name: "GitHub" });
+    expect(
+      await screen.findByText(/Conta conectada/, undefined, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Conectar com Jira" })).toBeDisabled();
+    expect(screen.getByText("Defina JIRA_OAUTH_CLIENT_ID")).toBeInTheDocument();
+  });
+
+  it("não oferece colar token de GitHub, Jira ou ClickUp", async () => {
+    stub({ ...base, "GET /oauth/providers": () => json({ items: [] }) });
+    renderAt("/connections");
+    const tipo = await screen.findByLabelText("Tipo");
+    const options = within(tipo)
+      .getAllByRole("option")
+      .map((o) => o.textContent);
+    expect(options).toEqual(["CLI", "API", "MCP"]);
   });
 });

@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ViniciusBernucci/le-fabrique/internal/security"
 )
 
 var (
@@ -34,6 +36,15 @@ func newJira(cfg Config) (Tracker, error) {
 			return nil, invalid("jira: destino deve ser https://<site>.atlassian.net")
 		}
 		base = u.Scheme + "://" + u.Host
+	}
+	if oa, ok := parseJiraOAuth(cfg.Secret); ok {
+		if cfg.BaseURL == "" {
+			base = jiraOAuthBase + "/" + oa.CloudID
+		}
+		return &jira{api: &apiClient{
+			hc: cfg.Client, base: strings.TrimRight(base, "/") + "/rest/api/3", now: time.Now,
+			auth: func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+oa.AccessToken) },
+		}}, nil
 	}
 	email, token, ok := strings.Cut(cfg.Secret.Reveal(), ":")
 	if !ok || email == "" || token == "" {
@@ -532,4 +543,23 @@ func (j *jira) CreateItem(ctx context.Context, container string, in ItemInput) (
 		}
 	}
 	return j.GetItem(ctx, created.Key)
+}
+
+// jiraOAuthBase é o gateway da Atlassian para tokens OAuth (3LO): as chamadas
+// vão para /ex/jira/<cloudid>, não para o site.
+const jiraOAuthBase = "https://api.atlassian.com/ex/jira"
+
+type jiraOAuth struct {
+	AccessToken string `json:"access_token"`
+	CloudID     string `json:"cloud_id"`
+}
+
+// parseJiraOAuth reconhece o segredo JSON gravado pela conexão OAuth.
+func parseJiraOAuth(s security.Secret) (jiraOAuth, bool) {
+	raw := strings.TrimSpace(s.Reveal())
+	var oa jiraOAuth
+	if !strings.HasPrefix(raw, "{") || json.Unmarshal([]byte(raw), &oa) != nil || oa.AccessToken == "" || oa.CloudID == "" {
+		return jiraOAuth{}, false
+	}
+	return oa, true
 }

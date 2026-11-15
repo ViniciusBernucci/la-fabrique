@@ -300,6 +300,29 @@ export interface Connection {
   updated_at: string;
 }
 
+export interface OAuthProvider {
+  kind: "github" | "clickup" | "jira";
+  flow: "device" | "redirect";
+  available: boolean;
+  hint?: string;
+}
+
+export interface OAuthStarted {
+  flow_id: string;
+  flow: "device" | "redirect";
+  user_code?: string;
+  verification_uri?: string;
+  interval?: number;
+  authorize_url?: string;
+  expires_in: number;
+}
+
+export interface OAuthStatus {
+  status: "pending" | "done" | "failed";
+  error?: string;
+  connection?: Connection;
+}
+
 export interface NewConnection {
   kind: ConnectionKind;
   name: string;
@@ -1053,6 +1076,12 @@ export const api = {
   // Cofre de conexões (o segredo só é enviado, nunca recebido).
   listConnections: (signal?: AbortSignal) =>
     request<{ items: Connection[] }>("/connections", { signal }),
+  listOAuthProviders: (signal?: AbortSignal) =>
+    request<{ items: OAuthProvider[] }>("/oauth/providers", { signal }),
+  startOAuth: (kind: OAuthProvider["kind"], name: string) =>
+    post<OAuthStarted>(`/oauth/${kind}/start`, { name }),
+  oauthFlow: (id: string, signal?: AbortSignal) =>
+    request<OAuthStatus>(`/oauth/flows/${encodeURIComponent(id)}`, { signal }),
   createConnection: (input: NewConnection) => post<Connection>("/connections", input),
   testConnection: (id: string) => post<Connection>(`/connections/${encodeURIComponent(id)}/test`),
   rotateConnection: (id: string, secret: string, expected_version: number) =>

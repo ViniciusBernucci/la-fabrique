@@ -230,6 +230,49 @@ paths:
         "200": {description: Conexão, content: {application/json: {schema: {$ref: "#/components/schemas/Connection"}}}}
         "401": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
+  /oauth/providers:
+    get:
+      tags: [conexoes]
+      summary: Provedores de conexão por OAuth e se estão configurados
+      responses:
+        "200": {description: Provedores, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/OAuthProvider"}}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+  /oauth/{kind}/start:
+    post:
+      tags: [conexoes]
+      summary: "[SENSÍVEL] Inicia a conexão por OAuth (github: device flow; clickup/jira: redirecionamento)"
+      description: |
+        Nenhuma senha ou token passa pela tela: o token vai direto ao cofre. 409 `oauth_unavailable`
+        quando o app OAuth do provedor não está configurado no `.env`.
+      parameters:
+        - {name: kind, in: path, required: true, schema: {type: string, enum: [github, clickup, jira]}}
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [name], additionalProperties: false, properties: {name: {type: string, maxLength: 80}}}}}}
+      responses:
+        "200": {description: Fluxo iniciado, content: {application/json: {schema: {$ref: "#/components/schemas/OAuthStarted"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /oauth/flows/{id}:
+    get:
+      tags: [conexoes]
+      summary: Andamento do fluxo (no device flow consulta o GitHub respeitando o intervalo)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: Andamento, content: {application/json: {schema: {$ref: "#/components/schemas/OAuthStatus"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /oauth/callback:
+    get:
+      tags: [conexoes]
+      summary: Retorno do provedor (público; o `state` de uso único autoriza a troca)
+      description: Redireciona (303) para `/connections?oauth=ok|failed`.
+      parameters:
+        - {name: code, in: query, schema: {type: string}}
+        - {name: state, in: query, schema: {type: string}}
+      responses:
+        "303": {description: Redireciona para a tela de conexões}
   /connections/{id}/test:
     post:
       tags: [conexoes]
@@ -1931,6 +1974,28 @@ components:
       properties:
         secret: {type: string, format: password, maxLength: 8192}
         expected_version: {type: integer, minimum: 1}
+    OAuthProvider:
+      type: object
+      required: [kind, flow, available]
+      properties: {kind: {type: string}, flow: {type: string, enum: [device, redirect]}, available: {type: boolean}, hint: {type: string}}
+    OAuthStarted:
+      type: object
+      required: [flow_id, flow, expires_in]
+      properties:
+        flow_id: {type: string}
+        flow: {type: string, enum: [device, redirect]}
+        user_code: {type: string}
+        verification_uri: {type: string}
+        interval: {type: integer}
+        authorize_url: {type: string}
+        expires_in: {type: integer}
+    OAuthStatus:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [pending, done, failed]}
+        error: {type: string}
+        connection: {$ref: "#/components/schemas/Connection"}
     Connection:
       type: object
       required: [id, kind, name, target, scopes, state, secret_version, last_test_status, last_test_detail, version, created_at, updated_at]

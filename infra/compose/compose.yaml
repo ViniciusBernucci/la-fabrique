@@ -62,6 +62,13 @@ services:
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
       # Só dev (ADR-0059): a API recusa subir com true fora de APP_ENV=development.
       AUTH_SKIP_TOTP: ${AUTH_SKIP_TOTP:-false}
+      # Conexões por OAuth (ADR-0060). Vazio = provedor indisponível na tela.
+      GITHUB_OAUTH_CLIENT_ID: ${GITHUB_OAUTH_CLIENT_ID:-}
+      CLICKUP_OAUTH_CLIENT_ID: ${CLICKUP_OAUTH_CLIENT_ID:-}
+      CLICKUP_OAUTH_CLIENT_SECRET: ${CLICKUP_OAUTH_CLIENT_SECRET:-}
+      JIRA_OAUTH_CLIENT_ID: ${JIRA_OAUTH_CLIENT_ID:-}
+      JIRA_OAUTH_CLIENT_SECRET: ${JIRA_OAUTH_CLIENT_SECRET:-}
+      OAUTH_REDIRECT_BASE: ${OAUTH_REDIRECT_BASE:-http://localhost:${WEB_PORT:-5180}}
       # Chave AES-256 do cofre e do segredo TOTP: fora do banco, só no .env (openssl rand -base64 32).
       VAULT_KEY: ${VAULT_KEY:?defina VAULT_KEY no .env (openssl rand -base64 32)}
       VAULT_KEY_ID: ${VAULT_KEY_ID:-k1}

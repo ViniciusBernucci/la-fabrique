@@ -49,10 +49,18 @@ type NewConnection struct {
 // valor só por Resolve, que consulta o estado a cada uso: uma revogação vale
 // para o próximo uso, sem cache.
 type Vault struct {
-	db       persistence.DBTX
-	sealer   *Sealer
-	redactor *Redactor
+	db        persistence.DBTX
+	sealer    *Sealer
+	redactor  *Redactor
+	refresher Refresher
 }
+
+// Refresher renova um segredo que expira (token OAuth). Devolve changed=true
+// quando há um segredo novo, que o cofre regrava antes de entregá-lo.
+type Refresher func(ctx context.Context, c Connection, secret Secret) (Secret, bool, error)
+
+// SetRefresher instala o gancho de renovação usado por Resolve.
+func (v *Vault) SetRefresher(r Refresher) { v.refresher = r }
 
 // NewVault cria o cofre; redactor recebe todo segredo que passar por aqui.
 func NewVault(db persistence.DBTX, sealer *Sealer, redactor *Redactor) *Vault {
@@ -201,7 +209,33 @@ func (v *Vault) Resolve(ctx context.Context, id string) (Secret, Connection, err
 		return Secret{}, c, fmt.Errorf("decifrar conexão %s: %w", id, err)
 	}
 	v.redactor.Register(string(plain))
-	return NewSecret(string(plain)), c, nil
+	secret := NewSecret(string(plain))
+	if v.refresher != nil {
+		fresh, changed, rerr := v.refresher(ctx, c, secret)
+		if rerr != nil {
+			return Secret{}, c, rerr
+		}
+		if changed {
+			if serr := v.storeRefreshed(ctx, id, fresh); serr != nil {
+				return Secret{}, c, serr
+			}
+			secret = fresh
+		}
+	}
+	return secret, c, nil
+}
+
+// storeRefreshed regrava o segredo renovado sem mexer em `version` (a edição
+// otimista da tela não deve falhar por causa de uma renovação automática).
+func (v *Vault) storeRefreshed(ctx context.Context, id string, secret Secret) error {
+	sealed, err := v.sealer.Seal([]byte(secret.Reveal()), connAAD(id))
+	if err != nil {
+		return err
+	}
+	v.redactor.Register(secret.Reveal())
+	_, err = v.db.Exec(ctx, `UPDATE connections SET secret_ciphertext = $2, key_id = $3, rotated_at = now()
+		WHERE id = $1 AND state = 'active'`, id, sealed, v.sealer.KeyID())
+	return persistence.MapError(err)
 }
 
 var refPattern = regexp.MustCompile(`^connection:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$`)

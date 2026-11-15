@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/ViniciusBernucci/le-fabrique/internal/oauth"
+	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -35,6 +37,7 @@ func registerIssueSync(sch *sentinel.Scheduler, pool *pgxpool.Pool, cfg config.W
 		return fmt.Errorf("cofre do worker: %w", err)
 	}
 	vault := security.NewVault(pool, sealer, security.NewRedactor())
+	vault.SetRefresher(oauth.NewRefresher(oauth.FromEnv(os.LookupEnv))) // renova o token OAuth do Jira
 	loc, _ := time.LoadLocation(cfg.IssueSyncTZ)
 	fs := &flow.Store{DB: pool}
 	resolve := func(ctx context.Context, projectID string) (issuesync.Source, integrations.Tracker, error) {
@@ -87,6 +90,7 @@ func registerPRSync(sch *sentinel.Scheduler, pool *pgxpool.Pool, cfg config.Work
 		return fmt.Errorf("cofre do worker: %w", err)
 	}
 	vault := security.NewVault(pool, sealer, security.NewRedactor())
+	vault.SetRefresher(oauth.NewRefresher(oauth.FromEnv(os.LookupEnv))) // renova o token OAuth do Jira
 	co := &sentinel.Coordinator{DB: pool}
 	res := &prcycle.Resolver{DB: pool, Vault: vault, Syncer: &issuesync.Syncer{DB: pool, Sentinel: co}}
 	svc := &prcycle.Service{DB: pool, Ledger: &effects.Ledger{DB: pool}, Sentinel: co}

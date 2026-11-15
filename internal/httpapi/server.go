@@ -5,6 +5,7 @@ package httpapi
 import (
 	"context"
 	"github.com/ViniciusBernucci/le-fabrique/internal/guidance"
+	"github.com/ViniciusBernucci/le-fabrique/internal/oauth"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -39,6 +40,7 @@ type Server struct {
 	vault    *security.Vault
 	redactor *security.Redactor
 	tester   *integrations.Tester
+	oauth    *oauth.Service
 	trackers func(integrations.Config) (integrations.Tracker, error)
 	policy   *policy.Policy
 
@@ -81,6 +83,8 @@ func NewServer(cfg config.API, db Store, log *slog.Logger, opts ...Option) (*Ser
 			SkipTOTP:   cfg.SkipTOTP,
 		}, log),
 	}
+	s.oauth = oauth.New(cfg.OAuth, s.vault)
+	s.vault.SetRefresher(s.oauth.Refresher())
 	for _, o := range opts {
 		o(s)
 	}
@@ -144,6 +148,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/connections/{id}/test", s.protected(s.testConnection))
 	mux.HandleFunc("POST /api/connections/{id}/rotate", s.sensitive(s.rotateConnection))
 	mux.HandleFunc("POST /api/connections/{id}/revoke", s.sensitive(s.revokeConnection))
+
+	// Conexão por OAuth (ADR-0060). O callback é público: o state de uso único é a prova.
+	mux.HandleFunc("GET /api/oauth/providers", s.protected(s.oauthProviders))
+	mux.HandleFunc("POST /api/oauth/{kind}/start", s.sensitive(s.oauthStart))
+	mux.HandleFunc("GET /api/oauth/flows/{id}", s.protected(s.oauthFlow))
+	mux.HandleFunc("GET /api/oauth/callback", s.oauthCallback)
 
 	mux.HandleFunc("POST /api/workflows/{id}/publish", s.protected(s.publishWorkflow))
 	mux.HandleFunc("POST /api/workflows/{id}/unpublish", s.protected(s.unpublishWorkflow))
