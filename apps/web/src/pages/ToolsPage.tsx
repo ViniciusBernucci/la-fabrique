@@ -11,10 +11,9 @@ const kindLabel: Record<Tool["kind"], string> = {
 };
 
 /** Resumo de uma assinatura: "path*: path, max_bytes: int" (obrigatórios com asterisco). */
-export function signature(fields: Tool["input"]): string {
-  return fields.length === 0
-    ? "sem parâmetros"
-    : fields.map((f) => `${f.name}${f.required ? "*" : ""}: ${f.type}`).join(", ");
+export function signature(fields: Tool["input"] | null | undefined): string {
+  if (!fields || fields.length === 0) return "sem parâmetros";
+  return fields.map((f) => `${f.name}${f.required ? "*" : ""}: ${f.type}`).join(", ");
 }
 
 export function ToolsPage() {
@@ -42,8 +41,8 @@ export function ToolsPage() {
                       Entrada: {signature(t.input)} · Saída: {signature(t.output)}
                     </small>
                     <small>
-                      Permissões: {t.permissions.join(", ")} · {t.limits.timeout_seconds} s ·{" "}
-                      {Math.round(t.limits.max_output_bytes / 1024)} KiB
+                      Permissões: {(t.permissions ?? []).join(", ")} · {t.limits.timeout_seconds} s
+                      · {Math.round(t.limits.max_output_bytes / 1024)} KiB
                       {t.requires?.length ? ` · exige ${t.requires.join(", ")} na imagem` : ""}
                     </small>
                   </span>

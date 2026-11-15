@@ -14,6 +14,17 @@ func (s *Server) toolRegistry() *tools.Registry {
 
 func (s *Server) listTools(w http.ResponseWriter, r *http.Request) {
 	items := tools.Natives()
+	for i := range items {
+		if items[i].Input == nil {
+			items[i].Input = []tools.Field{}
+		}
+		if items[i].Output == nil {
+			items[i].Output = []tools.Field{}
+		}
+		if items[i].Permissions == nil {
+			items[i].Permissions = []string{}
+		}
+	}
 	custom, err := tools.List(r.Context(), s.db)
 	if err != nil {
 		s.writeDomainError(w, r, err)

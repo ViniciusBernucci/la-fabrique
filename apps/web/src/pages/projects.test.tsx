@@ -398,6 +398,26 @@ describe("detalhe do projeto", () => {
     expect(await screen.findByText("Nenhum projeto cadastrado")).toBeInTheDocument();
   });
 
+  it("apaga direto da lista, com confirmação, e recarrega", async () => {
+    let apagado = false;
+    const calls = stub({
+      "GET /session": () => json(session),
+      "GET /projects?limit=100": () =>
+        json({ items: apagado ? [] : [project({ state: "draft" })], next_cursor: null }),
+      [`DELETE /projects/${ID}`]: () => {
+        apagado = true;
+        return new Response(null, { status: 204 });
+      },
+    });
+    renderAt("/projects");
+    await userEvent.click(await screen.findByRole("button", { name: /^Apagar projeto / }));
+    const alert = await screen.findByRole("alertdialog");
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+    await userEvent.click(within(alert).getByRole("button", { name: "Apagar definitivamente" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
+    expect(await screen.findByText("Nenhum projeto cadastrado")).toBeInTheDocument();
+  });
+
   it("não oferece apagar projeto ativo", async () => {
     stub({
       "GET /session": () => json(session),

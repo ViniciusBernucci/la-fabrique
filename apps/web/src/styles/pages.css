@@ -519,3 +519,13 @@
   gap: 8px;
   margin-top: 8px;
 }
+
+.item-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-right: 18px;
+}
+.item-row .item-link {
+  flex: 1;
+}
