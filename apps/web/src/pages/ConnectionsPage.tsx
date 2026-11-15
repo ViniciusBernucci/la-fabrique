@@ -60,7 +60,19 @@ export function ConnectionsPage() {
         title="Conexões e credenciais"
         lead="Cofre de credenciais. O valor é cifrado com chave fora do banco e nunca volta para a tela; workflows e agentes usam apenas a referência."
       />
-      <OAuthPanel onConnected={reload} />
+      <OAuthPanel
+        onConnected={reload}
+        connections={state.status === "ready" ? state.data.items : []}
+        onRecheck={async () => {
+          // Re-check: testa cada conta GitHub no GitHub (identidade e escopos) e recarrega.
+          if (state.status === "ready") {
+            for (const c of state.data.items) {
+              if (c.kind === "github" && c.state === "active") await api.testConnection(c.id);
+            }
+          }
+          reload();
+        }}
+      />
       <NewConnectionForm onCreated={reload} />
       <FormError error={error} />
       <section className="panel" aria-label="Lista de conexões">

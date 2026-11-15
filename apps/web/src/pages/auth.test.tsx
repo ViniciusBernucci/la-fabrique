@@ -541,4 +541,24 @@ describe("conexão por OAuth", () => {
       }),
     );
   });
+
+  it("GitHub: sem conta mostra o passo a passo; com conta avisa escopos faltando e reverifica", async () => {
+    let items: Connection[] = [];
+    const calls = stub({
+      ...base,
+      "GET /connections": () => json({ items }),
+      "GET /oauth/providers": () => json({ items: [] }),
+      [`POST /connections/${baseConn.id}/test`]: () => json(baseConn),
+    });
+    renderAt("/connections");
+    expect(await screen.findByText("Não conectado")).toBeInTheDocument();
+    expect(screen.getByText(/make connect-github/)).toBeInTheDocument();
+
+    items = [{ ...baseConn, target: "octocat", scopes: "repo" }];
+    await userEvent.click(screen.getByRole("button", { name: "Verificar de novo" }));
+    expect(await screen.findByText("Conectado")).toBeInTheDocument();
+    expect(screen.getByText(/Faltam escopos: read:org, workflow/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Verificar de novo" }));
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith("/test"))).toBe(true));
+  });
 });

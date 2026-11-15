@@ -49,10 +49,8 @@ seed: ## Carrega projetos fictícios de dev (somente APP_ENV=development)
 create-admin: ## Cria a conta única do administrador (pergunta usuário e senha; o 2FA é cadastrado no 1º login)
 	@read -p "Usuário: " u; read -s -p "Senha (mín. 12 caracteres): " p; echo; \
 	  ADMIN_USERNAME="$$u" ADMIN_PASSWORD="$$p" DATABASE_URL='$(DB_APP_URL)' go run ./cmd/migrate create-admin
-connect-github: ## Conecta o GitHub com a conta logada no `gh` da sua máquina (faz `gh auth login` se preciso)
-	@command -v gh >/dev/null || (echo "instale o GitHub CLI: brew install gh"; exit 1)
-	@gh auth status >/dev/null 2>&1 || gh auth login --hostname github.com --git-protocol https --web --scopes repo,read:org,workflow
-	@GITHUB_TOKEN="$$(gh auth token --hostname github.com)" DATABASE_URL='$(DB_APP_URL)' go run ./cmd/migrate connect-github
+connect-github: ## Importa as contas do GitHub CLI (gh) da máquina para o cofre; abre `gh auth login` se não houver conta. Rode de novo para atualizar
+	DATABASE_URL='$(DB_APP_URL)' go run ./cmd/migrate connect-github
 db-backup: ## Backup do banco (MODE=dev|prod)
 	scripts/db-backup.sh $(or $(MODE),dev)
 db-restore: ## Restaura em banco isolado. Ex.: make db-restore F=backups/db-XXXX.dump

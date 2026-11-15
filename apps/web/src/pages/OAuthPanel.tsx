@@ -3,6 +3,7 @@ import { FormError, toApiError } from "../components/AuthParts";
 import {
   type ApiError,
   api,
+  type Connection,
   type OAuthProvider,
   type OAuthStarted,
   type OAuthStatus,
@@ -27,7 +28,17 @@ const defaultName: Record<OAuthProvider["kind"], string> = {
  * Conexão por OAuth: nenhum token passa pela tela. GitHub usa o código de
  * dispositivo (autoriza no navegador); ClickUp e Jira redirecionam ao provedor.
  */
-export function OAuthPanel({ onConnected }: { onConnected: () => void }) {
+const requiredScopes = ["repo", "read:org", "workflow"];
+
+export function OAuthPanel({
+  onConnected,
+  connections,
+  onRecheck,
+}: {
+  onConnected: () => void;
+  connections: Connection[];
+  onRecheck: () => Promise<void>;
+}) {
   const { expire } = useSession();
   const { runSensitive } = useReauth();
   const providers = useResource((s) => api.listOAuthProviders(s), "oauth-providers", expire);
@@ -76,6 +87,20 @@ export function OAuthPanel({ onConnected }: { onConnected: () => void }) {
     }, Math.max(seconds, 1) * 1000);
   }
 
+  const accounts = connections.filter((c) => c.kind === "github" && c.state === "active");
+
+  async function recheck() {
+    setBusy(true);
+    setError(null);
+    try {
+      await onRecheck();
+    } catch (e) {
+      setError(toApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function start(kind: OAuthProvider["kind"]) {
     setBusy(true);
     setError(null);
@@ -101,11 +126,51 @@ export function OAuthPanel({ onConnected }: { onConnected: () => void }) {
     <section className="panel panel--pad" aria-label="Conectar com OAuth">
       <h2>GitHub</h2>
       <p className="muted">
-        A fábrica age no GitHub com a conta que você conectar. Na sua máquina, rode{" "}
-        <code>make connect-github</code>: ele usa (ou abre o login do) GitHub CLI e guarda o acesso
-        no cofre, sem você digitar token. Se o app OAuth estiver configurado no <code>.env</code>,
-        também dá para conectar daqui.
+        A fábrica age no GitHub com a conta do seu GitHub CLI, como o Orca. Cada projeto escolhe
+        qual conta usar na sua configuração.
       </p>
+      {accounts.length === 0 ? (
+        <div className="callout" role="status">
+          <strong>Não conectado</strong>
+          <p>
+            1. Instale o GitHub CLI se faltar: <code>brew install gh</code>
+            <br />
+            2. No terminal, na pasta do projeto: <code>make connect-github</code> (abre o login no
+            navegador se ainda não houver conta)
+            <br />
+            3. Volte aqui e clique em Verificar de novo.
+          </p>
+        </div>
+      ) : (
+        <ul className="item-list">
+          {accounts.map((c) => {
+            const missing = requiredScopes.filter((r) => !c.scopes.split(/[\s,]+/).includes(r));
+            return (
+              <li key={c.id} className="row">
+                <span>
+                  <strong>{c.target || c.name}</strong>{" "}
+                  <span className="badge badge--active">Conectado</span>
+                  <small>
+                    {c.name} · escopos: {c.scopes || "não informados"}
+                  </small>
+                  {missing.length > 0 && (
+                    <small className="form-error">
+                      Faltam escopos: {missing.join(", ")}. Rode{" "}
+                      <code>gh auth refresh -s {missing.join(",")}</code> e depois{" "}
+                      <code>make connect-github</code>.
+                    </small>
+                  )}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <div className="actions">
+        <button type="button" className="secondary-action" disabled={busy} onClick={recheck}>
+          Verificar de novo
+        </button>
+      </div>
       {providers.state.status === "ready" &&
         providers.state.data.items
           .filter((p) => p.available)
