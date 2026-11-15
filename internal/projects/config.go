@@ -421,6 +421,20 @@ func Validate(ctx context.Context, db persistence.DBTX, p Project) (Report, erro
 	connOK, connAction := connectionState(p.Repository.ConnectionID, repoConn, "github", "GitHub", "Repositório")
 	add("repository.connection", "repository", "Conexão GitHub", connOK, connAction)
 
+	if p.Repository.Owner != "" && p.Repository.Name != "" {
+		other, err := activeRepoOwner(ctx, db, p)
+		if err != nil {
+			return Report{}, err
+		}
+		add("repository.unique", "repository", "Repositório exclusivo", other == "",
+			"Este repositório já pertence ao projeto ativo \""+other+"\". Suspenda-o ou escolha outro repositório na etapa Repositório.")
+	}
+	repoOK, repoAction, err := repoCheckState(ctx, db, p, repoConn)
+	if err != nil {
+		return Report{}, err
+	}
+	add("repository.verified", "repository", "Verificação do repositório", repoOK, repoAction)
+
 	add("source.kind", "source", "Plataforma da origem de tarefas", p.Source.Kind != "", "Escolha Jira ou ClickUp na etapa Origem.")
 	srcConn, err := lookupConnection(ctx, db, p.Source.ConnectionID)
 	if err != nil {
@@ -500,6 +514,39 @@ func activeSourceOwner(ctx context.Context, db persistence.DBTX, p Project) (str
 		return "", nil
 	}
 	return name, persistence.MapError(err)
+}
+
+// activeRepoOwner devolve o nome de outro projeto ativo com o mesmo repositório GitHub, ou "".
+// Dois projetos ativos no mesmo repositório teriam dois escritores sobre as mesmas branches.
+func activeRepoOwner(ctx context.Context, db persistence.DBTX, p Project) (string, error) {
+	var name string
+	err := db.QueryRow(ctx, `
+		SELECT name FROM projects
+		WHERE id <> $1 AND state = 'active' AND lower(repo_owner) = lower($2) AND lower(repo_name) = lower($3)
+		ORDER BY created_at LIMIT 1`, p.ID, p.Repository.Owner, p.Repository.Name).Scan(&name)
+	if errors.Is(persistence.MapError(err), persistence.ErrNotFound) {
+		return "", nil
+	}
+	return name, persistence.MapError(err)
+}
+
+func repoCheckState(ctx context.Context, db persistence.DBTX, p Project, conn connInfo) (bool, string, error) {
+	var ok *bool
+	var fp string
+	err := db.QueryRow(ctx, `SELECT repo_check_ok, repo_check_fingerprint FROM projects WHERE id = $1`, p.ID).Scan(&ok, &fp)
+	if err != nil {
+		return false, "", persistence.MapError(err)
+	}
+	const run = "Use \"Verificar repositório\" na revisão para provar a pasta, o origin, a branch base e a permissão de push."
+	switch {
+	case ok == nil:
+		return false, "O repositório ainda não foi verificado. " + run, nil
+	case fp != RepoFingerprint(p, conn.secretVer):
+		return false, "O repositório, a conexão ou o segredo mudou depois da última verificação. " + run, nil
+	case !*ok:
+		return false, "A última verificação do repositório falhou. Corrija os pontos indicados e verifique de novo. " + run, nil
+	}
+	return true, "", nil
 }
 
 func remoteCheckState(ctx context.Context, db persistence.DBTX, p Project, conn connInfo) (bool, string, error) {

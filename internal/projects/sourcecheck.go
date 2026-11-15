@@ -21,6 +21,7 @@ const (
 	StepOK      = "ok"
 	StepFailed  = "failed"
 	StepSkipped = "skipped"
+	StepWarn    = "warn"
 )
 
 // SourceStep é um passo da verificação remota da origem.
@@ -244,5 +245,38 @@ func RecordSourceCheck(ctx context.Context, db DB, adminID, projectID, fingerpri
 			return persistence.MapError(err)
 		}
 		return record(ctx, tx, projectID, adminID, ChangeSourceChecked, map[string]any{"ok": check.OK, "items": len(check.Items)})
+	})
+}
+
+// RepoCheck é o resultado da verificação do repositório (ADR-0062).
+type RepoCheck struct {
+	OK        bool         `json:"ok"`
+	Steps     []SourceStep `json:"steps"`
+	CheckedAt time.Time    `json:"checked_at"`
+}
+
+// RepoFingerprint identifica a configuração do repositório e a versão do segredo da conexão.
+// A verificação só vale enquanto ela não muda.
+func RepoFingerprint(p Project, secretVersion int) string {
+	conn := ""
+	if p.Repository.ConnectionID != nil {
+		conn = *p.Repository.ConnectionID
+	}
+	h := sha256.Sum256([]byte(strings.Join([]string{
+		p.Repository.Mode, p.Repository.Path, strings.ToLower(p.Repository.Owner), strings.ToLower(p.Repository.Name),
+		p.Repository.BaseBranch, conn, fmt.Sprint(secretVersion),
+	}, "\x1e")))
+	return hex.EncodeToString(h[:])
+}
+
+// RecordRepoCheck grava o resultado vinculado à configuração verificada e o registra na trilha.
+// Não altera a versão do projeto.
+func RecordRepoCheck(ctx context.Context, db DB, adminID, projectID, fingerprint string, check RepoCheck) error {
+	return persistence.WithTx(ctx, db, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `UPDATE projects SET repo_check_ok = $2, repo_check_fingerprint = $3, repo_checked_at = $4 WHERE id = $1`,
+			projectID, check.OK, fingerprint, check.CheckedAt); err != nil {
+			return persistence.MapError(err)
+		}
+		return record(ctx, tx, projectID, adminID, ChangeRepoChecked, map[string]any{"ok": check.OK})
 	})
 }

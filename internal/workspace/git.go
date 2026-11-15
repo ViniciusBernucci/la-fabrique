@@ -243,3 +243,22 @@ func (i Info) Describe() string {
 	}
 	return i.Branch
 }
+
+// HasBranch diz se a branch existe localmente ou como origin/<branch>.
+func (g Git) HasBranch(ctx context.Context, dir, branch string) bool {
+	for _, ref := range []string{"refs/heads/" + branch, "refs/remotes/origin/" + branch} {
+		if _, err := g.run(ctx, dir, security.Secret{}, "rev-parse", "--verify", "-q", ref); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// Dirty diz se há alterações não commitadas (inclui arquivos não rastreados).
+func (g Git) Dirty(ctx context.Context, dir string) (bool, error) {
+	out, err := g.run(ctx, dir, security.Secret{}, "status", "--porcelain")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
+}

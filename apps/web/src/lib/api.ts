@@ -83,6 +83,19 @@ export interface SourceCheck {
   checked_at: string;
 }
 
+export interface RepoCheckStep {
+  id: string;
+  label: string;
+  status: "ok" | "warn" | "failed" | "skipped";
+  detail: string;
+}
+
+export interface RepoCheck {
+  ok: boolean;
+  steps: RepoCheckStep[];
+  checked_at: string;
+}
+
 export interface Project {
   id: string;
   slug: string;
@@ -936,6 +949,9 @@ export const api = {
       `/projects/${encodeURIComponent(id)}/repository/prepare`,
       { expected_version, ...body },
     ),
+  /** Prova pasta, origin, branch base, conta e push; a ativação exige o resultado. */
+  checkRepository: (id: string) =>
+    post<RepoCheck>(`/projects/${encodeURIComponent(id)}/repository/check`),
   browseWorkspace: (path: string, signal?: AbortSignal) =>
     request<WorkspaceListing>(`/workspace/browse?path=${encodeURIComponent(path)}`, { signal }),
   githubRepos: (connectionId: string, signal?: AbortSignal) =>

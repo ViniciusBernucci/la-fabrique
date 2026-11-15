@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
@@ -124,6 +125,9 @@ func (s *Server) prepareRepository(w http.ResponseWriter, r *http.Request) {
 		s.writeDomainError(w, r, err)
 		return
 	}
+	if !s.pathFree(w, r, p, repo) {
+		return
+	}
 	wr := workspace.Request{
 		Mode: repo.Mode, Slug: p.Slug, Title: p.Name, Path: repo.Path, Owner: repo.Owner, Name: repo.Name, Base: repo.BaseBranch,
 		CreateRemote: req.CreateRemote, Private: req.Private, Description: p.Description,
@@ -153,4 +157,73 @@ func (s *Server) prepareRepository(w http.ResponseWriter, r *http.Request) {
 
 func ctxTimeout(r *http.Request, d time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(r.Context(), d)
+}
+
+// pathFree recusa a pasta que outro projeto já usa, comparando o caminho real (links simbólicos
+// e diferença de maiúsculas não escapam da regra).
+func (s *Server) pathFree(w http.ResponseWriter, r *http.Request, p projects.Project, repo projects.Repository) bool {
+	rel := repo.Path
+	if rel == "" && repo.Mode != projects.RepoLocal {
+		rel = p.Slug
+	}
+	if rel == "" || !s.ws.Root.Enabled() {
+		return true
+	}
+	abs, err := s.ws.Root.Resolve(rel)
+	if err != nil {
+		return true // o Prepare devolve o erro de caminho com a mensagem certa
+	}
+	others, err := projects.OtherRepoPaths(r.Context(), s.db, p.ID)
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return false
+	}
+	for _, o := range others {
+		if other, err := s.ws.Root.Resolve(o.Path); err == nil && strings.EqualFold(other, abs) {
+			writeError(w, r, http.StatusConflict, "workspace_taken", "A pasta "+rel+" já é usada pelo projeto \""+o.Name+"\".",
+				"Escolha outra pasta ou apague/ajuste o outro projeto.")
+			return false
+		}
+	}
+	return true
+}
+
+// checkRepository prova o repositório configurado (pasta, origin, branch base, conta e push) sem escrever
+// e grava o resultado vinculado à configuração verificada; a ativação o exige.
+func (s *Server) checkRepository(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.projectID(w, r)
+	if !ok {
+		return
+	}
+	p, err := projects.Get(r.Context(), s.db, id)
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	repo := p.Repository
+	if repo.Owner == "" || repo.Name == "" || repo.BaseBranch == "" {
+		writeError(w, r, http.StatusConflict, "repository_incomplete", "Repositório incompleto: faltam dono, nome ou branch base.",
+			"Preencha a etapa Repositório antes de verificar.")
+		return
+	}
+	req := workspace.CheckRequest{Path: repo.Path, Owner: repo.Owner, Name: repo.Name, Base: repo.BaseBranch}
+	secretVersion := 0
+	if repo.ConnectionID != nil {
+		secret, conn, err := s.vault.Resolve(r.Context(), *repo.ConnectionID)
+		if err == nil && conn.Kind == "github" && conn.State == "active" {
+			req.Token, secretVersion = secret, conn.SecretVersion
+		}
+	}
+	ctx, cancel := ctxTimeout(r, 60*time.Second)
+	defer cancel()
+	good, steps := s.ws.Check(ctx, req)
+	res := projects.RepoCheck{OK: good, Steps: make([]projects.SourceStep, 0, len(steps)), CheckedAt: time.Now().UTC()}
+	for _, st := range steps {
+		res.Steps = append(res.Steps, projects.SourceStep{ID: st.ID, Label: st.Label, Status: st.Status, Detail: st.Detail})
+	}
+	if err := projects.RecordRepoCheck(r.Context(), s.db, s.adminID(r), id, projects.RepoFingerprint(p, secretVersion), res); err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }

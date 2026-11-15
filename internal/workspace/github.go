@@ -161,3 +161,73 @@ func (g GitHub) CreateRepo(ctx context.Context, token security.Secret, owner, lo
 	}
 	return RepoRef{FullName: r.FullName, Owner: r.Owner.Login, Name: r.Name, Private: r.Private, DefaultBranch: r.DefaultBranch, CanPush: true}, nil
 }
+
+// RepoInfo é o que a API informa sobre um repositório para a verificação.
+type RepoInfo struct {
+	FullName      string
+	DefaultBranch string
+	CanPush       bool
+	Archived      bool
+}
+
+func (g GitHub) status(ctx context.Context, token security.Secret, path string) (int, []byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, g.base()+path, nil)
+	if err != nil {
+		return 0, nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token.Reveal())
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	resp, err := g.client().Do(req)
+	if err != nil {
+		return 0, nil, ErrGitHubDown
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	return resp.StatusCode, raw, nil
+}
+
+// Repo consulta o repositório com as permissões da conta do token.
+func (g GitHub) Repo(ctx context.Context, token security.Secret, owner, name string) (RepoInfo, error) {
+	code, raw, err := g.status(ctx, token, "/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name))
+	if err != nil {
+		return RepoInfo{}, err
+	}
+	switch {
+	case code == http.StatusUnauthorized:
+		return RepoInfo{}, ErrGitHubAuth
+	case code == http.StatusNotFound || code == http.StatusForbidden:
+		return RepoInfo{}, ErrGitHubForbidden
+	case code >= 300:
+		return RepoInfo{}, fmt.Errorf("o GitHub respondeu %d", code)
+	}
+	var r struct {
+		FullName      string `json:"full_name"`
+		DefaultBranch string `json:"default_branch"`
+		Archived      bool   `json:"archived"`
+		Permissions   struct {
+			Push bool `json:"push"`
+		} `json:"permissions"`
+	}
+	if err := json.Unmarshal(raw, &r); err != nil {
+		return RepoInfo{}, err
+	}
+	return RepoInfo{FullName: r.FullName, DefaultBranch: r.DefaultBranch, Archived: r.Archived, CanPush: r.Permissions.Push}, nil
+}
+
+// BranchExists diz se a branch existe no remoto.
+func (g GitHub) BranchExists(ctx context.Context, token security.Secret, owner, name, branch string) (bool, error) {
+	code, _, err := g.status(ctx, token, "/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/branches/"+url.PathEscape(branch))
+	if err != nil {
+		return false, err
+	}
+	switch {
+	case code == http.StatusOK:
+		return true, nil
+	case code == http.StatusNotFound:
+		return false, nil
+	case code == http.StatusUnauthorized:
+		return false, ErrGitHubAuth
+	}
+	return false, fmt.Errorf("o GitHub respondeu %d", code)
+}

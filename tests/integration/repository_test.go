@@ -128,6 +128,11 @@ func TestRepositoryModes(t *testing.T) {
 			t.Fatalf("repositório: %+v", r)
 		}
 		// pasta fora da raiz e pasta sem git
+		// a mesma pasta em outro projeto é recusada
+		p3 := createProject(t, c, "app-legado-2")
+		if resp, _ := prepare(p3, map[string]any{"mode": "local", "path": "legado"}); resp.StatusCode != 409 || resp.ErrCode() != "workspace_taken" {
+			t.Fatalf("pasta repetida: %d %s", resp.StatusCode, resp.Body)
+		}
 		p2 := createProject(t, c, "app-fora")
 		if resp, _ := prepare(p2, map[string]any{"mode": "local", "path": "../etc"}); resp.StatusCode != 400 {
 			t.Fatalf("fora da raiz: %d %s", resp.StatusCode, resp.Body)
@@ -179,4 +184,65 @@ func TestRepositoryModes(t *testing.T) {
 			t.Fatalf("sem CSRF: %d", r.StatusCode)
 		}
 	})
+}
+
+// ADR-0062: ativação exige o repositório verificado; mudar a configuração invalida; o mesmo repositório
+// não pode estar em dois projetos ativos.
+func TestRepositoryVerificationGatesActivation(t *testing.T) {
+	_, c, _ := newProjectEnv(t)
+	gh := conn(t, c, "github", "gh-v")
+	jira := conn(t, c, "jira", "jira-v")
+
+	pending := func(id, check string) bool {
+		for _, ch := range validation(t, c, id).Checks {
+			if ch.ID == check {
+				return ch.Status != "ok"
+			}
+		}
+		t.Fatalf("check %s não existe", check)
+		return false
+	}
+
+	p := configure(t, c, createProject(t, c, "verif-a"), gh, jira)
+	var sc projects.SourceCheck
+	c.expect(c.post("/api/projects/"+p.ID+"/source/check", nil), 200).JSON(&sc)
+	if !pending(p.ID, "repository.verified") {
+		t.Fatal("repositório não verificado deveria estar pendente")
+	}
+	if resp := c.post("/api/projects/"+p.ID+"/activate", map[string]any{"expected_version": p.Version}); resp.StatusCode != 422 {
+		t.Fatalf("sem verificação: %d %s", resp.StatusCode, resp.Body)
+	}
+	var rc projects.RepoCheck
+	c.expect(c.post("/api/projects/"+p.ID+"/repository/check", nil), 200).JSON(&rc)
+	if !rc.OK || len(rc.Steps) < 3 {
+		t.Fatalf("verificação: %+v", rc)
+	}
+	if pending(p.ID, "repository.verified") {
+		t.Fatal("verificação deveria valer")
+	}
+	var active projects.Project
+	c.expect(c.post("/api/projects/"+p.ID+"/activate", map[string]any{"expected_version": p.Version}), 200).JSON(&active)
+
+	// outro projeto com o mesmo repositório: duplicado
+	q := createProject(t, c, "verif-b")
+	var q2 projects.Project
+	c.expect(c.do("PATCH", "/api/projects/"+q.ID, map[string]any{
+		"expected_version": q.Version,
+		"repository":       map[string]any{"owner": "org-exemplo", "name": "verif-a", "base_branch": "main", "connection_id": gh.ID},
+	}, nil), 200).JSON(&q2)
+	if !pending(q.ID, "repository.unique") {
+		t.Fatal("o mesmo repositório em dois projetos ativos deveria ser recusado")
+	}
+	// a verificação do repositório de A vale só para a configuração dela: suspender e mudar invalida
+	var susp projects.Project
+	c.expect(c.post("/api/projects/"+p.ID+"/suspend", map[string]any{"expected_version": active.Version}), 200).JSON(&susp)
+	c.expect(c.do("PATCH", "/api/projects/"+p.ID, map[string]any{
+		"expected_version": susp.Version,
+		"repository":       map[string]any{"owner": "org-exemplo", "name": "verif-a", "base_branch": "develop", "connection_id": gh.ID},
+	}, nil), 200)
+	if !pending(p.ID, "repository.verified") {
+		t.Fatal("mudar a configuração deveria invalidar a verificação")
+	}
+	// repositório incompleto não verifica
+	c.expect(c.post("/api/projects/"+createProject(t, c, "verif-c").ID+"/repository/check", nil), 409)
 }

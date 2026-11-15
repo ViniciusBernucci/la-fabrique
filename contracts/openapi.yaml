@@ -472,6 +472,43 @@ paths:
         "404": {$ref: "#/components/responses/Error"}
         "409": {$ref: "#/components/responses/Error"}
         "502": {$ref: "#/components/responses/Error"}
+  /projects/{id}/repository/check:
+    post:
+      tags: [projetos]
+      summary: Verifica o repositório do projeto (pasta, git, origin, branch base, conta, permissão de push) sem escrever
+      description: >
+        Passos `ok`, `warn`, `failed` ou `skipped`, cada um com o motivo e a ação. O resultado fica gravado para a
+        configuração atual (dono, nome, branch, pasta, conexão e versão do segredo); a ativação o exige
+        (check `repository.verified`). Mudar qualquer um desses itens invalida a verificação. Dois projetos ativos
+        não podem usar o mesmo repositório (`repository.unique`); a mesma pasta não pode servir a dois projetos
+        (409 `workspace_taken` no prepare).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Resultado da verificação
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, steps, checked_at]
+                properties:
+                  ok: {type: boolean}
+                  checked_at: {type: string, format: date-time}
+                  steps:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, label, status, detail]
+                      properties:
+                        id: {type: string}
+                        label: {type: string}
+                        status: {type: string, enum: [ok, warn, failed, skipped]}
+                        detail: {type: string}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
   /workspace/browse:
     get:
       tags: [projetos]

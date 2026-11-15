@@ -376,6 +376,55 @@ describe("cadastro de projeto", () => {
     ).toBeInTheDocument();
   });
 
+  it("a revisão verifica o repositório e mostra cada passo com o motivo", async () => {
+    let verified = false;
+    const calls = stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(project({ wizard_step: "review" })),
+      "GET /connections": () => json(connections),
+      [`GET /projects/${ID}/validation`]: () =>
+        json({
+          ok: false,
+          not_verified: [],
+          checks: [
+            {
+              id: "repository.verified",
+              area: "repository",
+              label: "Verificação do repositório",
+              status: verified ? "ok" : "pending",
+              action: "O repositório ainda não foi verificado.",
+            },
+          ],
+        }),
+      [`POST /projects/${ID}/repository/check`]: () => {
+        verified = true;
+        return json({
+          ok: false,
+          checked_at: "2026-11-15T10:00:00Z",
+          steps: [
+            { id: "account", label: "Conta GitHub", status: "ok", detail: "Acessa org/app." },
+            {
+              id: "push",
+              label: "Permissão de push",
+              status: "failed",
+              detail: "A conta tem acesso somente leitura.",
+            },
+          ],
+        });
+      },
+    });
+    renderAt(`/projects/${ID}/setup`);
+    await userEvent.click(await screen.findByRole("button", { name: "Verificar repositório" }));
+    const list = await screen.findByRole("list", {
+      name: "Resultado da verificação do repositório",
+    });
+    expect(within(list).getByText("A conta tem acesso somente leitura.")).toBeInTheDocument();
+    expect(within(list).getByText("Acessa org/app.")).toBeInTheDocument();
+    const call = calls.find((c) => c.url.endsWith("/repository/check"));
+    expect(call?.method).toBe("POST");
+    expect(call?.csrf).toBe("csrf-1");
+  });
+
   it("ativa quando válido e vai para o detalhe", async () => {
     let active = false;
     const calls = stub({

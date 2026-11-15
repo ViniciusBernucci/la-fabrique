@@ -11,6 +11,7 @@ import {
   type PrepareRepository,
   type Project,
   type ProjectPatch,
+  type RepoCheck,
   type SourceCheck,
   type SourceConfig,
   type WizardStep,
@@ -528,6 +529,21 @@ function ReviewStep({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [repoCheck, setRepoCheck] = useState<RepoCheck | null>(null);
+
+  /** Prova pasta, origin, branch base, conta e push; a ativação exige o resultado (ADR-0062). */
+  async function verifyRepository() {
+    setBusy(true);
+    setError(null);
+    try {
+      setRepoCheck(await api.checkRepository(project.id));
+      reload();
+    } catch (e) {
+      setError(toApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function activate() {
     setBusy(true);
@@ -573,7 +589,12 @@ function ReviewStep({
               <strong>{c.label}</strong>
               <small>{c.status === "ok" ? "Preenchido" : c.action}</small>
             </span>
-            {c.status === "pending" && (
+            {c.status === "pending" && c.id === "repository.verified" && (
+              <button type="button" disabled={busy} onClick={verifyRepository}>
+                Verificar repositório
+              </button>
+            )}
+            {c.status === "pending" && c.id !== "repository.verified" && (
               <button
                 type="button"
                 className="secondary-action"
@@ -585,6 +606,28 @@ function ReviewStep({
           </li>
         ))}
       </ul>
+      {repoCheck && (
+        <ul
+          className="checklist"
+          aria-label="Resultado da verificação do repositório"
+          data-ok={repoCheck.ok}
+        >
+          {repoCheck.steps.map((st) => (
+            <li
+              key={st.id}
+              className={`checklist-item checklist-item--${st.status === "ok" ? "ok" : "pending"}`}
+            >
+              <span className="checklist-mark" aria-hidden="true">
+                {st.status === "ok" ? "✓" : st.status === "skipped" ? "–" : "!"}
+              </span>
+              <span>
+                <strong>{st.label}</strong>
+                <small>{st.detail}</small>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
       {report.not_verified.length > 0 && (
         <div className="callout">
           <strong>Ainda não verificado nesta versão:</strong>

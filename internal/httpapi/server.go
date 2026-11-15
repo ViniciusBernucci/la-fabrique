@@ -156,6 +156,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/workspace/browse", s.protected(s.workspaceBrowse))
 	mux.HandleFunc("GET /api/github/repos", s.protected(s.githubRepos))
 	mux.HandleFunc("POST /api/projects/{id}/repository/prepare", s.protected(s.prepareRepository))
+	mux.HandleFunc("POST /api/projects/{id}/repository/check", s.protected(s.checkRepository))
 	mux.HandleFunc("GET /api/oauth/providers", s.protected(s.oauthProviders))
 	mux.HandleFunc("POST /api/oauth/{kind}/start", s.protected(s.oauthStart))
 	mux.HandleFunc("GET /api/oauth/flows/{id}", s.protected(s.oauthFlow))

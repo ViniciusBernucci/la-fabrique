@@ -2,6 +2,9 @@ package integration
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -10,6 +13,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/integrations"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
+	"github.com/ViniciusBernucci/le-fabrique/internal/workspace"
 )
 
 type changesResp struct {
@@ -19,13 +23,35 @@ type changesResp struct {
 func newProjectEnv(t *testing.T) (*authEnv, *client, *fakeJira) {
 	t.Helper()
 	fj := newFakeJira(t)
+	gh := newFakeGitHubRepos(t)
 	e := newAuthEnv(t, nil, httpapi.WithTrackerFactory(func(cfg integrations.Config) (integrations.Tracker, error) {
 		cfg.BaseURL = fj.URL // todos os tipos falam com a plataforma falsa
 		return integrations.NewTracker(cfg)
-	}))
+	}), httpapi.WithWorkspaceSetup(func(s *workspace.Service) { s.GH = workspace.GitHub{BaseURL: gh.URL} }))
 	c := e.newClient()
 	c.login(nil)
 	return e, c, fj
+}
+
+// newFakeGitHubRepos responde à API do GitHub para a verificação do repositório (qualquer dono/nome, push liberado).
+func newFakeGitHubRepos(t *testing.T) *httptest.Server {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		switch {
+		case len(parts) == 3 && parts[0] == "repos":
+			fmt.Fprintf(w, `{"full_name":"%s/%s","default_branch":"main","archived":false,"permissions":{"push":true}}`, parts[1], parts[2])
+		case len(parts) == 5 && parts[0] == "repos" && parts[3] == "branches":
+			if parts[4] == "main" {
+				fmt.Fprint(w, `{"name":"main"}`)
+				return
+			}
+			w.WriteHeader(404)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
 }
 
 func createProject(t *testing.T, c *client, slug string) projects.Project {
@@ -77,7 +103,7 @@ func configure(t *testing.T, c *client, p projects.Project, gh, jira security.Co
 	var out projects.Project
 	c.expect(c.do("PATCH", "/api/projects/"+p.ID, map[string]any{
 		"expected_version": p.Version, "wizard_step": "review",
-		"repository": map[string]any{"owner": "org-exemplo", "name": "app", "base_branch": "main", "connection_id": gh.ID},
+		"repository": map[string]any{"owner": "org-exemplo", "name": p.Slug, "base_branch": "main", "connection_id": gh.ID},
 		"source":     jiraSource(jira.ID),
 	}, nil), 200).JSON(&out)
 	return out
@@ -91,6 +117,11 @@ func completeConfig(t *testing.T, c *client, p projects.Project, gh, jira securi
 	c.expect(c.post("/api/projects/"+p.ID+"/source/check", nil), 200).JSON(&check)
 	if !check.OK {
 		t.Fatalf("a origem deveria verificar: %+v", check.Steps)
+	}
+	var rc projects.RepoCheck
+	c.expect(c.post("/api/projects/"+p.ID+"/repository/check", nil), 200).JSON(&rc)
+	if !rc.OK {
+		t.Fatalf("o repositório deveria verificar: %+v", rc.Steps)
 	}
 	return out
 }

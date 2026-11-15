@@ -263,3 +263,109 @@ func TestGitHubListAndErrors(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+func stepsByID(steps []Step) map[string]Step {
+	m := map[string]Step{}
+	for _, s := range steps {
+		m[s.ID] = s
+	}
+	return m
+}
+
+func fakeRepoAPI(t *testing.T, push, archived bool, branches ...string) GitHub {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := strings.Trim(r.URL.Path, "/")
+		switch {
+		case p == "repos/acme/app":
+			_, _ = w.Write([]byte(`{"full_name":"acme/app","default_branch":"main","archived":` + map[bool]string{true: "true", false: "false"}[archived] +
+				`,"permissions":{"push":` + map[bool]string{true: "true", false: "false"}[push] + `}}`))
+		case strings.HasPrefix(p, "repos/acme/app/branches/"):
+			for _, b := range branches {
+				if p == "repos/acme/app/branches/"+b {
+					_, _ = w.Write([]byte(`{}`))
+					return
+				}
+			}
+			w.WriteHeader(404)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	t.Cleanup(api.Close)
+	return GitHub{BaseURL: api.URL}
+}
+
+func TestCheckRepositoryHappyPathAndFailures(t *testing.T) {
+	s, root := service(t)
+	dir := filepath.Join(root, "app")
+	_ = os.MkdirAll(dir, 0o755)
+	gitCmd(t, dir, "init", "-b", "main")
+	_ = os.WriteFile(filepath.Join(dir, "a"), []byte("x"), 0o644)
+	gitCmd(t, dir, "add", ".")
+	gitCmd(t, dir, "commit", "-m", "i")
+	gitCmd(t, dir, "remote", "add", "origin", "https://github.com/acme/app.git")
+	tok := security.NewSecret("t")
+	req := CheckRequest{Path: "app", Owner: "acme", Name: "app", Base: "main", Token: tok}
+
+	s.GH = fakeRepoAPI(t, true, false, "main")
+	ok, steps := s.Check(context.Background(), req)
+	if !ok {
+		t.Fatalf("deveria passar: %+v", steps)
+	}
+	if got := stepsByID(steps); got["clean"].Status != StepOK || got["push"].Status != StepOK || got["base_remote"].Status != StepOK {
+		t.Fatalf("%+v", steps)
+	}
+
+	// árvore suja só avisa
+	_ = os.WriteFile(filepath.Join(dir, "novo"), []byte("y"), 0o644)
+	ok, steps = s.Check(context.Background(), req)
+	if !ok || stepsByID(steps)["clean"].Status != StepWarn {
+		t.Fatalf("suja: %v %+v", ok, steps)
+	}
+
+	// somente leitura, arquivado, branch ausente, origin diferente, sem conexão
+	s.GH = fakeRepoAPI(t, false, false, "main")
+	if ok, steps = s.Check(context.Background(), req); ok || stepsByID(steps)["push"].Status != StepFailed {
+		t.Fatalf("sem push: %+v", steps)
+	}
+	s.GH = fakeRepoAPI(t, true, true, "main")
+	if ok, steps = s.Check(context.Background(), req); ok || !strings.Contains(stepsByID(steps)["push"].Detail, "arquivado") {
+		t.Fatalf("arquivado: %+v", steps)
+	}
+	s.GH = fakeRepoAPI(t, true, false)
+	if ok, steps = s.Check(context.Background(), req); ok || stepsByID(steps)["base_remote"].Status != StepFailed {
+		t.Fatalf("sem branch no remoto: %+v", steps)
+	}
+	s.GH = fakeRepoAPI(t, true, false, "main")
+	other := req
+	other.Owner, other.Name = "acme", "outro"
+	if ok, steps = s.Check(context.Background(), other); ok || stepsByID(steps)["origin"].Status != StepFailed {
+		t.Fatalf("origin diferente: %+v", steps)
+	}
+	noTok := req
+	noTok.Token = security.Secret{}
+	if ok, steps = s.Check(context.Background(), noTok); ok || stepsByID(steps)["account"].Status != StepFailed {
+		t.Fatalf("sem conexão: %+v", steps)
+	}
+	badBase := req
+	badBase.Base = "inexistente"
+	if ok, steps = s.Check(context.Background(), badBase); ok || stepsByID(steps)["base_local"].Status != StepFailed {
+		t.Fatalf("branch base local: %+v", steps)
+	}
+	// pasta sumiu e pasta fora da raiz
+	gone := req
+	gone.Path = "nao-existe"
+	if ok, steps = s.Check(context.Background(), gone); ok || stepsByID(steps)["folder"].Status != StepFailed {
+		t.Fatalf("pasta ausente: %+v", steps)
+	}
+	gone.Path = "../fora"
+	if ok, _ = s.Check(context.Background(), gone); ok {
+		t.Fatal("fora da raiz deveria falhar")
+	}
+	// sem pasta local: só a parte remota
+	remote := req
+	remote.Path = ""
+	if ok, steps = s.Check(context.Background(), remote); !ok || stepsByID(steps)["folder"].Status != StepSkipped {
+		t.Fatalf("sem pasta: %+v", steps)
+	}
+}

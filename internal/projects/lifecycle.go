@@ -26,6 +26,7 @@ const (
 	ChangeUpdated       = "updated"
 	ChangeSourceChanged = "source_changed"
 	ChangeSourceChecked = "source_checked"
+	ChangeRepoChecked   = "repository_checked"
 	ChangeActivated     = "activated"
 	ChangeSuspended     = "suspended"
 	ChangeResumed       = "resumed"

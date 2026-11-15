@@ -241,3 +241,26 @@ func List(ctx context.Context, db persistence.DBTX, params ListParams) (Page, er
 	}
 	return page, nil
 }
+
+// PathOwner é um projeto que já usa uma pasta de repositório.
+type PathOwner struct {
+	ID, Name, Path string
+}
+
+// OtherRepoPaths lista as pastas de repositório dos demais projetos (para comparar por caminho real).
+func OtherRepoPaths(ctx context.Context, db persistence.DBTX, selfID string) ([]PathOwner, error) {
+	rows, err := db.Query(ctx, `SELECT id::text, name, repo_path FROM projects WHERE id <> $1 AND repo_path <> ''`, selfID)
+	if err != nil {
+		return nil, persistence.MapError(err)
+	}
+	defer rows.Close()
+	var out []PathOwner
+	for rows.Next() {
+		var o PathOwner
+		if err := rows.Scan(&o.ID, &o.Name, &o.Path); err != nil {
+			return nil, persistence.MapError(err)
+		}
+		out = append(out, o)
+	}
+	return out, persistence.MapError(rows.Err())
+}
