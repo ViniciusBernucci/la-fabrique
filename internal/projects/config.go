@@ -148,7 +148,7 @@ func ValidRepoPath(p string) bool {
 		return false
 	}
 	for _, seg := range strings.Split(p, "/") {
-		if seg == "." || seg == ".." || !repoPathPattern.MatchString(seg) || strings.HasPrefix(seg, "-") {
+		if strings.HasPrefix(seg, ".") || !repoPathPattern.MatchString(seg) || strings.HasPrefix(seg, "-") {
 			return false
 		}
 	}

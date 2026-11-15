@@ -17,11 +17,21 @@ O responsável forneceu a análise técnica do sistema de projetos do Orca 1.4.2
 4. **A ativação exige a verificação** (`repository.verified`), vinculada por impressão digital à configuração (modo, pasta, dono, nome, branch, conexão e versão do segredo): mudar qualquer item, ou rotacionar o segredo, invalida e exige verificar de novo. Mesmo padrão da verificação da origem; resultado na trilha do projeto (`repository_checked`).
 
 ## Decisões para as próximas fases (ainda não implementadas)
-- **Fase 2 — worktrees por tentativa** ligadas ao checkout do projeto: `git worktree add --no-track -b lf-tmp/… <wt> <base_sha>` com base resolvida na ordem explícita > branch base do projeto > `origin/HEAD`; trava por projeto (um escritor), serialização de mudanças de refs por repositório, limite de tentativas paralelas por projeto e por host; registro de operações com `operationId` (retry sem duplicar; releitura do estado antes de repetir escrita).
+- **Fase 2 — worktrees por tentativa** (implementada, ver abaixo).
 - **Fase 3 — setup do repositório e limpeza.** Scripts de setup (equivalente ao `orca.yaml`) **só rodam dentro do sandbox**, nunca no host da API, e exigem **aprovação do usuário vinculada ao hash** do arquivo, por projeto e ref; conteúdo alterado pede nova aprovação (decisão do responsável). Limpeza: regras desligadas por padrão, simulação (dry-run) antes de apagar, nunca remove árvore suja, arquivos só locais ou processo vivo; arquivar e remover são ações distintas.
 
+## Decisão (fase 2, implementada)
+1. **Worktrees ligadas ao checkout do projeto.** `worktrees.Provider.For(projeto)` usa a pasta do projeto (`repo_path`, resolvida dentro da raiz, sem links para fora) como checkout principal, que a fábrica **nunca altera** (branch e árvore intactas; testado). As worktrees nascem em `<raiz>/.lf-worktrees/…` (pasta oculta, fora da navegação); caminhos de projeto com segmento oculto (`.x`) passam a ser recusados.
+2. **Base da tentativa** (`Manager.ResolveBase`): referência explícita > branch base do projeto > `origin/HEAD`; cada uma lida como branch local e depois `origin/<ref>`; explícita inexistente falha (não cai no padrão). Nomes validados com `git check-ref-format --branch`; a worktree é criada com `--no-track`.
+3. **Um escritor por projeto.** Toda mudança de refs/worktrees (provisionar, checkpoint, liberar) passa por uma trava: mutex no processo + `flock` em `<git-common-dir>/lf-writer.lock` (api e worker compartilham o volume), com espera que respeita o contexto.
+4. **Limites** de tentativas ativas: 4 por projeto e 8 por servidor (padrões; `Manager.MaxPerProject/MaxPerHost`, negativo = sem limite). Só tentativas novas contam; repetir uma existente (retry) segue permitido. Excedido: `ErrLimit`.
+5. **Registro de operações** (`worktree_operations`, migration 00065): `Spec.OperationID` repetido devolve a mesma tentativa (recria o diretório se sumiu, nunca duplica); o mesmo ID em outra tentativa é recusado.
+6. **Links para fora** (`Manager.Escapes`): lista links simbólicos da worktree que apontam para fora dela, para o executor recusar a entrega.
+
+**Ainda não ligado:** nenhum `cmd/` constrói o `Manager` hoje (a execução de tentativas ainda não roda no worker); o `Provider` fica pronto para quando o executor for ligado. Montar só a worktree no sandbox depende dessa ligação.
+
 ## Isolamento entre projetos (princípios)
-Cada agente roda no sandbox com **só a sua worktree** montada (nunca a raiz de workspaces); token por cabeçalho no ambiente do processo e conexão por projeto; hooks do repositório desligados, submódulos fora, links simbólicos que saiam da worktree recusados e nomes de branch validados com `git check-ref-format` (a completar na fase 2); só dados recriáveis ficam no volume, e o aviso de backup recai sobre repositórios `new`/`local` sem remoto.
+Cada agente roda no sandbox com **só a sua worktree** montada (nunca a raiz de workspaces); token por cabeçalho no ambiente do processo e conexão por projeto; hooks do repositório desligados, submódulos fora, links simbólicos que saiam da worktree recusados e nomes de branch validados com `git check-ref-format` (feito na fase 2); só dados recriáveis ficam no volume, e o aviso de backup recai sobre repositórios `new`/`local` sem remoto.
 
 ## Limites
 A verificação usa a API do GitHub com a conexão do projeto; sem conexão válida a ativação fica bloqueada. Projetos já ativos não são reverificados automaticamente (só ao suspender/retomar). A verificação não faz `fetch`: compara a pasta com o que ela já tem.
