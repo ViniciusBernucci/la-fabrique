@@ -529,3 +529,25 @@
 .item-row .item-link {
   flex: 1;
 }
+
+.icon-trash {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--hud-text-muted, var(--hud-text));
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  opacity: 0.6;
+  cursor: pointer;
+}
+.icon-trash:hover:not(:disabled),
+.icon-trash:focus-visible {
+  opacity: 1;
+  color: var(--hud-danger-text);
+  background: color-mix(in srgb, var(--hud-rose) 16%, transparent);
+  border-color: color-mix(in srgb, var(--hud-rose) 45%, transparent);
+}
