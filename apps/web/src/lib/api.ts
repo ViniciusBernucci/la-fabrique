@@ -32,7 +32,13 @@ export type ProjectState = "draft" | "active" | "paused" | "archived";
 
 export type WizardStep = "basics" | "repository" | "source" | "review";
 
+/** Como o repositório chega à fábrica (ADR-0061). */
+export type RepoMode = "github" | "local" | "new";
+
 export interface RepositoryConfig {
+  mode: RepoMode;
+  /** Pasta relativa à raiz de workspaces; vazio = o worker clona sozinho. */
+  path: string;
   owner: string;
   name: string;
   base_branch: string;
@@ -875,6 +881,42 @@ function put<T>(path: string, body: unknown): Promise<T> {
   });
 }
 
+export interface WorkspaceEntry {
+  name: string;
+  path: string;
+  is_repo: boolean;
+  empty: boolean;
+}
+
+export interface WorkspaceListing {
+  enabled: boolean;
+  path: string;
+  parent: string | null;
+  is_repo: boolean;
+  entries: WorkspaceEntry[];
+}
+
+export interface GitHubRepo {
+  full_name: string;
+  owner: string;
+  name: string;
+  private: boolean;
+  default_branch: string;
+  can_push: boolean;
+  description: string;
+}
+
+export interface PrepareRepository {
+  mode: RepoMode;
+  path?: string;
+  owner?: string;
+  name?: string;
+  base_branch?: string;
+  connection_id?: string | null;
+  create_remote?: boolean;
+  private?: boolean;
+}
+
 export const api = {
   session: (signal?: AbortSignal) => request<Session>("/session", { signal }),
   ready: (signal?: AbortSignal) => request<{ status: string }>("/readyz", { signal }),
@@ -882,12 +924,25 @@ export const api = {
   getProject: (id: string, signal?: AbortSignal) =>
     request<Project>(`/projects/${encodeURIComponent(id)}`, { signal }),
   createProject: (input: NewProject) => post<Project>("/projects", input),
-  /** Apaga projeto em rascunho ou suspenso (ação sensível: pode exigir reautenticação). */
+  /** Apaga projeto em rascunho ou suspenso (sem reautenticação; só sessão e CSRF). */
   deleteProject: (id: string) =>
     request<void>(`/projects/${encodeURIComponent(id)}`, { method: "DELETE" }),
   /** Persiste uma etapa do assistente com controle otimista de versão. */
   updateProject: (id: string, expected_version: number, changes: ProjectPatch) =>
     patch<Project>(`/projects/${encodeURIComponent(id)}`, { expected_version, ...changes }),
+  /** Clona, abre ou cria o repositório do projeto e grava na configuração (ADR-0061). */
+  prepareRepository: (id: string, expected_version: number, body: PrepareRepository) =>
+    post<{ project: Project; notes: string[] }>(
+      `/projects/${encodeURIComponent(id)}/repository/prepare`,
+      { expected_version, ...body },
+    ),
+  browseWorkspace: (path: string, signal?: AbortSignal) =>
+    request<WorkspaceListing>(`/workspace/browse?path=${encodeURIComponent(path)}`, { signal }),
+  githubRepos: (connectionId: string, signal?: AbortSignal) =>
+    request<{ items: GitHubRepo[] }>(
+      `/github/repos?connection_id=${encodeURIComponent(connectionId)}`,
+      { signal },
+    ),
   /** Prova o acesso à origem e devolve o preview dos itens elegíveis (não escreve na origem). */
   checkSource: (id: string) =>
     post<SourceCheck>(`/projects/${encodeURIComponent(id)}/source/check`),

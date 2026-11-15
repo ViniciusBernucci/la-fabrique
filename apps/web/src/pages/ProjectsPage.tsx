@@ -4,7 +4,6 @@ import { FormError, toApiError } from "../components/AuthParts";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../components/States";
 import { type ApiError, api, type Project } from "../lib/api";
-import { useReauth } from "../lib/reauth";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
 
@@ -22,7 +21,6 @@ export function StateBadge({ state }: { state: Project["state"] }) {
 export function ProjectsPage() {
   const { expire } = useSession();
   const { state, reload } = useResource((signal) => api.listProjects(signal), "projects", expire);
-  const { runSensitive } = useReauth();
   const [target, setTarget] = useState<Project | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -31,7 +29,7 @@ export function ProjectsPage() {
     setBusy(true);
     setError(null);
     try {
-      await runSensitive(() => api.deleteProject(project.id));
+      await api.deleteProject(project.id);
       setTarget(null);
       reload();
     } catch (e) {
@@ -68,7 +66,6 @@ export function ProjectsPage() {
             <p id="delete-desc" className="muted">
               Atenção: esta ação é permanente e não pode ser desfeita. A configuração do projeto
               será removida. Só rascunhos ou projetos suspensos sem execuções podem ser apagados.
-              Será pedida sua senha e o código do 2FA.
             </p>
             <div className="actions">
               <button

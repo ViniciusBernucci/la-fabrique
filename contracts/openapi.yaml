@@ -370,7 +370,7 @@ paths:
         "409": {$ref: "#/components/responses/Error"}
     delete:
       tags: [projetos]
-      summary: Apaga um projeto em rascunho ou suspenso (exige reautenticação recente)
+      summary: Apaga um projeto em rascunho ou suspenso (sessão e CSRF; sem reautenticação)
       description: >
         Remove o projeto e seus vínculos e trilha. Projeto ativo devolve 409 `invalid_state`;
         projeto com execuções registradas devolve 409 `project_has_history` (suspenda em vez de apagar).
@@ -426,6 +426,115 @@ paths:
         "404": {$ref: "#/components/responses/Error"}
         "409": {$ref: "#/components/responses/Error"}
         "422": {$ref: "#/components/responses/Error"}
+  /projects/{id}/repository/prepare:
+    post:
+      tags: [projetos]
+      summary: Prepara o repositório do projeto (clonar do GitHub, usar pasta existente ou criar do zero) e grava na configuração
+      description: >
+        `github` clona o repositório na área de workspaces (ou só salva, se ela não estiver configurada);
+        `local` valida uma pasta que já é repositório git e deduz branch e remoto; `new` cria a pasta com
+        `git init` e commit inicial e, com `create_remote`, também o repositório no GitHub e o primeiro envio,
+        com as permissões da conta da conexão. Os caminhos são relativos à raiz `WORKSPACES_DIR` e nunca saem dela.
+        Só rascunho ou suspenso.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expected_version, mode]
+              properties:
+                expected_version: {type: integer, minimum: 1}
+                mode: {type: string, enum: [github, local, new]}
+                path: {type: string}
+                owner: {type: string}
+                name: {type: string}
+                base_branch: {type: string}
+                connection_id: {type: [string, "null"], format: uuid}
+                create_remote: {type: boolean}
+                private: {type: boolean}
+      responses:
+        "200":
+          description: Projeto atualizado e o que foi feito
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [project, notes]
+                properties:
+                  project: {$ref: "#/components/schemas/Project"}
+                  notes: {type: array, items: {type: string}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "502": {$ref: "#/components/responses/Error"}
+  /workspace/browse:
+    get:
+      tags: [projetos]
+      summary: Lista as subpastas da área de workspaces (caminhos relativos)
+      parameters:
+        - {name: path, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: Subpastas; `enabled=false` quando WORKSPACES_DIR não está configurada
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enabled, path, parent, is_repo, entries]
+                properties:
+                  enabled: {type: boolean}
+                  path: {type: string}
+                  parent: {type: [string, "null"]}
+                  is_repo: {type: boolean}
+                  entries:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, path, is_repo, empty]
+                      properties:
+                        name: {type: string}
+                        path: {type: string}
+                        is_repo: {type: boolean}
+                        empty: {type: boolean}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /github/repos:
+    get:
+      tags: [projetos]
+      summary: Lista os repositórios que a conta da conexão GitHub enxerga (para escolher o que clonar)
+      parameters:
+        - {name: connection_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Repositórios (até 300, arquivados omitidos)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [full_name, owner, name, private, default_branch, can_push, description]
+                      properties:
+                        full_name: {type: string}
+                        owner: {type: string}
+                        name: {type: string}
+                        private: {type: boolean}
+                        default_branch: {type: string}
+                        can_push: {type: boolean}
+                        description: {type: string}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "502": {$ref: "#/components/responses/Error"}
   /projects/{id}/activate:
     post:
       tags: [projetos]
@@ -2029,8 +2138,10 @@ components:
       enum: [basics, repository, source, review]
     Repository:
       type: object
-      required: [owner, name, base_branch, connection_id]
+      required: [mode, path, owner, name, base_branch, connection_id]
       properties:
+        mode: {type: string, enum: [github, local, new], description: "Como o repositório chega à fábrica: clonado do GitHub, pasta existente ou criado do zero (ADR-0061)"}
+        path: {type: string, description: "Pasta do repositório, relativa à raiz de workspaces; vazio = o worker clona sozinho"}
         owner: {type: string, description: "Usuário ou organização GitHub; vazio = não preenchido"}
         name: {type: string}
         base_branch: {type: string}

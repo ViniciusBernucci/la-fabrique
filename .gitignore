@@ -24,3 +24,6 @@ backups/
 .DS_Store
 .idea/
 .vscode/
+
+# Repositórios dos projetos criados/clonados em dev (WORKSPACES_HOST_DIR)
+/workspaces/

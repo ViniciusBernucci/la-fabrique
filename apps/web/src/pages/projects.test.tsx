@@ -72,7 +72,14 @@ function project(over: Partial<Project> = {}): Project {
     state: "draft",
     priority: 2,
     wizard_step: "repository",
-    repository: { owner: "", name: "", base_branch: "", connection_id: null },
+    repository: {
+      mode: "github",
+      path: "",
+      owner: "",
+      name: "",
+      base_branch: "",
+      connection_id: null,
+    },
     source: {
       kind: "",
       connection_id: null,
@@ -181,7 +188,9 @@ describe("cadastro de projeto", () => {
     expect(screen.getByLabelText("Identificador")).toHaveValue("meu-app");
     await userEvent.click(screen.getByRole("button", { name: "Criar rascunho e continuar" }));
 
-    expect(await screen.findByRole("heading", { name: "Repositório GitHub" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Repositório do projeto" }),
+    ).toBeInTheDocument();
     const create = calls.find((c) => c.method === "POST" && c.url === "/projects");
     expect(create?.csrf).toBe("csrf-1");
     expect(create?.body).toMatchObject({ name: "Meu app", slug: "meu-app", priority: 2 });
@@ -203,13 +212,26 @@ describe("cadastro de projeto", () => {
       "GET /session": () => json(session),
       [`GET /projects/${ID}`]: () => json(project()),
       "GET /connections": () => json(connections),
-      [`PATCH /projects/${ID}`]: (c) =>
-        json(
-          project({ version: 3, wizard_step: "source", repository: c.body?.repository as never }),
-        ),
+      [`POST /projects/${ID}/repository/prepare`]: (c) =>
+        json({
+          project: project({
+            version: 3,
+            repository: {
+              mode: "github",
+              path: "",
+              owner: String(c.body?.owner),
+              name: String(c.body?.name),
+              base_branch: String(c.body?.base_branch),
+              connection_id: GH,
+            },
+          }),
+          notes: ["Repositório clonado em meu-app."],
+        }),
+      [`GET /github/repos?connection_id=${GH}`]: () => json({ items: [] }),
+      [`PATCH /projects/${ID}`]: () => json(project({ version: 4, wizard_step: "source" })),
     });
     renderAt(`/projects/${ID}/setup`);
-    await screen.findByRole("heading", { name: "Repositório GitHub" });
+    await screen.findByRole("heading", { name: "Repositório do projeto" });
 
     const select = screen.getByRole("combobox", { name: /Conexão GitHub/ });
     const options = within(select)
@@ -223,15 +245,77 @@ describe("cadastro de projeto", () => {
     await userEvent.type(screen.getByRole("textbox", { name: "Repositório" }), "app");
     await userEvent.type(screen.getByLabelText("Branch base"), "main");
     await userEvent.selectOptions(select, GH);
-    await userEvent.click(screen.getByRole("button", { name: "Salvar e continuar" }));
+    await userEvent.click(screen.getByRole("button", { name: "Clonar e continuar" }));
 
     expect(await screen.findByRole("heading", { name: "Origem de tarefas" })).toBeInTheDocument();
-    const patch = calls.find((c) => c.method === "PATCH");
-    expect(patch?.csrf).toBe("csrf-1");
-    expect(patch?.body).toEqual({
+    expect(screen.getByText("Repositório clonado em meu-app.")).toBeInTheDocument();
+    const prep = calls.find((c) => c.method === "POST" && c.url.endsWith("/repository/prepare"));
+    expect(prep?.csrf).toBe("csrf-1");
+    expect(prep?.body).toEqual({
       expected_version: 2,
-      wizard_step: "source",
-      repository: { owner: "org-exemplo", name: "app", base_branch: "main", connection_id: GH },
+      mode: "github",
+      connection_id: GH,
+      owner: "org-exemplo",
+      name: "app",
+      base_branch: "main",
+    });
+    const patch = calls.find((c) => c.method === "PATCH");
+    expect(patch?.body).toEqual({ expected_version: 3, wizard_step: "source" });
+  });
+
+  it("modo pasta existente navega pelas pastas e envia o caminho escolhido", async () => {
+    const listing = (path: string) => ({
+      enabled: true,
+      path,
+      parent: path ? "" : null,
+      is_repo: false,
+      entries: path ? [] : [{ name: "meu-repo", path: "meu-repo", is_repo: true, empty: false }],
+    });
+    const calls = stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(project()),
+      "GET /connections": () => json(connections),
+      "GET /workspace/browse?path=": () => json(listing("")),
+      [`POST /projects/${ID}/repository/prepare`]: () =>
+        json({ project: project({ version: 3 }), notes: ["ok"] }),
+      [`PATCH /projects/${ID}`]: () => json(project({ version: 4, wizard_step: "source" })),
+    });
+    renderAt(`/projects/${ID}/setup`);
+    await screen.findByRole("heading", { name: "Repositório do projeto" });
+    await userEvent.click(screen.getByRole("radio", { name: /Pasta existente/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "Usar" }));
+    expect(screen.getByText(/Selecionada:/)).toHaveTextContent("/meu-repo");
+    await userEvent.click(screen.getByRole("button", { name: "Usar e continuar" }));
+    await screen.findByRole("heading", { name: "Origem de tarefas" });
+    const prep = calls.find((c) => c.url.endsWith("/repository/prepare"));
+    expect(prep?.body).toMatchObject({ mode: "local", path: "meu-repo" });
+  });
+
+  it("modo criar novo envia create_remote com visibilidade e exige conexão", async () => {
+    const calls = stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(project()),
+      "GET /connections": () => json(connections),
+      [`POST /projects/${ID}/repository/prepare`]: () =>
+        json({ project: project({ version: 3 }), notes: ["criado"] }),
+      [`PATCH /projects/${ID}`]: () => json(project({ version: 4, wizard_step: "source" })),
+    });
+    renderAt(`/projects/${ID}/setup`);
+    await screen.findByRole("heading", { name: "Repositório do projeto" });
+    await userEvent.click(screen.getByRole("radio", { name: /Criar novo/ }));
+    const submit = screen.getByRole("button", { name: "Criar e continuar" });
+    expect(submit).toBeEnabled();
+    await userEvent.click(screen.getByRole("checkbox", { name: /Criar também/ }));
+    expect(screen.getByRole("button", { name: "Criar e continuar" })).toBeDisabled();
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: /Conexão GitHub/ }), GH);
+    await userEvent.click(screen.getByRole("button", { name: "Criar e continuar" }));
+    await screen.findByRole("heading", { name: "Origem de tarefas" });
+    const prep = calls.find((c) => c.url.endsWith("/repository/prepare"));
+    expect(prep?.body).toMatchObject({
+      mode: "new",
+      create_remote: true,
+      private: true,
+      connection_id: GH,
     });
   });
 
@@ -287,7 +371,9 @@ describe("cadastro de projeto", () => {
     expect(screen.getByRole("button", { name: "Ativar projeto" })).toBeDisabled();
 
     await userEvent.click(screen.getByRole("button", { name: "Ir para a etapa" }));
-    expect(await screen.findByRole("heading", { name: "Repositório GitHub" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Repositório do projeto" }),
+    ).toBeInTheDocument();
   });
 
   it("ativa quando válido e vai para o detalhe", async () => {

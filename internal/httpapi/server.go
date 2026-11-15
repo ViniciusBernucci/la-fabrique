@@ -6,6 +6,7 @@ import (
 	"context"
 	"github.com/ViniciusBernucci/le-fabrique/internal/guidance"
 	"github.com/ViniciusBernucci/le-fabrique/internal/oauth"
+	"github.com/ViniciusBernucci/le-fabrique/internal/workspace"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -41,6 +42,7 @@ type Server struct {
 	redactor *security.Redactor
 	tester   *integrations.Tester
 	oauth    *oauth.Service
+	ws       workspace.Service
 	trackers func(integrations.Config) (integrations.Tracker, error)
 	policy   *policy.Policy
 
@@ -85,6 +87,7 @@ func NewServer(cfg config.API, db Store, log *slog.Logger, opts ...Option) (*Ser
 	}
 	s.oauth = oauth.New(cfg.OAuth, s.vault)
 	s.vault.SetRefresher(s.oauth.Refresher())
+	s.ws = workspace.Service{Root: workspace.Root{Dir: cfg.WorkspacesDir}}
 	for _, o := range opts {
 		o(s)
 	}
@@ -150,6 +153,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/connections/{id}/revoke", s.sensitive(s.revokeConnection))
 
 	// Conexão por OAuth (ADR-0060). O callback é público: o state de uso único é a prova.
+	mux.HandleFunc("GET /api/workspace/browse", s.protected(s.workspaceBrowse))
+	mux.HandleFunc("GET /api/github/repos", s.protected(s.githubRepos))
+	mux.HandleFunc("POST /api/projects/{id}/repository/prepare", s.protected(s.prepareRepository))
 	mux.HandleFunc("GET /api/oauth/providers", s.protected(s.oauthProviders))
 	mux.HandleFunc("POST /api/oauth/{kind}/start", s.protected(s.oauthStart))
 	mux.HandleFunc("GET /api/oauth/flows/{id}", s.protected(s.oauthFlow))
@@ -225,7 +231,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/projects/{id}", s.protected(s.getProject))
 	mux.HandleFunc("POST /api/projects", s.protected(s.createProject))
 	mux.HandleFunc("PATCH /api/projects/{id}", s.protected(s.updateProject))
-	mux.HandleFunc("DELETE /api/projects/{id}", s.sensitive(s.deleteProject))
+	mux.HandleFunc("DELETE /api/projects/{id}", s.protected(s.deleteProject))
 	mux.HandleFunc("GET /api/projects/{id}/validation", s.protected(s.validateProject))
 	mux.HandleFunc("GET /api/projects/{id}/changes", s.protected(s.listProjectChanges))
 	mux.HandleFunc("POST /api/projects/{id}/source/check", s.protected(s.checkProjectSource))

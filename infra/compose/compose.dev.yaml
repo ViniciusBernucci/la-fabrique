@@ -17,6 +17,7 @@ services:
     working_dir: /src
     volumes:
       - .:/src
+      - ${WORKSPACES_HOST_DIR:-./workspaces}:/workspaces
       - go_mod_cache:/go/pkg/mod
       - go_build_cache:/root/.cache/go-build
     user: "0:0"
@@ -35,6 +36,7 @@ services:
     working_dir: /src
     volumes:
       - .:/src
+      - ${WORKSPACES_HOST_DIR:-./workspaces}:/workspaces
       - go_mod_cache:/go/pkg/mod
       - go_build_cache:/root/.cache/go-build
     user: "0:0"

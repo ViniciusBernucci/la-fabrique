@@ -41,6 +41,10 @@ var validSteps = map[string]bool{StepBasics: true, StepRepository: true, StepSou
 
 // Repository é o repositório GitHub atendido. Vazio = ainda não preenchido.
 type Repository struct {
+	// Mode: "github" (clonar do GitHub), "local" (pasta existente) ou "new" (criado do zero).
+	Mode string `json:"mode"`
+	// Path é a pasta do repositório, relativa à raiz de workspaces. Vazio = a fábrica clona sozinha.
+	Path         string  `json:"path"`
 	Owner        string  `json:"owner"`
 	Name         string  `json:"name"`
 	BaseBranch   string  `json:"base_branch"`
@@ -98,7 +102,7 @@ type NewProject struct {
 }
 
 const columns = `id, slug, name, description, state, priority, wizard_step,
-	repo_owner, repo_name, base_branch, repo_connection_id,
+	repo_owner, repo_name, base_branch, repo_connection_id, repo_mode, repo_path,
 	COALESCE(source_kind, ''), source_connection_id, source_container,
 	eligibility_marker, eligible_statuses, priority_map, source_access,
 	version, activated_at, created_at, updated_at`
@@ -107,7 +111,7 @@ func scan(row interface{ Scan(...any) error }) (Project, error) {
 	var p Project
 	var statuses, priorities []byte
 	err := row.Scan(&p.ID, &p.Slug, &p.Name, &p.Description, &p.State, &p.Priority, &p.WizardStep,
-		&p.Repository.Owner, &p.Repository.Name, &p.Repository.BaseBranch, &p.Repository.ConnectionID,
+		&p.Repository.Owner, &p.Repository.Name, &p.Repository.BaseBranch, &p.Repository.ConnectionID, &p.Repository.Mode, &p.Repository.Path,
 		&p.Source.Kind, &p.Source.ConnectionID, &p.Source.Container,
 		&p.Source.EligibilityMarker, &statuses, &priorities, &p.Source.Access,
 		&p.Version, &p.ActivatedAt, &p.CreatedAt, &p.UpdatedAt)

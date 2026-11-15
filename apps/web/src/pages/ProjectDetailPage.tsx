@@ -4,7 +4,6 @@ import { FormError, toApiError } from "../components/AuthParts";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../components/States";
 import { type ApiError, api, type Connection, type Project, type ProjectChange } from "../lib/api";
-import { useReauth } from "../lib/reauth";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
 import { DeliveryPanel } from "./DeliveryPanel";
@@ -80,7 +79,6 @@ function ProjectDetail({ project, reload }: { project: Project; reload: () => vo
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const { runSensitive } = useReauth();
   const navigate = useNavigate();
   const names = connections.state.status === "ready" ? connections.state.data.items : [];
 
@@ -101,7 +99,7 @@ function ProjectDetail({ project, reload }: { project: Project; reload: () => vo
     setBusy(true);
     setError(null);
     try {
-      await runSensitive(() => api.deleteProject(project.id));
+      await api.deleteProject(project.id);
       navigate("/projects");
     } catch (e) {
       setConfirmingDelete(false);
@@ -170,7 +168,7 @@ function ProjectDetail({ project, reload }: { project: Project; reload: () => vo
             <p id="delete-desc" className="muted">
               Atenção: esta ação é permanente e não pode ser desfeita. A configuração do projeto
               (repositório, origem, recursos e histórico de alterações) será removida. Projetos com
-              execuções registradas não podem ser apagados. Será pedida sua senha e o código do 2FA.
+              execuções registradas não podem ser apagados.
             </p>
             <div className="actions">
               <button

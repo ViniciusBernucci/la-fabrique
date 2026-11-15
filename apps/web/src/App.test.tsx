@@ -23,7 +23,14 @@ const project: Project = {
   state: "active",
   priority: 3,
   wizard_step: "review",
-  repository: { owner: "org", name: "api", base_branch: "main", connection_id: null },
+  repository: {
+    mode: "github",
+    path: "",
+    owner: "org",
+    name: "api",
+    base_branch: "main",
+    connection_id: null,
+  },
   source: {
     kind: "",
     connection_id: null,

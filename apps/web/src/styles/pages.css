@@ -551,3 +551,61 @@
   background: color-mix(in srgb, var(--hud-rose) 16%, transparent);
   border-color: color-mix(in srgb, var(--hud-rose) 45%, transparent);
 }
+
+.mode-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.mode-card {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--hud-border, currentColor);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.mode-card input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.mode-card--on {
+  border-color: var(--hud-cyan, var(--hud-text-strong));
+  background: color-mix(in srgb, var(--hud-cyan, var(--hud-text-strong)) 12%, transparent);
+}
+.mode-card small {
+  color: var(--hud-text-muted);
+}
+.repo-list {
+  max-height: 260px;
+  overflow: auto;
+}
+.repo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.repo-item {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 8px 10px;
+  color: inherit;
+  cursor: pointer;
+}
+.repo-item small {
+  color: var(--hud-text-muted);
+}
+.link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--hud-cyan, inherit);
+  cursor: pointer;
+  text-decoration: underline;
+}

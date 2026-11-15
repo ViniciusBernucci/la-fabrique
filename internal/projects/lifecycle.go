@@ -114,7 +114,7 @@ func sameStr(a, b *string) bool {
 }
 
 func sameRepo(a, b Repository) bool {
-	return a.Owner == b.Owner && a.Name == b.Name && a.BaseBranch == b.BaseBranch && sameStr(a.ConnectionID, b.ConnectionID)
+	return a.Mode == b.Mode && a.Path == b.Path && a.Owner == b.Owner && a.Name == b.Name && a.BaseBranch == b.BaseBranch && sameStr(a.ConnectionID, b.ConnectionID)
 }
 
 func sameSource(a, b Source) bool {

@@ -50,6 +50,15 @@ type Patch struct {
 
 func (p Patch) touchesConfig() bool { return p.Repository != nil || p.Source != nil }
 
+// NormalizeRepository valida e normaliza os dados do repositório (modo, pasta, dono, nome, branch).
+func NormalizeRepository(r Repository) (Repository, error) {
+	p := Patch{Repository: &r}
+	if err := p.normalize(); err != nil {
+		return Repository{}, err
+	}
+	return *p.Repository, nil
+}
+
 // normalize apara texto e valida o formato dos campos preenchidos.
 func (p *Patch) normalize() error {
 	if p.Name != nil {
@@ -77,6 +86,16 @@ func (p *Patch) normalize() error {
 	}
 	if r := p.Repository; r != nil {
 		c := *r
+		if c.Mode == "" {
+			c.Mode = RepoGitHub
+		}
+		if c.Mode != RepoGitHub && c.Mode != RepoLocal && c.Mode != RepoNew {
+			return &FieldError{"repository.mode", "Modo do repositório inválido: use github, local ou new."}
+		}
+		c.Path = strings.TrimSpace(c.Path)
+		if c.Path != "" && !ValidRepoPath(c.Path) {
+			return &FieldError{"repository.path", "Pasta inválida: use um caminho relativo à raiz de workspaces, sem “..”."}
+		}
 		c.Owner, c.Name, c.BaseBranch = strings.TrimSpace(c.Owner), strings.TrimSpace(c.Name), strings.TrimSpace(c.BaseBranch)
 		if c.Owner != "" && !ownerPattern.MatchString(c.Owner) {
 			return &FieldError{"repository.owner", "Dono do repositório inválido: use letras, números e hífens (até 39)."}
@@ -112,6 +131,28 @@ func (p *Patch) normalize() error {
 		p.Source = &c
 	}
 	return nil
+}
+
+// Modos do repositório do projeto (ADR-0061).
+const (
+	RepoGitHub = "github"
+	RepoLocal  = "local"
+	RepoNew    = "new"
+)
+
+var repoPathPattern = regexp.MustCompile(`^[A-Za-z0-9._ -]{1,100}$`)
+
+// ValidRepoPath aceita só caminhos relativos limpos (segmentos simples, sem "..", sem "/" inicial).
+func ValidRepoPath(p string) bool {
+	if p == "" || len(p) > 300 || strings.HasPrefix(p, "/") {
+		return false
+	}
+	for _, seg := range strings.Split(p, "/") {
+		if seg == "." || seg == ".." || !repoPathPattern.MatchString(seg) || strings.HasPrefix(seg, "-") {
+			return false
+		}
+	}
+	return true
 }
 
 var labelPattern = regexp.MustCompile(`^[^\x00-\x1f"\\]{1,50}$`)
@@ -219,6 +260,8 @@ func Update(ctx context.Context, db persistence.DBTX, id string, expectedVersion
 			repo_name = CASE WHEN $8::boolean THEN $10 ELSE repo_name END,
 			base_branch = CASE WHEN $8::boolean THEN $11 ELSE base_branch END,
 			repo_connection_id = CASE WHEN $8::boolean THEN $12::uuid ELSE repo_connection_id END,
+			repo_mode = CASE WHEN $8::boolean THEN $22 ELSE repo_mode END,
+			repo_path = CASE WHEN $8::boolean THEN $23 ELSE repo_path END,
 			source_kind = CASE WHEN $13::boolean THEN $14::text ELSE source_kind END,
 			source_connection_id = CASE WHEN $13::boolean THEN $15::uuid ELSE source_connection_id END,
 			source_container = CASE WHEN $13::boolean THEN $16 ELSE source_container END,
@@ -233,7 +276,7 @@ func Update(ctx context.Context, db persistence.DBTX, id string, expectedVersion
 		id, expectedVersion, p.Name, p.Description, p.State, p.Priority, p.WizardStep,
 		p.Repository != nil, repo.Owner, repo.Name, repo.BaseBranch, repo.ConnectionID,
 		p.Source != nil, srcKind, src.ConnectionID, src.Container,
-		p.touchesConfig(), src.EligibilityMarker, string(statusesJSON), string(priorityJSON), accessOrRead(src.Access)))
+		p.touchesConfig(), src.EligibilityMarker, string(statusesJSON), string(priorityJSON), accessOrRead(src.Access), repo.Mode, repo.Path))
 	if errors.Is(err, persistence.ErrNotFound) {
 		if cur, getErr := Get(ctx, db, id); getErr == nil {
 			if cur.Version != expectedVersion {
@@ -367,6 +410,9 @@ func Validate(ctx context.Context, db persistence.DBTX, p Project) (Report, erro
 
 	add("repository.owner", "repository", "Dono do repositório GitHub", p.Repository.Owner != "", "Informe o dono (usuário ou organização) na etapa Repositório.")
 	add("repository.name", "repository", "Nome do repositório", p.Repository.Name != "", "Informe o nome do repositório na etapa Repositório.")
+	if p.Repository.Mode == RepoLocal || p.Repository.Mode == RepoNew {
+		add("repository.path", "repository", "Pasta do repositório", p.Repository.Path != "", "Escolha a pasta do repositório na etapa Repositório.")
+	}
 	add("repository.base_branch", "repository", "Branch base", p.Repository.BaseBranch != "", "Informe a branch base (ex.: main) na etapa Repositório.")
 	repoConn, err := lookupConnection(ctx, db, p.Repository.ConnectionID)
 	if err != nil {

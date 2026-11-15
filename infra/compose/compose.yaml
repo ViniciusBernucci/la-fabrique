@@ -69,6 +69,8 @@ services:
       JIRA_OAUTH_CLIENT_ID: ${JIRA_OAUTH_CLIENT_ID:-}
       JIRA_OAUTH_CLIENT_SECRET: ${JIRA_OAUTH_CLIENT_SECRET:-}
       OAUTH_REDIRECT_BASE: ${OAUTH_REDIRECT_BASE:-http://localhost:${WEB_PORT:-5180}}
+      # Raiz dos repositórios dos projetos (clonar, pasta existente, criar do zero; ADR-0061).
+      WORKSPACES_DIR: /workspaces
       # Chave AES-256 do cofre e do segredo TOTP: fora do banco, só no .env (openssl rand -base64 32).
       VAULT_KEY: ${VAULT_KEY:?defina VAULT_KEY no .env (openssl rand -base64 32)}
       VAULT_KEY_ID: ${VAULT_KEY_ID:-k1}
@@ -80,6 +82,8 @@ services:
       postgres: {condition: service_healthy}
       migrate: {condition: service_completed_successfully}
     networks: [private, egress]
+    volumes:
+      - ${WORKSPACES_HOST_DIR:-workspaces}:/workspaces
     read_only: true
     tmpfs: [/tmp]
     mem_limit: ${LIMIT_API_MEM:-512m}
@@ -105,6 +109,8 @@ services:
       postgres: {condition: service_healthy}
       migrate: {condition: service_completed_successfully}
     networks: [private, egress]
+    volumes:
+      - ${WORKSPACES_HOST_DIR:-workspaces}:/workspaces
     read_only: true
     tmpfs: [/tmp]
     mem_limit: ${LIMIT_WORKER_MEM:-1g}
@@ -146,3 +152,5 @@ networks:
 
 volumes:
   postgres_data:
+  # Repositórios dos projetos (clonados, abertos ou criados). Em dev, vira uma pasta do host (compose.dev.yaml).
+  workspaces:

@@ -56,6 +56,9 @@ type API struct {
 	VaultKeyID string
 	// OAuth configura as conexões por OAuth (ADR-0060).
 	OAuth oauth.Config
+	// WorkspacesDir é a raiz onde a fábrica clona, abre e cria repositórios (ADR-0061).
+	// Vazio = só repositórios que o worker clona sozinho.
+	WorkspacesDir string
 }
 
 // Worker é a configuração do cmd/worker.
@@ -236,6 +239,7 @@ func LoadAPI(lookup Lookup) (API, error) {
 	}
 	cfg.RequireHTTPS = l.boolean("REQUIRE_HTTPS", cfg.Env == Production)
 	cfg.OAuth = oauth.FromEnv(lookup)
+	cfg.WorkspacesDir = l.str("WORKSPACES_DIR", "")
 	cfg.SkipTOTP = l.boolean("AUTH_SKIP_TOTP", false)
 	if cfg.SkipTOTP && cfg.Env != Development {
 		l.fail("AUTH_SKIP_TOTP só é aceita com APP_ENV=development (ADR-0059)")
