@@ -5,6 +5,9 @@
 ## Contexto
 O responsável não quer digitar senhas ou tokens no painel: a conexão com GitHub (e demais) deve usar o acesso do próprio usuário, autorizado no site do serviço, como faz o Orca. A decisão atual do responsável prevalece sobre o item 14 do ADR-0005 (credencial colada para esses três tipos).
 
+## Premissa: app web, local ou em VPS
+O painel é web e roda localmente ou numa VPS; o navegador do usuário é a única superfície interativa e o servidor não tem Keychain, `gh` logado nem navegador. Por isso o **caminho primário do GitHub é o device flow pelo navegador** (funciona igual local e VPS; um OAuth App único com `GITHUB_OAUTH_CLIENT_ID`, sem secret). O import do `gh` (`make connect-github`) é a **alternativa local**, para quem já tem o `gh` logado na máquina da API. Jira/ClickUp: token no formulário, em qualquer ambiente.
+
 ## Revisão (2026-11-15) — decisão final do responsável
 Registrar OAuth Apps (e client secrets) é atrito sem ganho. Vale esta forma, igual ao Orca/GitKraken:
 - **GitHub (modelo do Orca, a partir da análise técnica do 1.4.259):** `make connect-github` usa o GitHub CLI da máquina. Lista as contas logadas (`gh auth status`, várias por host), obtém o token de cada uma com `gh auth token --hostname H --user U` num ambiente **sem** `GH_TOKEN`/`GITHUB_TOKEN`/`GH_ENTERPRISE_TOKEN`/`GH_HOST`/`GH_REPO`, timeout de 10 s, argv sem shell (`internal/ghcli`), confere identidade e escopos (`repo`, `read:org`, `workflow`; avisa o que falta) e grava uma conexão por conta, "GitHub · usuário". Sem conta, abre `gh auth login --web`. Rodar de novo atualiza os tokens (o "Re-check"). A tela Conexões mostra o estado (não conectado + passo a passo / conectado, escopos, aviso) e "Verificar de novo". **Conta por projeto** = a conexão GitHub escolhida na configuração do projeto (equivale ao `ghAccount` do Orca). Roda no host porque a API fica em container e não enxerga o Keychain; o token vai ao cofre e a fábrica o usa por `connection:<id>`.

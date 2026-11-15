@@ -133,12 +133,15 @@ export function OAuthPanel({
         <div className="callout" role="status">
           <strong>Não conectado</strong>
           <p>
-            1. Instale o GitHub CLI se faltar: <code>brew install gh</code>
-            <br />
-            2. No terminal, na pasta do projeto: <code>make connect-github</code> (abre o login no
-            navegador se ainda não houver conta)
-            <br />
-            3. Volte aqui e clique em Verificar de novo.
+            <strong>Pelo navegador (local ou VPS):</strong> clique em "Conectar com GitHub" abaixo.
+            Você recebe um código e autoriza no github.com com a sua conta; nada é digitado aqui.
+            Exige o app OAuth do GitHub no <code>.env</code> (uma vez, veja a dica abaixo).
+          </p>
+          <p>
+            <strong>
+              Pelo GitHub CLI (só na máquina com o <code>gh</code> logado):
+            </strong>{" "}
+            no terminal, <code>make connect-github</code>, e depois "Verificar de novo".
           </p>
         </div>
       ) : (
@@ -173,7 +176,7 @@ export function OAuthPanel({
       </div>
       {providers.state.status === "ready" &&
         providers.state.data.items
-          .filter((p) => p.available)
+          .filter((p) => p.available || p.kind === "github")
           .map((p) => (
             <div key={p.kind} className="form form--inline">
               <label>

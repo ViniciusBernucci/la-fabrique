@@ -164,7 +164,7 @@ func (s *Service) SetClock(now func() time.Time) { s.now = now }
 // Providers lista o que está configurado.
 func (s *Service) Providers() []Provider {
 	return []Provider{
-		{Kind: GitHub, Flow: "device", Available: s.cfg.GitHubClientID != "", Hint: "Defina GITHUB_OAUTH_CLIENT_ID (OAuth App com Device Flow habilitado)."},
+		{Kind: GitHub, Flow: "device", Available: s.cfg.GitHubClientID != "", Hint: "Configuração única: em github.com/settings/developers crie um OAuth App, marque \"Enable Device Flow\", copie o Client ID para GITHUB_OAUTH_CLIENT_ID no .env e reinicie a API."},
 		{Kind: ClickUp, Flow: "redirect", Available: s.cfg.ClickUpClientID != "" && s.cfg.ClickUpClientSecret != "",
 			Hint: "Defina CLICKUP_OAUTH_CLIENT_ID e CLICKUP_OAUTH_CLIENT_SECRET; redirect URL: " + s.cfg.CallbackURL()},
 		{Kind: Jira, Flow: "redirect", Available: s.cfg.JiraClientID != "" && s.cfg.JiraClientSecret != "",
