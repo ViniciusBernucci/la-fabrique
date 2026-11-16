@@ -80,7 +80,28 @@ type collector struct {
 	total int
 }
 
+// isOSJunk diz se o caminho é lixo que o sistema operacional põe em pacotes e que não faz parte da
+// skill: a pasta __MACOSX/ e os arquivos ._* (AppleDouble) do "Comprimir" do Finder, .DS_Store,
+// Thumbs.db e desktop.ini. Sem isso, um zip feito no macOS tem duas pastas na raiz, a raiz única não
+// é removida e o SKILL.md "some" (erro no_manifest). Só o nome do elemento conta: um arquivo legítimo
+// como "docs/macosx.md" não é afetado.
+func isOSJunk(path string) bool {
+	parts := strings.Split(path, "/")
+	if parts[0] == "__MACOSX" {
+		return true
+	}
+	for _, el := range parts {
+		if el == ".DS_Store" || strings.EqualFold(el, "Thumbs.db") || strings.EqualFold(el, "desktop.ini") {
+			return true
+		}
+	}
+	return strings.HasPrefix(parts[len(parts)-1], "._")
+}
+
 func (c *collector) add(path string, content []byte) error {
+	if isOSJunk(path) {
+		return nil
+	}
 	clean, err := CleanPath(path)
 	if err != nil {
 		return err
