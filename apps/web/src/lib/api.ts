@@ -348,6 +348,13 @@ export interface OAuthStatus {
   connection?: Connection;
 }
 
+/** Recurso global associado a um projeto (workflow, agente, skill, ferramenta ou modelo). */
+export interface ProjectResource {
+  kind: "workflow" | "agent" | "skill" | "tool" | "model";
+  ref: string;
+  name: string;
+}
+
 /** Login oficial de uma conta de assinatura de IA (ADR-0065). */
 export type CLIProvider = "claude" | "codex";
 export interface CLILogin {
@@ -518,6 +525,8 @@ export interface Skill {
     steps: SkillStep[];
   };
   needs_approval: boolean;
+  /** Skill padrão da fábrica (ADR-0066): já vem instalada e associada a todos os projetos. */
+  is_default: boolean;
   version: number;
   files?: { path: string; sha256: string; size: number }[];
   created_at: string;
@@ -1039,6 +1048,10 @@ export const api = {
     post<SourceCheck>(`/projects/${encodeURIComponent(id)}/source/check`),
   validateProject: (id: string, signal?: AbortSignal) =>
     request<ValidationReport>(`/projects/${encodeURIComponent(id)}/validation`, { signal }),
+  projectResources: (id: string, signal?: AbortSignal) =>
+    request<{ resources: ProjectResource[] }>(`/projects/${encodeURIComponent(id)}/resources`, {
+      signal,
+    }),
   projectChanges: (id: string, signal?: AbortSignal) =>
     request<{ items: ProjectChange[] }>(`/projects/${encodeURIComponent(id)}/changes`, { signal }),
   activateProject: (id: string, expected_version: number) =>

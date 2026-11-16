@@ -443,7 +443,7 @@ const sections: Section[] = [
             ],
             [
               "Agentes, workflows e recursos",
-              "O que está associado ao projeto. “Nenhum associado” significa que nada foi vinculado ainda.",
+              "O que está associado ao projeto, por tipo. As skills padrão da fábrica já vêm associadas a todo projeto; “Nenhum associado” significa que nada foi vinculado.",
             ],
           ]}
         />

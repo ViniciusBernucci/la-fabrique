@@ -765,3 +765,8 @@
     gap: 2px;
   }
 }
+
+.resource-list {
+  display: grid;
+  gap: 4px;
+}

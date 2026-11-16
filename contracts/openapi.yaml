@@ -3198,12 +3198,13 @@ components:
         size: {type: integer}
     Skill:
       type: object
-      required: [id, name, description, executor, source_kind, source_ref, revision, content_hash, body, manifest, needs_approval, version, created_at, updated_at]
+      required: [id, name, description, executor, source_kind, source_ref, revision, content_hash, body, manifest, needs_approval, is_default, version, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         name: {type: string}
         description: {type: string}
         executor: {type: string, enum: [ai, script, deterministic, hybrid]}
+        is_default: {type: boolean, description: "Skill padrão da fábrica (ADR-0066): instalada ao subir a API e associada a todos os projetos."}
         source_kind: {type: string, enum: [manual, file, package, git]}
         source_ref: {type: string}
         revision: {type: string}

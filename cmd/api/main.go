@@ -14,6 +14,8 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/config"
 	"github.com/ViniciusBernucci/le-fabrique/internal/httpapi"
 	"github.com/ViniciusBernucci/le-fabrique/internal/logging"
+	"github.com/ViniciusBernucci/le-fabrique/internal/policy"
+	"github.com/ViniciusBernucci/le-fabrique/internal/skills"
 )
 
 func main() { os.Exit(run()) }
@@ -47,6 +49,16 @@ func run() int {
 	if err != nil {
 		log.Error("falha ao carregar o cofre", "error", err.Error())
 		return 1
+	}
+	// Skills padrão da fábrica (ADR-0066): instaladas no catálogo e associadas aos projetos. Falhar aqui
+	// não impede a API de subir: o painel funciona e a próxima subida tenta de novo.
+	installCtx, cancelInstall := context.WithTimeout(ctx, 30*time.Second)
+	rep, ierr := skills.InstallDefaults(installCtx, pool, policy.DefaultPolicy(policy.Options{}))
+	cancelInstall()
+	if ierr != nil {
+		log.Warn("não consegui instalar as skills padrão", "error", ierr.Error())
+	} else if len(rep.Installed)+len(rep.Updated) > 0 || len(rep.Kept) > 0 {
+		log.Info("skills padrão", "instaladas", rep.Installed, "atualizadas", rep.Updated, "mantidas", rep.Kept)
 	}
 	srv := &http.Server{
 		Addr:              cfg.Addr,

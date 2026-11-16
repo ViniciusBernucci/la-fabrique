@@ -488,6 +488,7 @@ describe("detalhe do projeto", () => {
       [`GET /projects/${ID}`]: () => json(project()),
       "GET /connections": () => json(connections),
       [`GET /projects/${ID}/validation`]: () => json(pendingReport),
+      [`GET /projects/${ID}/resources`]: () => json({ resources: [] }),
       [`GET /projects/${ID}/changes`]: () =>
         json({
           items: [{ id: 1, action: "created", detail: {}, created_at: "2026-11-12T10:00:00Z" }],
@@ -499,7 +500,7 @@ describe("detalhe do projeto", () => {
       `/projects/${ID}/setup`,
     );
     expect(await screen.findByText("Informe o dono na etapa Repositório.")).toBeInTheDocument();
-    expect(screen.getByText("Nenhum associado")).toBeInTheDocument();
+    expect(await screen.findByText("Nenhum associado")).toBeInTheDocument();
     expect(await screen.findByText("Rascunho criado")).toBeInTheDocument();
   });
 
@@ -605,6 +606,28 @@ describe("detalhe do projeto", () => {
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Como funciona este painel" })).toHaveFocus();
+  });
+
+  it("mostra as skills padrão já associadas ao projeto, agrupadas por tipo", async () => {
+    stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(project()),
+      "GET /connections": () => json(connections),
+      [`GET /projects/${ID}/validation`]: () => json(pendingReport),
+      [`GET /projects/${ID}/changes`]: () => json({ items: [] }),
+      [`GET /projects/${ID}/resources`]: () =>
+        json({
+          resources: [
+            { kind: "skill", ref: "s1", name: "lf-tech-lead" },
+            { kind: "skill", ref: "s2", name: "escrever-prd-e-specs" },
+          ],
+        }),
+    });
+    renderAt(`/projects/${ID}`);
+    expect(
+      await screen.findByText("Skills (2): escrever-prd-e-specs, lf-tech-lead"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Nenhum associado")).not.toBeInTheDocument();
   });
 
   it("suspende um projeto ativo enviando a versão atual", async () => {

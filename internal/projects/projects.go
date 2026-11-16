@@ -124,7 +124,7 @@ func scan(row interface{ Scan(...any) error }) (Project, error) {
 	return p, nil
 }
 
-// Create cria um projeto em rascunho, sem vínculos.
+// Create cria um projeto em rascunho, sem vínculos de repositório ou origem (só as skills padrão).
 func Create(ctx context.Context, db persistence.DBTX, in NewProject) (Project, error) {
 	in.Slug = strings.TrimSpace(in.Slug)
 	in.Name = strings.TrimSpace(in.Name)
@@ -146,8 +146,13 @@ func Create(ctx context.Context, db persistence.DBTX, in NewProject) (Project, e
 		return Project{}, &FieldError{Field: "priority", Message: "A prioridade deve estar entre 0 e 4."}
 	}
 	// Criar conclui a etapa "Dados": o assistente retoma em "Repositório".
+	// O projeto já nasce com as skills padrão da fábrica associadas (ADR-0066), no mesmo comando.
 	return scan(db.QueryRow(ctx,
-		`INSERT INTO projects (slug, name, description, priority, wizard_step) VALUES ($1, $2, $3, $4, 'repository') RETURNING `+columns,
+		`WITH p AS (
+			INSERT INTO projects (slug, name, description, priority, wizard_step) VALUES ($1, $2, $3, $4, 'repository') RETURNING *
+		), r AS (
+			INSERT INTO project_resources (project_id, kind, ref) SELECT p.id, 'skill', s.id::text FROM p, skills s WHERE s.is_default
+		) SELECT `+columns+` FROM p`,
 		in.Slug, in.Name, in.Description, priority))
 }
 

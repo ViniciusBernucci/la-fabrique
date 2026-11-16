@@ -3,7 +3,14 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { FormError, toApiError } from "../components/AuthParts";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../components/States";
-import { type ApiError, api, type Connection, type Project, type ProjectChange } from "../lib/api";
+import {
+  type ApiError,
+  api,
+  type Connection,
+  type Project,
+  type ProjectChange,
+  type ProjectResource,
+} from "../lib/api";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
 import { DeliveryPanel } from "./DeliveryPanel";
@@ -66,6 +73,24 @@ const changeLabel: Record<ProjectChange["action"], string> = {
   cleanup_applied: "Limpeza aplicada",
 };
 
+const resourceLabel: Record<ProjectResource["kind"], string> = {
+  workflow: "Workflows",
+  agent: "Agentes",
+  skill: "Skills",
+  tool: "Ferramentas",
+  model: "Modelos",
+};
+
+/** "Skills (6): a, b…" por tipo; vazio = "Nenhum associado". */
+function resourceSummary(items: ProjectResource[]): string[] {
+  const by = new Map<string, string[]>();
+  for (const r of items) by.set(r.kind, [...(by.get(r.kind) ?? []), r.name || r.ref]);
+  return [...by.entries()].map(
+    ([kind, names]) =>
+      `${resourceLabel[kind as ProjectResource["kind"]]} (${names.length}): ${names.sort().join(", ")}`,
+  );
+}
+
 function connectionName(id: string | null, connections: Connection[]): string {
   if (!id) return "—";
   return connections.find((c) => c.id === id)?.name ?? "Conexão indisponível";
@@ -82,6 +107,11 @@ function ProjectDetail({ project, reload }: { project: Project; reload: () => vo
   const changes = useResource(
     (s) => api.projectChanges(project.id, s),
     `changes:${project.id}:${project.version}`,
+    expire,
+  );
+  const resources = useResource(
+    (s) => api.projectResources(project.id, s),
+    `resources:${project.id}:${project.version}`,
     expire,
   );
   const [busy, setBusy] = useState(false);
@@ -268,7 +298,20 @@ function ProjectDetail({ project, reload }: { project: Project; reload: () => vo
           </div>
           <div>
             <dt>Agentes, workflows e recursos</dt>
-            <dd>Nenhum associado</dd>
+            <dd>
+              {resources.state.status === "loading" && "Carregando…"}
+              {resources.state.status === "error" && "Não foi possível carregar"}
+              {resources.state.status === "ready" &&
+                (resources.state.data.resources.length === 0 ? (
+                  "Nenhum associado"
+                ) : (
+                  <span className="resource-list">
+                    {resourceSummary(resources.state.data.resources).map((line) => (
+                      <span key={line}>{line}</span>
+                    ))}
+                  </span>
+                ))}
+            </dd>
           </div>
         </dl>
       </section>

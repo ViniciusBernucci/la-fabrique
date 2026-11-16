@@ -34,20 +34,23 @@ type DB interface {
 
 // Skill é uma skill do catálogo.
 type Skill struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	Description   string    `json:"description"`
-	Executor      string    `json:"executor"`
-	SourceKind    string    `json:"source_kind"`
-	SourceRef     string    `json:"source_ref"`
-	Revision      string    `json:"revision"`
-	ContentHash   string    `json:"content_hash"`
-	Body          string    `json:"body"`
-	Manifest      Manifest  `json:"manifest"`
-	NeedsApproval bool      `json:"needs_approval"`
-	Version       int       `json:"version"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	Description   string   `json:"description"`
+	Executor      string   `json:"executor"`
+	SourceKind    string   `json:"source_kind"`
+	SourceRef     string   `json:"source_ref"`
+	Revision      string   `json:"revision"`
+	ContentHash   string   `json:"content_hash"`
+	Body          string   `json:"body"`
+	Manifest      Manifest `json:"manifest"`
+	NeedsApproval bool     `json:"needs_approval"`
+	// IsDefault marca as skills padrão da fábrica (ADR-0066): instaladas ao subir a API e associadas a
+	// todos os projetos. Editar ou substituir a skill não tira a marca.
+	IsDefault bool      `json:"is_default"`
+	Version   int       `json:"version"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // FileInfo descreve um arquivo guardado (sem o conteúdo).
@@ -57,13 +60,13 @@ type FileInfo struct {
 	Size   int    `json:"size"`
 }
 
-const columns = `id, name, description, executor, source_kind, source_ref, revision, content_hash, body, manifest, needs_approval, version, created_at, updated_at`
+const columns = `id, name, description, executor, source_kind, source_ref, revision, content_hash, body, manifest, needs_approval, is_default, version, created_at, updated_at`
 
 func scan(row interface{ Scan(...any) error }) (Skill, error) {
 	var s Skill
 	var raw []byte
 	if err := row.Scan(&s.ID, &s.Name, &s.Description, &s.Executor, &s.SourceKind, &s.SourceRef, &s.Revision, &s.ContentHash,
-		&s.Body, &raw, &s.NeedsApproval, &s.Version, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		&s.Body, &raw, &s.NeedsApproval, &s.IsDefault, &s.Version, &s.CreatedAt, &s.UpdatedAt); err != nil {
 		return s, persistence.MapError(err)
 	}
 	_ = json.Unmarshal(raw, &s.Manifest)
