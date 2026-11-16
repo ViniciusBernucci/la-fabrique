@@ -649,3 +649,116 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+.manual {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 16px;
+  width: min(1040px, 100%);
+  max-height: calc(100vh - 48px);
+  padding: 20px;
+}
+.manual-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.manual-head h2 {
+  margin: 0;
+}
+.manual-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 24px;
+  min-height: 0;
+}
+.manual-toc {
+  overflow-y: auto;
+  padding-right: 8px;
+  border-right: 1px solid var(--hud-line);
+  font-size: 13px;
+}
+.manual-toc ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+}
+.manual-toc .link-button {
+  text-align: left;
+}
+.manual-body {
+  display: grid;
+  align-content: start;
+  gap: 28px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 8px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.manual-body h3 {
+  margin: 0 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--hud-line);
+}
+.manual-body h4 {
+  margin: 16px 0 6px;
+}
+.manual-body p,
+.manual-body ol {
+  margin: 8px 0;
+}
+.manual-body ol {
+  padding-left: 20px;
+}
+.manual-when {
+  color: var(--hud-text-muted);
+  font-size: 13px;
+  font-style: italic;
+}
+.manual-fields,
+.manual-recipes {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+}
+.manual-fields > div {
+  display: grid;
+  grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--hud-line);
+  border-radius: var(--hud-radius);
+  background: var(--hud-surface-2);
+}
+.manual-fields dt,
+.manual-recipes dt {
+  font-weight: 600;
+}
+.manual-fields dd,
+.manual-recipes dd {
+  margin: 0;
+}
+.manual-recipes dt {
+  margin-top: 6px;
+}
+.manual code {
+  font-family: var(--hud-font-mono);
+}
+@media (max-width: 760px) {
+  .manual-layout {
+    grid-template-columns: 1fr;
+  }
+  .manual-toc {
+    max-height: 120px;
+    border-right: 0;
+    border-bottom: 1px solid var(--hud-line);
+    padding-bottom: 8px;
+  }
+  .manual-fields > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}

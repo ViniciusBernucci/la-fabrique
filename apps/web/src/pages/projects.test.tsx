@@ -574,6 +574,39 @@ describe("detalhe do projeto", () => {
     expect(await screen.findByText(/Arquivadas: 1/)).toBeInTheDocument();
   });
 
+  it("o botão do topo abre o manual do painel, navega pelo índice e fecha com Esc", async () => {
+    stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(project({ state: "active", version: 5 })),
+      "GET /connections": () => json(connections),
+      [`GET /projects/${ID}/validation`]: () => json(okReport),
+      [`GET /projects/${ID}/changes`]: () => json({ items: [] }),
+      [`GET /projects/${ID}/overview`]: () => err(404, "not_found", "x"),
+    });
+    renderAt(`/projects/${ID}`);
+    const open = await screen.findByRole("button", { name: "Como funciona este painel" });
+    expect(
+      screen.queryByRole("dialog", { name: /Como funciona o painel/ }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(open);
+    const dialog = await screen.findByRole("dialog", { name: "Como funciona o painel do projeto" });
+    // cada parte do painel tem a sua seção
+    for (const title of [
+      /Execução: o que está rodando agora/,
+      /Entregas: Pull Requests e merge/,
+      /Memória técnica/,
+      /Setup do repositório/,
+      /Limpeza das worktrees/,
+      /Receitas/,
+    ]) {
+      expect(within(dialog).getAllByText(title).length).toBeGreaterThan(0);
+    }
+    await userEvent.click(within(dialog).getByRole("button", { name: /Receitas/ }));
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Como funciona este painel" })).toHaveFocus();
+  });
+
   it("suspende um projeto ativo enviando a versão atual", async () => {
     const calls = stub({
       "GET /session": () => json(session),

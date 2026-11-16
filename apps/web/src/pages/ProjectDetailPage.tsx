@@ -8,6 +8,7 @@ import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
 import { DeliveryPanel } from "./DeliveryPanel";
 import { MemoryPanel } from "./MemoryPanel";
+import { ProjectManualButton } from "./ProjectManual";
 import { ProjectOpsPanel } from "./ProjectOpsPanel";
 import { StateBadge } from "./ProjectsPage";
 import { RunPanel } from "./RunPanel";
@@ -117,6 +118,7 @@ function ProjectDetail({ project, reload }: { project: Project; reload: () => vo
 
   const actions = (
     <div className="actions">
+      <ProjectManualButton />
       <StateBadge state={project.state} />
       {project.state === "draft" && (
         <Link className="button-link" to={`/projects/${project.id}/setup`}>
