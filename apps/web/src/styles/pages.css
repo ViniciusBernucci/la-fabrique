@@ -82,12 +82,15 @@
 }
 
 .badge {
+  display: inline-flex;
+  align-items: center; /* texto centrado na vertical, mesmo se o selo ganhar altura extra */
+  align-self: center; /* em linhas flex (ex.: botões do topo) não estica até a altura dos vizinhos */
   width: fit-content;
-  padding: 2px 9px;
+  padding: 4px 9px;
   border: 1px solid var(--hud-line-strong);
   border-radius: var(--hud-radius-pill);
   color: var(--hud-text-muted);
-  font: 500 11px var(--hud-font-mono);
+  font: 500 11px / 1 var(--hud-font-mono);
   white-space: nowrap;
 }
 .badge--active {
