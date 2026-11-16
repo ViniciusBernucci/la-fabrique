@@ -225,6 +225,9 @@ func TestCloneFromRemoteAndReuse(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "app", "a")); err != nil {
 		t.Fatal("o clone não trouxe os arquivos")
 	}
+	if _, err := os.Stat(filepath.Join(root, "app"+CloneTmpSuffix)); !os.IsNotExist(err) {
+		t.Fatal("a pasta temporária do clone não pode sobrar")
+	}
 	// origin do clone é file://, então não bate com acme/app: tratado como outro repositório.
 	if _, err := s.Prepare(context.Background(), req); err == nil {
 		t.Fatal("pasta ocupada deveria falhar")
@@ -242,6 +245,45 @@ func TestCloneFromRemoteAndReuse(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "app2")); !os.IsNotExist(err) {
 		t.Fatal("clone falho deveria limpar a pasta")
+	}
+}
+
+// Uma tentativa interrompida deixa só a pasta temporária: o destino segue livre e a nova tentativa
+// limpa a sobra e conclui, sem reaproveitar checkout pela metade.
+func TestCloneRecoversFromInterruptedAttempt(t *testing.T) {
+	s, root := service(t)
+	remotes := t.TempDir()
+	bare := filepath.Join(remotes, "acme", "app.git")
+	_ = os.MkdirAll(bare, 0o755)
+	gitCmd(t, bare, "init", "--bare", "-b", "main")
+	seed := t.TempDir()
+	gitCmd(t, seed, "init", "-b", "main")
+	_ = os.WriteFile(filepath.Join(seed, "a"), []byte("x"), 0o644)
+	gitCmd(t, seed, "add", ".")
+	gitCmd(t, seed, "commit", "-m", "i")
+	gitCmd(t, seed, "remote", "add", "origin", "file://"+bare)
+	gitCmd(t, seed, "push", "origin", "main")
+	s.WebURL = "file://" + remotes
+
+	// sobra de um clone morto no meio: pasta temporária com .git incompleto e trava
+	stale := filepath.Join(root, "app"+CloneTmpSuffix)
+	_ = os.MkdirAll(filepath.Join(stale, ".git"), 0o755)
+	_ = os.WriteFile(filepath.Join(stale, ".git", "index.lock"), nil, 0o644)
+
+	req := Request{Mode: ModeGitHub, Slug: "app", Owner: "acme", Name: "app", Base: "main"}
+	if _, err := s.Prepare(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "app", "a")); err != nil {
+		t.Fatal("o clone não trouxe os arquivos")
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatal("a sobra da tentativa interrompida deveria ter sido removida")
+	}
+	st := exec.Command("git", "status", "--porcelain")
+	st.Dir = filepath.Join(root, "app")
+	if out, err := st.CombinedOutput(); err != nil || strings.TrimSpace(string(out)) != "" {
+		t.Fatalf("checkout deveria estar íntegro: %v %q", err, out)
 	}
 }
 

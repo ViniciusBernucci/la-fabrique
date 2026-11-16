@@ -118,20 +118,37 @@ func (g Git) Clone(ctx context.Context, url, dest, branch string, token security
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err
 	}
+	// O clone vai para uma pasta temporária vizinha e só vira o destino no fim (rename atômico).
+	// Se o processo morrer no meio (reinício da API, requisição cancelada), o destino nunca fica
+	// com um checkout pela metade que a próxima tentativa reaproveitaria como se estivesse inteiro.
+	tmp := dest + CloneTmpSuffix
+	if err := os.RemoveAll(tmp); err != nil { // sobra de uma tentativa anterior interrompida
+		return err
+	}
 	args := []string{"clone", "--single-branch"}
 	if branch != "" {
 		args = append(args, "--branch", branch)
 	}
-	args = append(args, "--", url, dest)
+	args = append(args, "--", url, tmp)
 	if _, err := g.run(ctx, "", token, args...); err != nil {
-		_ = removeIfEmptyish(dest)
+		_ = os.RemoveAll(tmp)
+		return err
+	}
+	if _, err := os.Stat(dest); err == nil { // pasta vazia (checada acima): cede lugar ao clone
+		if err := os.Remove(dest); err != nil {
+			_ = os.RemoveAll(tmp)
+			return err
+		}
+	}
+	if err := os.Rename(tmp, dest); err != nil {
+		_ = os.RemoveAll(tmp)
 		return err
 	}
 	return nil
 }
 
-// removeIfEmptyish limpa o que um clone falho possa ter deixado (só se estava vazio antes).
-func removeIfEmptyish(dest string) error { return os.RemoveAll(dest) }
+// CloneTmpSuffix marca a pasta temporária do clone em andamento.
+const CloneTmpSuffix = ".lf-clone-tmp"
 
 // Info descreve um repositório existente.
 type Info struct {
