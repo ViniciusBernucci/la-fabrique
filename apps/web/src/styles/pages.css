@@ -609,3 +609,18 @@
   cursor: pointer;
   text-decoration: underline;
 }
+
+.code-block {
+  max-height: 280px;
+  overflow: auto;
+  margin: 8px 0;
+  padding: 12px;
+  border: 1px solid var(--hud-line);
+  border-radius: var(--hud-radius);
+  background: var(--hud-surface-solid);
+  color: var(--hud-text);
+  font-family: var(--hud-font-mono);
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

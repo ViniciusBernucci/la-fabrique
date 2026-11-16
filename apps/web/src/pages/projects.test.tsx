@@ -488,6 +488,77 @@ describe("detalhe do projeto", () => {
     expect(await screen.findByText("Rascunho criado")).toBeInTheDocument();
   });
 
+  it("aprova o setup pelo hash revisado e liga a limpeza com simulação", async () => {
+    const base = project({ state: "paused", version: 4 });
+    const withPath = { ...base, repository: { ...base.repository, path: "app" } };
+    const sha = "a".repeat(64);
+    let approved = false;
+    let policy = { enabled: false, archive_idle_days: 7, remove_archived_days: 30 };
+    const calls = stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(withPath),
+      "GET /connections": () => json(connections),
+      [`GET /projects/${ID}/validation`]: () => json(okReport),
+      [`GET /projects/${ID}/changes`]: () => json({ items: [] }),
+      [`GET /projects/${ID}/overview`]: () => err(404, "not_found", "x"),
+      [`GET /projects/${ID}/setup`]: () =>
+        json({
+          ref: "main",
+          commit: "c1",
+          found: true,
+          sha256: sha,
+          content: "npm ci --offline",
+          approved,
+          approval_id: approved ? "ap1" : undefined,
+        }),
+      [`POST /projects/${ID}/setup/approve`]: () => {
+        approved = true;
+        return json({});
+      },
+      [`GET /projects/${ID}/cleanup`]: () =>
+        json({
+          policy,
+          hash: "b".repeat(64),
+          generated_at: "2026-11-15T10:00:00Z",
+          items: policy.enabled
+            ? [
+                {
+                  attempt_id: "t1",
+                  branch: "lf-tmp/x/backend-impl-1",
+                  action: "archive",
+                  reason: "parada",
+                },
+              ]
+            : [],
+        }),
+      [`PUT /projects/${ID}/cleanup/policy`]: (c) => {
+        policy = c.body as typeof policy;
+        return json(policy);
+      },
+      [`POST /projects/${ID}/cleanup/apply`]: () => json({ archived: 1, removed: 0, failed: 0 }),
+    });
+    renderAt(`/projects/${ID}`);
+    expect(await screen.findByText("npm ci --offline")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Aprovar este script" }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.url.endsWith("/setup/approve"))?.body).toEqual({
+        ref: "main",
+        sha256: sha,
+      }),
+    );
+    expect(await screen.findByText("Aprovado para este conteúdo.")).toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Limpeza ligada" }));
+    expect(await screen.findByText(/parada/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Aplicar esta simulação/ }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.url.endsWith("/cleanup/apply"))?.body).toEqual({
+        hash: "b".repeat(64),
+      }),
+    );
+    expect(await screen.findByText(/Arquivadas: 1/)).toBeInTheDocument();
+  });
+
   it("suspende um projeto ativo enviando a versão atual", async () => {
     const calls = stub({
       "GET /session": () => json(session),

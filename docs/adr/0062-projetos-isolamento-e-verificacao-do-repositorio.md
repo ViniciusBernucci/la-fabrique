@@ -18,7 +18,7 @@ O responsável forneceu a análise técnica do sistema de projetos do Orca 1.4.2
 
 ## Decisões para as próximas fases (ainda não implementadas)
 - **Fase 2 — worktrees por tentativa** (implementada, ver abaixo).
-- **Fase 3 — setup do repositório e limpeza.** Scripts de setup (equivalente ao `orca.yaml`) **só rodam dentro do sandbox**, nunca no host da API, e exigem **aprovação do usuário vinculada ao hash** do arquivo, por projeto e ref; conteúdo alterado pede nova aprovação (decisão do responsável). Limpeza: regras desligadas por padrão, simulação (dry-run) antes de apagar, nunca remove árvore suja, arquivos só locais ou processo vivo; arquivar e remover são ações distintas.
+- **Fase 3 — setup do repositório e limpeza** (implementada, ver abaixo).
 
 ## Decisão (fase 2, implementada)
 1. **Worktrees ligadas ao checkout do projeto.** `worktrees.Provider.For(projeto)` usa a pasta do projeto (`repo_path`, resolvida dentro da raiz, sem links para fora) como checkout principal, que a fábrica **nunca altera** (branch e árvore intactas; testado). As worktrees nascem em `<raiz>/.lf-worktrees/…` (pasta oculta, fora da navegação); caminhos de projeto com segmento oculto (`.x`) passam a ser recusados.
@@ -29,6 +29,14 @@ O responsável forneceu a análise técnica do sistema de projetos do Orca 1.4.2
 6. **Links para fora** (`Manager.Escapes`): lista links simbólicos da worktree que apontam para fora dela, para o executor recusar a entrega.
 
 **Ainda não ligado:** nenhum `cmd/` constrói o `Manager` hoje (a execução de tentativas ainda não roda no worker); o `Provider` fica pronto para quando o executor for ligado. Montar só a worktree no sandbox depende dessa ligação.
+
+## Decisão (fase 3, implementada)
+1. **Setup versionado e aprovado por hash.** O script é `.lafabrique/setup.sh` (arquivo de texto UTF-8, até 64 KB), lido **do commit** da ref (nunca da árvore de trabalho). A tela e `GET /api/projects/{id}/setup` mostram o conteúdo e o SHA-256; `POST …/setup/approve` recebe a ref e o hash que o usuário revisou e **recusa (409 `setup_changed`)** se o conteúdo atual for outro. A aprovação é por projeto, ref e hash; mudar o conteúdo muda o hash e exige nova aprovação; pode ser revogada. Aprovar, revogar e rodar entram na trilha do projeto.
+2. **Só no sandbox.** `projectsetup.Service.Run` exige aprovação do hash **lido naquele instante** e envia exatamente esse conteúdo por stdin ao `sh -s` dentro do sandbox (sem janela entre checar e usar). O sandbox usa o perfil escolhido com **rede desligada**, sem segredos, sem montar a raiz de workspaces: recebe só o `git archive` da árvore pedida (a branch/SHA da tentativa). Nunca roda no host da API. O resultado (ok/failed/timeout, código e fim da saída) fica em `project_setup_runs`.
+3. **Limpeza desligada por padrão**, por projeto (`worktree_cleanup_policy`: ligada, dias parada para arquivar, dias arquivada para remover). **Simulação antes de apagar:** `GET …/cleanup` devolve itens (`archive`/`remove`/`skip`, cada um com motivo) e um hash; `POST …/cleanup/apply` refaz a simulação e só executa se o hash for o que o usuário viu (409 `cleanup_plan_changed`).
+4. **Arquivar e remover são ações distintas.** Arquivar = `Release` (checkpoint com arquivos não versionados + ref de arquivo; tira só a pasta) para tentativa ativa **sem escritor vivo** e parada há mais que o prazo. Remover (irreversível: apaga a ref de arquivo e os checkpoints) só para tentativa já arquivada há mais que o prazo, cuja ponta **já está na branch base** e cujo último checkpoint **não guarda arquivos só locais**. Tentativa com processo escritor vivo nunca é tocada; sem branch base conhecida, nada é removido.
+
+**Limites:** o setup roda sem rede (um repositório que precisa baixar dependências no setup depende de um gateway de saída, ainda não existente); a execução do setup é uma função do serviço, **não há rota que a dispare** (a API do stack não tem Docker; ela será chamada pelo executor quando ele for ligado ao worker, assim como o `Manager`); a aprovação é uma ação autenticada (sessão + CSRF), sem reautenticação, por decisão do responsável de não pedir senha/2FA nessas ações.
 
 ## Isolamento entre projetos (princípios)
 Cada agente roda no sandbox com **só a sua worktree** montada (nunca a raiz de workspaces); token por cabeçalho no ambiente do processo e conexão por projeto; hooks do repositório desligados, submódulos fora, links simbólicos que saiam da worktree recusados e nomes de branch validados com `git check-ref-format` (feito na fase 2); só dados recriáveis ficam no volume, e o aviso de backup recai sobre repositórios `new`/`local` sem remoto.

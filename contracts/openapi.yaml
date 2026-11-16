@@ -509,6 +509,168 @@ paths:
         "403": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
         "409": {$ref: "#/components/responses/Error"}
+  /projects/{id}/setup:
+    get:
+      tags: [projetos]
+      summary: Script de setup do repositório (.lafabrique/setup.sh) numa ref e se está aprovado
+      description: >
+        Lê o arquivo versionado na ref (padrão: branch base do projeto), devolve o conteúdo para revisão e o hash
+        SHA-256. O script só roda dentro do sandbox e só com aprovação vinculada a esse hash; mudar o conteúdo
+        muda o hash e exige nova aprovação.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: ref, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: Estado do setup
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ref, commit, found, sha256, content, approved]
+                properties:
+                  ref: {type: string}
+                  commit: {type: string}
+                  found: {type: boolean}
+                  sha256: {type: string}
+                  content: {type: string}
+                  approved: {type: boolean}
+                  approval_id: {type: string}
+                  approved_at: {type: string, format: date-time}
+                  last_run:
+                    type: object
+                    properties:
+                      id: {type: string}
+                      ref: {type: string}
+                      sha256: {type: string}
+                      status: {type: string, enum: [ok, failed, timeout]}
+                      exit_code: {type: integer}
+                      output_tail: {type: string}
+                      finished_at: {type: string, format: date-time}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /projects/{id}/setup/approve:
+    post:
+      tags: [projetos]
+      summary: Aprova o script de setup revisado (vinculado ao hash)
+      description: Se o conteúdo atual tiver outro hash, responde 409 `setup_changed` em vez de aprovar o que o usuário não viu.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ref, sha256]
+              properties:
+                ref: {type: string}
+                sha256: {type: string}
+      responses:
+        "200":
+          description: Estado do setup já aprovado
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /projects/{id}/setup/approvals/{approval}:
+    delete:
+      tags: [projetos]
+      summary: Revoga uma aprovação do setup
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: approval, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "204": {description: Revogada}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/cleanup:
+    get:
+      tags: [projetos]
+      summary: Política de limpeza das worktrees e simulação (nada é alterado)
+      description: >
+        Desligada por padrão. Arquivar preserva tudo (checkpoint e ref de arquivo) e tira só a pasta; remover apaga
+        as refs de arquivo (irreversível) e só vale para trabalho já incorporado na branch base e sem arquivos só
+        locais. Nunca toca tentativa com processo escritor vivo.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Política, itens e hash da simulação
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [policy, items, hash, generated_at]
+                properties:
+                  policy: {$ref: "#/components/schemas/CleanupPolicy"}
+                  hash: {type: string}
+                  generated_at: {type: string, format: date-time}
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [attempt_id, branch, action, reason]
+                      properties:
+                        attempt_id: {type: string}
+                        branch: {type: string}
+                        action: {type: string, enum: [archive, remove, skip]}
+                        reason: {type: string}
+        "401": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /projects/{id}/cleanup/policy:
+    put:
+      tags: [projetos]
+      summary: Define a política de limpeza
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CleanupPolicy"}
+      responses:
+        "200":
+          description: Política gravada
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CleanupPolicy"}
+        "401": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /projects/{id}/cleanup/apply:
+    post:
+      tags: [projetos]
+      summary: Aplica a limpeza que o usuário simulou (hash)
+      description: Refaz a simulação; se o hash for outro, 409 `cleanup_plan_changed`. Com a política desligada, 409 `cleanup_off`.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hash]
+              properties:
+                hash: {type: string}
+      responses:
+        "200":
+          description: Resultado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [archived, removed, failed]
+                properties:
+                  archived: {type: integer}
+                  removed: {type: integer}
+                  failed: {type: integer}
+        "401": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
   /workspace/browse:
     get:
       tags: [projetos]
@@ -1989,6 +2151,13 @@ components:
       description: Falha. `correlation_id` repete o cabeçalho X-Request-ID.
       content: {application/json: {schema: {$ref: "#/components/schemas/ErrorBody"}}}
   schemas:
+    CleanupPolicy:
+      type: object
+      required: [enabled, archive_idle_days, remove_archived_days]
+      properties:
+        enabled: {type: boolean}
+        archive_idle_days: {type: integer, minimum: 1, maximum: 365}
+        remove_archived_days: {type: integer, minimum: 1, maximum: 3650}
     Status:
       type: object
       required: [status]

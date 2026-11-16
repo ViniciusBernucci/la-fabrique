@@ -152,7 +152,13 @@ export interface ProjectChange {
     | "source_checked"
     | "activated"
     | "suspended"
-    | "resumed";
+    | "resumed"
+    | "repository_checked"
+    | "setup_approved"
+    | "setup_revoked"
+    | "setup_ran"
+    | "cleanup_policy_changed"
+    | "cleanup_applied";
   detail: Record<string, unknown>;
   created_at: string;
 }
@@ -894,6 +900,42 @@ function put<T>(path: string, body: unknown): Promise<T> {
   });
 }
 
+export interface SetupRun {
+  id: string;
+  status: "ok" | "failed" | "timeout";
+  exit_code: number;
+  output_tail: string;
+  finished_at: string;
+}
+export interface SetupState {
+  ref: string;
+  commit: string;
+  found: boolean;
+  sha256: string;
+  content: string;
+  approved: boolean;
+  approval_id?: string;
+  approved_at?: string;
+  last_run?: SetupRun;
+}
+export interface CleanupPolicy {
+  enabled: boolean;
+  archive_idle_days: number;
+  remove_archived_days: number;
+}
+export interface CleanupItem {
+  attempt_id: string;
+  branch: string;
+  action: "archive" | "remove" | "skip";
+  reason: string;
+}
+export interface CleanupPlan {
+  policy: CleanupPolicy;
+  items: CleanupItem[];
+  hash: string;
+  generated_at: string;
+}
+
 export interface WorkspaceEntry {
   name: string;
   path: string;
@@ -952,6 +994,24 @@ export const api = {
   /** Prova pasta, origin, branch base, conta e push; a ativação exige o resultado. */
   checkRepository: (id: string) =>
     post<RepoCheck>(`/projects/${encodeURIComponent(id)}/repository/check`),
+  setupState: (id: string, signal?: AbortSignal) =>
+    request<SetupState>(`/projects/${encodeURIComponent(id)}/setup`, { signal }),
+  approveSetup: (id: string, ref: string, sha256: string) =>
+    post<SetupState>(`/projects/${encodeURIComponent(id)}/setup/approve`, { ref, sha256 }),
+  revokeSetup: (id: string, approvalId: string) =>
+    request<void>(
+      `/projects/${encodeURIComponent(id)}/setup/approvals/${encodeURIComponent(approvalId)}`,
+      { method: "DELETE" },
+    ),
+  cleanupPlan: (id: string, signal?: AbortSignal) =>
+    request<CleanupPlan>(`/projects/${encodeURIComponent(id)}/cleanup`, { signal }),
+  setCleanupPolicy: (id: string, policy: CleanupPolicy) =>
+    put<CleanupPolicy>(`/projects/${encodeURIComponent(id)}/cleanup/policy`, policy),
+  applyCleanup: (id: string, hash: string) =>
+    post<{ archived: number; removed: number; failed: number }>(
+      `/projects/${encodeURIComponent(id)}/cleanup/apply`,
+      { hash },
+    ),
   browseWorkspace: (path: string, signal?: AbortSignal) =>
     request<WorkspaceListing>(`/workspace/browse?path=${encodeURIComponent(path)}`, { signal }),
   githubRepos: (connectionId: string, signal?: AbortSignal) =>

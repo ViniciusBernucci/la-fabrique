@@ -8,6 +8,7 @@ import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
 import { DeliveryPanel } from "./DeliveryPanel";
 import { MemoryPanel } from "./MemoryPanel";
+import { ProjectOpsPanel } from "./ProjectOpsPanel";
 import { StateBadge } from "./ProjectsPage";
 import { RunPanel } from "./RunPanel";
 
@@ -56,6 +57,12 @@ const changeLabel: Record<ProjectChange["action"], string> = {
   activated: "Projeto ativado",
   suspended: "Projeto suspenso",
   resumed: "Projeto retomado",
+  repository_checked: "Repositório verificado",
+  setup_approved: "Setup aprovado",
+  setup_revoked: "Aprovação do setup revogada",
+  setup_ran: "Setup executado",
+  cleanup_policy_changed: "Política de limpeza alterada",
+  cleanup_applied: "Limpeza aplicada",
 };
 
 function connectionName(id: string | null, connections: Connection[]): string {
@@ -201,6 +208,7 @@ function ProjectDetail({ project, reload }: { project: Project; reload: () => vo
       {project.state !== "draft" && <RunPanel projectId={project.id} />}
       {project.state !== "draft" && <DeliveryPanel projectId={project.id} />}
       {project.state !== "draft" && <MemoryPanel projectId={project.id} />}
+      {project.repository.path && <ProjectOpsPanel projectId={project.id} />}
       <section className="panel" aria-label="Resumo do projeto">
         <dl className="facts">
           <div>

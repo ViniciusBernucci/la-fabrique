@@ -262,3 +262,72 @@ func (g Git) Dirty(ctx context.Context, dir string) (bool, error) {
 	}
 	return strings.TrimSpace(out) != "", nil
 }
+
+// ErrRef é uma referência git inválida ou inexistente.
+var ErrRef = errors.New("referência inexistente no repositório")
+
+// ValidRef recusa referências que o git leria como opção ou que tenham caracteres de controle.
+func ValidRef(ref string) bool {
+	if ref == "" || len(ref) > 200 || strings.HasPrefix(ref, "-") {
+		return false
+	}
+	for _, r := range ref {
+		if r < 0x20 || r == 0x7f || r == ' ' {
+			return false
+		}
+	}
+	return true
+}
+
+// ResolveCommit devolve a SHA do commit de ref (branch, tag ou SHA) em dir.
+func (g Git) ResolveCommit(ctx context.Context, dir, ref string) (string, error) {
+	if !ValidRef(ref) {
+		return "", ErrRef
+	}
+	out, err := g.run(ctx, dir, security.Secret{}, "rev-parse", "--verify", "-q", ref+"^{commit}")
+	if err != nil {
+		return "", ErrRef
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// ReadBlob lê o arquivo path na revisão rev (conteúdo versionado, nunca o da árvore de trabalho).
+// found=false se não existir; recusa arquivos maiores que max.
+func (g Git) ReadBlob(ctx context.Context, dir, rev, path string, max int) (content string, found bool, err error) {
+	sz, err := g.run(ctx, dir, security.Secret{}, "cat-file", "-s", rev+":"+path)
+	if err != nil {
+		return "", false, nil
+	}
+	var n int
+	if _, e := fmt.Sscanf(strings.TrimSpace(sz), "%d", &n); e != nil || n > max {
+		return "", true, fmt.Errorf("o arquivo %s passa de %d bytes", path, max)
+	}
+	out, err := g.run(ctx, dir, security.Secret{}, "show", rev+":"+path)
+	if err != nil {
+		return "", true, err
+	}
+	return out, true, nil
+}
+
+// Archive devolve o tar da árvore de rev (sem .git), para semear um sandbox.
+func (g Git) Archive(ctx context.Context, dir, rev string) ([]byte, error) {
+	if !ValidRef(rev) {
+		return nil, ErrRef
+	}
+	home, err := os.MkdirTemp("", "lf-ws-home-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(home)
+	ctx, cancel := context.WithTimeout(ctx, g.timeout())
+	defer cancel()
+	cmd := exec.CommandContext(ctx, g.bin(), "-c", "core.hooksPath=/dev/null", "-c", "safe.directory="+dir, "archive", "--format=tar", rev)
+	cmd.Dir = dir
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + home, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null"}
+	var out, errb bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &errb
+	if err := cmd.Run(); err != nil {
+		return nil, &ErrGit{scrub(errb.String(), security.Secret{})}
+	}
+	return out.Bytes(), nil
+}
