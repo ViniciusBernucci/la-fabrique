@@ -13,6 +13,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/config"
 	"github.com/ViniciusBernucci/le-fabrique/internal/httpapi"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
+	"github.com/ViniciusBernucci/le-fabrique/internal/security"
 	"github.com/ViniciusBernucci/le-fabrique/internal/workspace"
 )
 
@@ -66,6 +67,23 @@ func TestRepositoryModes(t *testing.T) {
 	c.expect(c.get("/api/github/repos?connection_id="+gh.ID), 200).JSON(&repos)
 	if len(repos.Items) != 1 || repos.Items[0].FullName != "dev/existente" {
 		t.Fatalf("repos: %+v", repos.Items)
+	}
+	// token recusado pelo GitHub (401): a conexão passa a constar como "teste falhou"
+	bad := connWith(t, c, "github", "gh-revogada", "dev")
+	c.expect(c.get("/api/github/repos?connection_id="+bad.ID), 502)
+	var list struct{ Items []security.Connection }
+	c.expect(c.get("/api/connections"), 200).JSON(&list)
+	for _, it := range list.Items {
+		switch it.ID {
+		case bad.ID:
+			if it.LastTestStatus != "failed" || !strings.Contains(it.LastTestDetail, "401") {
+				t.Fatalf("conexão recusada deveria constar como falha: %+v", it)
+			}
+		case gh.ID:
+			if it.LastTestStatus == "failed" {
+				t.Fatalf("conexão saudável não deveria falhar: %+v", it)
+			}
+		}
 	}
 	jira := conn(t, c, "jira", "jira-repo")
 	c.expect(c.get("/api/github/repos?connection_id="+jira.ID), 400)

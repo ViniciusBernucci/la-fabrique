@@ -50,7 +50,7 @@ func (s *Server) githubConnection(w http.ResponseWriter, r *http.Request, id str
 
 // githubRepos lista os repositórios que a conta da conexão enxerga (para escolher o que clonar).
 func (s *Server) githubRepos(w http.ResponseWriter, r *http.Request) {
-	secret, _, ok := s.githubConnection(w, r, r.URL.Query().Get("connection_id"))
+	secret, conn, ok := s.githubConnection(w, r, r.URL.Query().Get("connection_id"))
 	if !ok {
 		return
 	}
@@ -58,10 +58,20 @@ func (s *Server) githubRepos(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	repos, err := s.ws.GH.ListRepos(ctx, secret)
 	if err != nil {
+		s.markGitHubAuthFailure(r.Context(), conn.ID, err)
 		writeWorkspaceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": repos})
+}
+
+// markGitHubAuthFailure registra em Conexões que o GitHub recusou o token (401), para a conta
+// aparecer com "Teste falhou" e o motivo, em vez de continuar parecendo saudável.
+func (s *Server) markGitHubAuthFailure(ctx context.Context, connID string, err error) {
+	if !errors.Is(err, workspace.ErrGitHubAuth) {
+		return
+	}
+	_, _ = s.vault.RecordTest(ctx, connID, "failed", "GitHub recusou a credencial (401): ela é inválida, expirou ou foi revogada. Reconecte a conta.")
 }
 
 func writeWorkspaceError(w http.ResponseWriter, r *http.Request, err error) {
@@ -217,6 +227,13 @@ func (s *Server) checkRepository(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := ctxTimeout(r, 60*time.Second)
 	defer cancel()
 	good, steps := s.ws.Check(ctx, req)
+	if repo.ConnectionID != nil {
+		for _, st := range steps {
+			if st.ID == "account" && st.Status == workspace.StepFailed && strings.Contains(st.Detail, "recusou a conexão") {
+				s.markGitHubAuthFailure(r.Context(), *repo.ConnectionID, workspace.ErrGitHubAuth)
+			}
+		}
+	}
 	res := projects.RepoCheck{OK: good, Steps: make([]projects.SourceStep, 0, len(steps)), CheckedAt: time.Now().UTC()}
 	for _, st := range steps {
 		res.Steps = append(res.Steps, projects.SourceStep{ID: st.ID, Label: st.Label, Status: st.Status, Detail: st.Detail})
