@@ -329,6 +329,21 @@ describe("cadastro de projeto", () => {
     expect(await screen.findByRole("heading", { name: "Origem de tarefas" })).toBeInTheDocument();
   });
 
+  it("cada etapa do assistente mostra o seu passo a passo", async () => {
+    stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(project({ wizard_step: "source" })),
+      "GET /connections": () => json(connections),
+    });
+    renderAt(`/projects/${ID}/setup`);
+    expect(await screen.findByText("Como preencher: Origem de tarefas")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Repositório/ }));
+    expect(await screen.findByText("Como preencher: Repositório")).toBeInTheDocument();
+    expect(screen.queryByText("Como preencher: Origem de tarefas")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Dados/ }));
+    expect(await screen.findByText("Como preencher: Dados")).toBeInTheDocument();
+  });
+
   it("trocar a plataforma da origem descarta a conexão e o identificador anteriores", async () => {
     stub({
       "GET /session": () => json(session),

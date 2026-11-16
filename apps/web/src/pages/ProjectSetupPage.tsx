@@ -19,6 +19,7 @@ import {
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
 import { RepositoryStep } from "./RepositoryStep";
+import { SetupTutorial } from "./SetupTutorial";
 
 const steps: { id: WizardStep; label: string }[] = [
   { id: "basics", label: "Dados" },
@@ -154,6 +155,7 @@ function Wizard({ initial, connections }: { initial: Project; connections: Conne
         className="panel panel--pad"
         aria-label={`Etapa ${steps.find((s) => s.id === step)?.label}`}
       >
+        <SetupTutorial step={step} />
         {step === "basics" && (
           <BasicsStep project={project} busy={busy} onSave={(c) => save(c, "repository")} />
         )}
