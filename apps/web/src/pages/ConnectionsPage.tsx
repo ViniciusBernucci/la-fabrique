@@ -6,6 +6,7 @@ import { type ApiError, api, type Connection, type ConnectionKind } from "../lib
 import { useReauth } from "../lib/reauth";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
+import { JiraTutorial } from "./JiraTutorial";
 import { OAuthPanel } from "./OAuthPanel";
 
 const kindLabel: Record<ConnectionKind, string> = {
@@ -139,6 +140,7 @@ function NewConnectionForm({ onCreated }: { onCreated: () => void }) {
     <section className="panel panel--pad" aria-label="Nova conexão">
       <form className="form form--grid" onSubmit={submit}>
         <h2>Nova conexão por token</h2>
+        {kind === "jira" && <JiraTutorial />}
         <label>
           Tipo
           <select value={kind} onChange={(e) => setKind(e.target.value as ConnectionKind)}>

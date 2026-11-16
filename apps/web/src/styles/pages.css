@@ -251,6 +251,30 @@
   color: var(--hud-amber);
   border-color: var(--hud-amber);
 }
+.tutorial {
+  grid-column: 1 / -1;
+  padding: 14px 16px;
+  border: 1px solid var(--hud-line-strong);
+  border-radius: var(--hud-radius);
+  background: var(--hud-surface-2);
+  font-size: 13px;
+}
+.tutorial summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.tutorial ol {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding-left: 20px;
+}
+.tutorial code {
+  font-family: var(--hud-font-mono);
+}
+.tutorial p {
+  margin: 8px 0 0;
+}
 .codes {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));

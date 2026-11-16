@@ -320,6 +320,20 @@ describe("conexões (cofre)", () => {
     expect(screen.getByText("Ativa")).toBeInTheDocument();
   });
 
+  it("mostra o passo a passo do Jira só quando o tipo escolhido é Jira", async () => {
+    stub({ ...base, "GET /connections": () => json({ items: [] }) });
+    renderAt("/connections");
+    expect(await screen.findByText("Como conectar o Jira (passo a passo)")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /api-tokens/ })).toHaveAttribute(
+      "href",
+      "https://id.atlassian.com/manage-profile/security/api-tokens",
+    );
+    await userEvent.selectOptions(screen.getByLabelText("Tipo"), "api");
+    expect(screen.queryByText("Como conectar o Jira (passo a passo)")).not.toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("Tipo"), "jira");
+    expect(screen.getByText("Como conectar o Jira (passo a passo)")).toBeInTheDocument();
+  });
+
   it("testar mostra o resultado; rotacionar envia a versão esperada", async () => {
     let conn = baseConn;
     const calls = stub({
