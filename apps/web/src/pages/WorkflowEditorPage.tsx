@@ -27,7 +27,7 @@ const GRID = 10;
 const snap = (n: number) => Math.max(0, Math.round(n / GRID) * GRID);
 
 function nodeHeight(t: NodeType | undefined): number {
-  const rows = Math.max(t?.inputs?.length ?? 0, t?.outputs.length ?? 0, 1);
+  const rows = Math.max(t?.inputs?.length ?? 0, t?.outputs?.length ?? 0, 1);
   return HEAD + rows * ROW + 8;
 }
 
@@ -46,7 +46,7 @@ function portPoint(
   const node = graph.nodes.find((n) => n.id === nodeId);
   const type = node && types.get(node.type);
   if (!node || !type) return null;
-  const list = side === "in" ? (type.inputs ?? []) : type.outputs;
+  const list = (side === "in" ? type.inputs : type.outputs) ?? [];
   const i = list.indexOf(port);
   if (i < 0) return null;
   return { x: side === "in" ? node.x : node.x + NODE_W, y: portY(node, i) };

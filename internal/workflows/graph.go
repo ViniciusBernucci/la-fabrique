@@ -60,13 +60,31 @@ type NodeType struct {
 	Fields   []FieldSpec `json:"fields"`
 }
 
+// Catalog devolve os tipos de nó. Listas sem itens saem como [] (nunca null): o cliente não precisa
+// tratar nulo, e o tipo "end" (sem saídas) derrubava o editor por causa disso.
+func Catalog() []NodeType {
+	out := rawCatalog()
+	for i := range out {
+		if out[i].Inputs == nil {
+			out[i].Inputs = []string{}
+		}
+		if out[i].Outputs == nil {
+			out[i].Outputs = []string{}
+		}
+		if out[i].Fields == nil {
+			out[i].Fields = []FieldSpec{}
+		}
+	}
+	return out
+}
+
 var (
 	profiles = []string{"base", "go", "node"}
 	gitOps   = []string{"branch", "commit", "push", "draft_pr"}
 )
 
-// Catalog devolve os tipos de nó na ordem de exibição.
-func Catalog() []NodeType {
+// rawCatalog é a lista dos tipos de nó na ordem de exibição (sem normalizar listas vazias).
+func rawCatalog() []NodeType {
 	exec := []string{PortOut, PortError}
 	return []NodeType{
 		{Type: TStart, Label: "Início", Category: "fluxo", Inputs: nil, Outputs: []string{PortOut}},

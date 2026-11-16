@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { ReauthProvider } from "../lib/reauth";
 import { useCurrentSession } from "../lib/session";
 import { useTheme } from "../lib/theme";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { Icon, type IconName } from "./Icon";
 
 const COLLAPSE_KEY = "le-fabrique.menu-collapsed";
@@ -188,7 +189,9 @@ export function AppShell() {
       </aside>
       <main id="content" className="content" tabIndex={-1}>
         <ReauthProvider>
-          <Outlet />
+          <ErrorBoundary resetKey={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </ReauthProvider>
       </main>
     </div>

@@ -199,6 +199,19 @@ describe("lista de workflows", () => {
 });
 
 describe("editor de workflows", () => {
+  // Regressão: a API devolvia outputs:null para o tipo "end" (sem saídas) e o editor quebrava ao
+  // abrir qualquer fluxo com nó de fim, deixando a página em branco.
+  it("abre um fluxo com nó de fim mesmo quando o tipo vem sem saídas (null)", async () => {
+    const real = catalog.map((t) => (t.type === "end" ? { ...t, outputs: null } : t));
+    stub({
+      ...editorRoutes(workflow()),
+      "GET /workflows/node-types": () => json({ items: real }),
+    });
+    renderAt(`/workflows/${ID}`);
+    expect(await screen.findByRole("group", { name: "Grafo do workflow" })).toBeInTheDocument();
+    expect(screen.getAllByText("Fim").length).toBeGreaterThan(0);
+  });
+
   it("monta um fluxo, edita propriedades e salva nós, conexões e propriedades", async () => {
     const calls = stub(
       editorRoutes(workflow(), {

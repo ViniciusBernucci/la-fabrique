@@ -394,7 +394,8 @@ export interface NodeType {
   label: string;
   category: "fluxo" | "execução" | "controle";
   inputs: string[] | null;
-  outputs: string[];
+  /** Nulo quando o tipo não tem saídas (ex.: "end"), como a API antiga devolvia. */
+  outputs: string[] | null;
   multi_in: boolean;
   fields: FieldSpec[] | null;
 }
