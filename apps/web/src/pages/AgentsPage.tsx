@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from "react";
 import { FormError, toApiError } from "../components/AuthParts";
+import { ModelSelect } from "../components/ModelSelect";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../components/States";
 import {
@@ -9,6 +10,7 @@ import {
   type ApiError,
   api,
   type Connection,
+  type Model,
 } from "../lib/api";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
@@ -51,6 +53,9 @@ export function AgentsPage() {
   const { expire } = useSession();
   const agents = useResource((s) => api.listAgents(s), "agents", expire);
   const connections = useResource((s) => api.listConnections(s), "connections", expire);
+  // A lista de modelos é conveniência: se falhar, o campo continua aceitando o nome digitado.
+  const modelList = useResource((s) => api.listModels(s), "models", expire);
+  const models = modelList.state.status === "ready" ? modelList.state.data.items : [];
   const [editing, setEditing] = useState<Agent | null>(null);
 
   if (agents.state.status === "loading" || connections.state.status === "loading") {
@@ -74,6 +79,7 @@ export function AgentsPage() {
         key={editing?.id ?? "novo"}
         agent={editing}
         connections={connections.state.data.items}
+        models={models}
         onSaved={() => {
           setEditing(null);
           agents.reload();
@@ -111,11 +117,13 @@ export function AgentsPage() {
 function AgentForm({
   agent,
   connections,
+  models,
   onSaved,
   onCancel,
 }: {
   agent: Agent | null;
   connections: Connection[];
+  models: Model[];
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -165,7 +173,13 @@ function AgentForm({
           <select
             value={f.provider}
             onChange={(e) =>
-              setF({ ...f, provider: e.target.value as AgentProvider, connection_id: null })
+              // Os modelos mudam por provedor: recomeça conta e modelo.
+              setF({
+                ...f,
+                provider: e.target.value as AgentProvider,
+                connection_id: null,
+                model: "",
+              })
             }
           >
             {Object.entries(providerLabel).map(([k, v]) => (
@@ -189,14 +203,14 @@ function AgentForm({
             ))}
           </select>
         </label>
-        <label>
-          Modelo
-          <input
-            value={f.model}
-            maxLength={80}
-            onChange={(e) => setF({ ...f, model: e.target.value })}
-          />
-        </label>
+        <ModelSelect
+          key={f.provider}
+          provider={f.provider}
+          gateway={options.find((c) => c.id === f.connection_id)?.target}
+          models={models}
+          value={f.model}
+          onChange={(model) => setF({ ...f, model })}
+        />
         <label>
           Tempo máximo (min)
           <input

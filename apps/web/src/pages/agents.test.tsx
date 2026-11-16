@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
-import type { Agent, Connection, EffectiveAgent, NodeType, Workflow } from "../lib/api";
+import type { Agent, Connection, EffectiveAgent, Model, NodeType, Workflow } from "../lib/api";
 import { SessionProvider } from "../lib/session";
 import { connectionsFor } from "./AgentsPage";
 
@@ -92,10 +92,47 @@ const connections = {
     conn(CLAUDE_A, "claude-conta-a", "cli", "claude"),
     conn(CLAUDE_B, "claude-conta-b", "cli", "claude"),
     conn(CODEX, "codex-conta", "cli", "codex"),
-    conn(GATEWAY, "gateway", "api", ""),
+    conn(GATEWAY, "gateway", "api", "openrouter"),
     conn("77777777-7777-4777-8777-777777777777", "claude-revogada", "cli", "claude", "revoked"),
   ],
 };
+
+const mdl = (
+  provider: Model["provider"],
+  name: string,
+  label: string,
+  over: Partial<Model> = {},
+): Model => ({
+  id: `m-${provider}-${name}`,
+  provider,
+  gateway: "",
+  name,
+  label,
+  supports_tools: true,
+  supports_streaming: true,
+  context_window: 0,
+  max_output_tokens: 0,
+  state: "active",
+  version: 1,
+  ...over,
+});
+
+const catalogModels: { items: Model[] } = {
+  items: [
+    mdl("claude", "claude-opus-5-5", "Claude Opus 5.5"),
+    mdl("claude", "claude-sonnet-5-5", "Claude Sonnet 5.5"),
+    mdl("claude", "claude-velho", "Claude Velho", { state: "disabled" }),
+    mdl("codex", "gpt-6.1-sol", "GPT-6.1 Sol"),
+    mdl("codex", "gpt-5.6-luna", "GPT-5.6 Luna"),
+    mdl("api", "anthropic/claude-sonnet-5-5", "Sonnet via OpenRouter", { gateway: "openrouter" }),
+    mdl("api", "vercel/modelo", "Modelo Vercel", { gateway: "vercel" }),
+  ],
+};
+
+const modelOptions = () =>
+  within(screen.getByRole("combobox", { name: "Modelo" }))
+    .getAllByRole("option")
+    .map((o) => o.textContent);
 
 const agent: Agent = {
   id: AGENT,
@@ -137,6 +174,7 @@ describe("catálogo de agentes", () => {
       "GET /session": () => json(session),
       "GET /agents": () => json({ items: [] }),
       "GET /connections": () => json(connections),
+      "GET /models": () => json(catalogModels),
       "POST /agents": () => json(agent, 201),
     });
     renderAt("/agents");
@@ -148,7 +186,10 @@ describe("catálogo de agentes", () => {
         .map((o) => o.textContent),
     ).not.toContain("codex-conta");
     await userEvent.selectOptions(select, CLAUDE_B);
-    await userEvent.type(screen.getByLabelText("Modelo"), "claude-sonnet-5-5");
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: "Modelo" }),
+      "claude-sonnet-5-5",
+    );
     await userEvent.type(screen.getByLabelText(/^Ferramentas \(separadas/), "Read, Edit ,, Bash");
     await userEvent.type(screen.getByLabelText("Instruções"), "Seja objetivo.");
     await userEvent.click(screen.getByRole("button", { name: "Cadastrar agente" }));
@@ -163,6 +204,82 @@ describe("catálogo de agentes", () => {
       tools: ["Read", "Edit", "Bash"],
       instructions: "Seja objetivo.",
     });
+  });
+
+  it("carrega a lista de modelos de cada LLM e a troca ao mudar o provedor", async () => {
+    stub({
+      "GET /session": () => json(session),
+      "GET /agents": () => json({ items: [] }),
+      "GET /connections": () => json(connections),
+      "GET /models": () => json(catalogModels),
+    });
+    renderAt("/agents");
+    await screen.findByRole("combobox", { name: "Modelo" });
+    // Claude: só os ativos do Claude (o desativado e os de outros provedores não aparecem)
+    expect(modelOptions()).toEqual([
+      "Padrão da conta",
+      "Claude Opus 5.5 (claude-opus-5-5)",
+      "Claude Sonnet 5.5 (claude-sonnet-5-5)",
+      "Outro (digitar o nome)…",
+    ]);
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: "Modelo" }),
+      "claude-opus-5-5",
+    );
+    await userEvent.selectOptions(screen.getByLabelText("Provedor"), "codex");
+    // Codex: lista própria, e a escolha do Claude foi descartada
+    expect(modelOptions()).toEqual([
+      "Padrão da conta",
+      "GPT-5.6 Luna (gpt-5.6-luna)",
+      "GPT-6.1 Sol (gpt-6.1-sol)",
+      "Outro (digitar o nome)…",
+    ]);
+    expect(screen.getByRole("combobox", { name: "Modelo" })).toHaveValue("");
+  });
+
+  it("no provedor api lista os modelos do gateway da conta escolhida", async () => {
+    stub({
+      "GET /session": () => json(session),
+      "GET /agents": () => json({ items: [] }),
+      "GET /connections": () => json(connections),
+      "GET /models": () => json(catalogModels),
+    });
+    renderAt("/agents");
+    await userEvent.selectOptions(await screen.findByLabelText("Provedor"), "api");
+    // sem conta escolhida: todos os modelos de API
+    expect(modelOptions()).toContain("Sonnet via OpenRouter (anthropic/claude-sonnet-5-5)");
+    expect(modelOptions()).toContain("Modelo Vercel (vercel/modelo)");
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: "Conta (conexão)" }),
+      GATEWAY,
+    );
+    // a conexão "gateway" tem destino openrouter: só os modelos desse gateway
+    expect(modelOptions()).toContain("Sonnet via OpenRouter (anthropic/claude-sonnet-5-5)");
+    expect(modelOptions()).not.toContain("Modelo Vercel (vercel/modelo)");
+  });
+
+  it("permite digitar um modelo fora do catálogo e funciona sem a lista", async () => {
+    const calls = stub({
+      "GET /session": () => json(session),
+      "GET /agents": () => json({ items: [] }),
+      "GET /connections": () => json(connections),
+      // sem GET /models: a lista falha, o campo continua utilizável
+      "POST /agents": () => json(agent, 201),
+    });
+    renderAt("/agents");
+    await userEvent.type(await screen.findByLabelText("Nome"), "dev");
+    expect(
+      await screen.findByText(/Nenhum modelo cadastrado para este provedor/),
+    ).toBeInTheDocument();
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: "Modelo" }),
+      "Outro (digitar o nome)…",
+    );
+    await userEvent.type(screen.getByLabelText("Nome do modelo"), "modelo-novo");
+    await userEvent.type(screen.getByLabelText("Instruções"), "Seja objetivo.");
+    await userEvent.click(screen.getByRole("button", { name: "Cadastrar agente" }));
+    await screen.findByText("Nenhum agente");
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ model: "modelo-novo" });
   });
 
   it("trocar o provedor descarta a conta escolhida", async () => {
@@ -184,13 +301,15 @@ describe("catálogo de agentes", () => {
       "GET /session": () => json(session),
       "GET /agents": () => json({ items: [agent] }),
       "GET /connections": () => json(connections),
+      "GET /models": () => json(catalogModels),
       [`PUT /agents/${AGENT}`]: () =>
         err(409, "connection_incompatible", "conexão incompatível: a conexão está revogada"),
     });
     renderAt("/agents");
     await userEvent.click(await screen.findByRole("button", { name: "Editar dev" }));
-    await userEvent.clear(screen.getByLabelText("Modelo"));
-    await userEvent.type(screen.getByLabelText("Modelo"), "claude-opus-5-5");
+    const model = screen.getByRole("combobox", { name: "Modelo" });
+    expect(model).toHaveValue("claude-sonnet-5-5"); // o modelo salvo vem selecionado
+    await userEvent.selectOptions(model, "claude-opus-5-5");
     await userEvent.click(screen.getByRole("button", { name: "Salvar alterações" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("a conexão está revogada");
     const put = calls.find((c) => c.method === "PUT");

@@ -348,6 +348,22 @@ export interface OAuthStatus {
   connection?: Connection;
 }
 
+/** Modelo do catálogo (ADR-0021/0067). */
+export interface Model {
+  id: string;
+  provider: AgentProvider;
+  /** Só no provedor api: openrouter ou vercel. Vazio nos demais. */
+  gateway: "" | "openrouter" | "vercel";
+  name: string;
+  label: string;
+  supports_tools: boolean;
+  supports_streaming: boolean;
+  context_window: number;
+  max_output_tokens: number;
+  state: "active" | "disabled";
+  version: number;
+}
+
 /** Recurso global associado a um projeto (workflow, agente, skill, ferramenta ou modelo). */
 export interface ProjectResource {
   kind: "workflow" | "agent" | "skill" | "tool" | "model";
@@ -1201,6 +1217,8 @@ export const api = {
       { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file },
     ),
 
+  // Catálogo de modelos (lista por provedor nos agentes).
+  listModels: (signal?: AbortSignal) => request<{ items: Model[] }>("/models", { signal }),
   // Catálogo de agentes.
   listAgents: (signal?: AbortSignal) => request<{ items: Agent[] }>("/agents", { signal }),
   createAgent: (input: AgentInput) => post<Agent>("/agents", input),

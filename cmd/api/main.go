@@ -14,6 +14,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/config"
 	"github.com/ViniciusBernucci/le-fabrique/internal/httpapi"
 	"github.com/ViniciusBernucci/le-fabrique/internal/logging"
+	"github.com/ViniciusBernucci/le-fabrique/internal/models"
 	"github.com/ViniciusBernucci/le-fabrique/internal/policy"
 	"github.com/ViniciusBernucci/le-fabrique/internal/skills"
 )
@@ -59,6 +60,15 @@ func run() int {
 		log.Warn("não consegui instalar as skills padrão", "error", ierr.Error())
 	} else if len(rep.Installed)+len(rep.Updated) > 0 || len(rep.Kept) > 0 {
 		log.Info("skills padrão", "instaladas", rep.Installed, "atualizadas", rep.Updated, "mantidas", rep.Kept)
+	}
+	// Catálogo inicial de modelos de Claude e Codex (ADR-0067); só cadastra o que falta.
+	modelsCtx, cancelModels := context.WithTimeout(ctx, 15*time.Second)
+	added, merr := models.InstallDefaults(modelsCtx, pool)
+	cancelModels()
+	if merr != nil {
+		log.Warn("não consegui instalar os modelos padrão", "error", merr.Error())
+	} else if len(added) > 0 {
+		log.Info("modelos padrão cadastrados", "quantidade", len(added))
 	}
 	srv := &http.Server{
 		Addr:              cfg.Addr,
