@@ -266,58 +266,21 @@ describe("conexões (cofre)", () => {
     expect(screen.getByText(`connection:${baseConn.id}`)).toBeInTheDocument();
   });
 
-  it("ação sensível sem reautenticação pede senha + código e repete a ação", async () => {
-    let attempts = 0;
-    let reauthed = false;
+  it("revogar a conexão não pede reautenticação", async () => {
     let conn = baseConn;
     stub({
       ...base,
       "GET /connections": () => json({ items: [conn] }),
-      "POST /auth/reauth": (c) => {
-        expect(c.body).toEqual({ password: "minha-senha-123456", code: "654321" });
-        reauthed = true;
-        return json(session);
-      },
       [`POST /connections/${baseConn.id}/revoke`]: () => {
-        attempts++;
-        if (reauthed) conn = { ...baseConn, state: "revoked", revoked_at: "2026-11-12T10:00:00Z" };
-        return reauthed
-          ? json(conn)
-          : err(403, "reauth_required", "Esta ação exige confirmar sua identidade.");
+        conn = { ...baseConn, state: "revoked", revoked_at: "2026-11-12T10:00:00Z" };
+        return json(conn);
       },
     });
     renderAt("/connections");
     await userEvent.click(await screen.findByRole("button", { name: "Revogar" }));
     await userEvent.click(screen.getByRole("button", { name: "Confirmar revogação" }));
-
-    const dialog = await screen.findByRole("dialog", { name: "Confirme sua identidade" });
-    await userEvent.type(within(dialog).getByLabelText("Senha"), "minha-senha-123456");
-    await userEvent.type(within(dialog).getByLabelText(/Código do autenticador/), "654321");
-    await userEvent.click(within(dialog).getByRole("button", { name: "Confirmar" }));
-
     expect(await screen.findByText("Revogada")).toBeInTheDocument();
-    expect(attempts).toBe(2);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
-
-  it("cancelar a reautenticação mantém a conexão e mostra o erro", async () => {
-    stub({
-      ...base,
-      "GET /connections": () => json({ items: [baseConn] }),
-      [`POST /connections/${baseConn.id}/revoke`]: () =>
-        err(403, "reauth_required", "Esta ação exige confirmar sua identidade."),
-    });
-    renderAt("/connections");
-    await userEvent.click(await screen.findByRole("button", { name: "Revogar" }));
-    await userEvent.click(screen.getByRole("button", { name: "Confirmar revogação" }));
-    await userEvent.click(
-      within(await screen.findByRole("dialog")).getByRole("button", { name: "Cancelar" }),
-    );
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(
-      screen.getByText("Esta ação exige confirmar sua identidade.", { exact: false }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Ativa")).toBeInTheDocument();
   });
 
   it("mostra o passo a passo do Jira só quando o tipo escolhido é Jira", async () => {

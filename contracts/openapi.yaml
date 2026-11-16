@@ -291,7 +291,7 @@ paths:
   /connections/{id}/rotate:
     post:
       tags: [conexoes]
-      summary: "[SENSÍVEL] Troca o segredo mantendo id e vínculos"
+      summary: "Troca o segredo mantendo id e vínculos"
       description: O valor anterior é descartado. `expected_version` evita sobrescrever alteração concorrente (409 `version_conflict`).
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -306,7 +306,7 @@ paths:
   /connections/{id}/revoke:
     post:
       tags: [conexoes]
-      summary: "[SENSÍVEL] Revoga a conexão e apaga o segredo (irreversível, idempotente)"
+      summary: "Revoga a conexão e apaga o segredo (irreversível, idempotente)"
       description: O efeito vale para o próximo uso, sem cache (`Vault.Resolve` consulta o banco).
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, format: uuid}}

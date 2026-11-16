@@ -130,16 +130,14 @@ func TestSensitiveActionsRequireRecentReauthentication(t *testing.T) {
 	var created security.Connection
 	c.expect(c.post("/api/connections", body), 201).JSON(&created)
 
-	// Passada a janela, a ação é recusada com código próprio. (Guardar uma conexão nova não exige
-	// reautenticação, ADR-0063; revogar e rotacionar exigem.)
+	// Passada a janela, a ação é recusada com código próprio. (Criar, rotacionar e revogar
+	// conexão não exigem reautenticação, ADR-0063.)
 	if _, err := e.db.Pool.Exec(ctx, `UPDATE admin_sessions SET reauth_at = now() - interval '10 minutes'`); err != nil {
 		t.Fatal(err)
 	}
 	body["name"] = "segunda"
 	c.expect(c.post("/api/connections", body), 201)
-	if r := c.post("/api/connections/"+created.ID+"/revoke", nil); r.StatusCode != 403 || r.ErrCode() != "reauth_required" {
-		t.Fatalf("sem reauth: %d %s", r.StatusCode, r.Body)
-	}
+	c.expect(c.post("/api/connections/"+created.ID+"/revoke", nil), 200)
 	if r := c.post("/api/sessions/revoke-others", nil); r.StatusCode != 403 || r.ErrCode() != "reauth_required" {
 		t.Fatalf("revoke-others sem reauth: %d %s", r.StatusCode, r.Body)
 	}
@@ -166,7 +164,7 @@ func TestSensitiveActionsRequireRecentReauthentication(t *testing.T) {
 	if s.ReauthUntil == nil {
 		t.Fatal("reauth deveria abrir a janela")
 	}
-	c.expect(c.post("/api/connections/"+created.ID+"/revoke", nil), 200)
+	c.expect(c.post("/api/sessions/revoke-others", nil), 200)
 
 	// O mesmo código não serve duas vezes (replay) na reautenticação.
 	if _, err := e.db.Pool.Exec(ctx, `UPDATE admin_sessions SET reauth_at = now() - interval '10 minutes'`); err != nil {

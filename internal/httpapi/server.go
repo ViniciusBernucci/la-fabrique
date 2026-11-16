@@ -149,8 +149,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/connections", s.protected(s.createConnection))
 	mux.HandleFunc("GET /api/connections/{id}", s.protected(s.getConnection))
 	mux.HandleFunc("POST /api/connections/{id}/test", s.protected(s.testConnection))
-	mux.HandleFunc("POST /api/connections/{id}/rotate", s.sensitive(s.rotateConnection))
-	mux.HandleFunc("POST /api/connections/{id}/revoke", s.sensitive(s.revokeConnection))
+	mux.HandleFunc("POST /api/connections/{id}/rotate", s.protected(s.rotateConnection))
+	mux.HandleFunc("POST /api/connections/{id}/revoke", s.protected(s.revokeConnection))
 
 	// Conexão por OAuth (ADR-0060). O callback é público: o state de uso único é a prova.
 	mux.HandleFunc("GET /api/workspace/browse", s.protected(s.workspaceBrowse))

@@ -3,7 +3,6 @@ import { FormError, toApiError } from "../components/AuthParts";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../components/States";
 import { type ApiError, api, type Connection, type ConnectionKind } from "../lib/api";
-import { useReauth } from "../lib/reauth";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
 import { JiraTutorial } from "./JiraTutorial";
@@ -36,7 +35,6 @@ const when = (iso?: string) => (iso ? new Date(iso).toLocaleString("pt-BR") : "â
 
 export function ConnectionsPage() {
   const { expire } = useSession();
-  const { runSensitive } = useReauth();
   const { state, reload } = useResource((s) => api.listConnections(s), "connections", expire);
   const [error, setError] = useState<ApiError | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -93,9 +91,9 @@ export function ConnectionsPage() {
                 busy={busyId === c.id}
                 onTest={() => act(c.id, () => api.testConnection(c.id))}
                 onRotate={(secret) =>
-                  act(c.id, () => runSensitive(() => api.rotateConnection(c.id, secret, c.version)))
+                  act(c.id, () => api.rotateConnection(c.id, secret, c.version))
                 }
-                onRevoke={() => act(c.id, () => runSensitive(() => api.revokeConnection(c.id)))}
+                onRevoke={() => act(c.id, () => api.revokeConnection(c.id))}
               />
             ))}
           </ul>
