@@ -564,7 +564,7 @@ describe("detalhe do projeto", () => {
     expect(await screen.findByText("Aprovado para este conteúdo.")).toBeInTheDocument();
 
     await userEvent.click(await screen.findByRole("checkbox", { name: "Limpeza ligada" }));
-    expect(await screen.findByText(/parada/)).toBeInTheDocument();
+    expect(await screen.findByText(/lf-tmp\/x\/backend-impl-1/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Aplicar esta simulação/ }));
     await waitFor(() =>
       expect(calls.find((c) => c.url.endsWith("/cleanup/apply"))?.body).toEqual({
