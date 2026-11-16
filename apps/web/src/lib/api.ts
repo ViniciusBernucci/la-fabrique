@@ -348,6 +348,21 @@ export interface OAuthStatus {
   connection?: Connection;
 }
 
+/** Login oficial de uma conta de assinatura de IA (ADR-0065). */
+export type CLIProvider = "claude" | "codex";
+export interface CLILogin {
+  id: string;
+  provider: CLIProvider;
+  name: string;
+  state: "pending" | "preparing" | "awaiting_user" | "verifying" | "done" | "failed" | "cancelled";
+  verification_uri?: string;
+  user_code?: string;
+  needs_code: boolean;
+  error?: string;
+  expires_in: number;
+  connection?: Connection;
+}
+
 export interface NewConnection {
   kind: ConnectionKind;
   name: string;
@@ -1213,6 +1228,13 @@ export const api = {
     post<OAuthStarted>(`/oauth/${kind}/start`, { name }),
   oauthFlow: (id: string, signal?: AbortSignal) =>
     request<OAuthStatus>(`/oauth/flows/${encodeURIComponent(id)}`, { signal }),
+  startCLILogin: (provider: CLIProvider, name: string) =>
+    post<CLILogin>("/cli-logins", { provider, name }),
+  cliLogin: (id: string, signal?: AbortSignal) =>
+    request<CLILogin>(`/cli-logins/${encodeURIComponent(id)}`, { signal }),
+  submitCLILoginCode: (id: string, code: string) =>
+    post<CLILogin>(`/cli-logins/${encodeURIComponent(id)}/code`, { code }),
+  cancelCLILogin: (id: string) => post<CLILogin>(`/cli-logins/${encodeURIComponent(id)}/cancel`),
   createConnection: (input: NewConnection) => post<Connection>("/connections", input),
   testConnection: (id: string) => post<Connection>(`/connections/${encodeURIComponent(id)}/test`),
   rotateConnection: (id: string, secret: string, expected_version: number) =>

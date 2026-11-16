@@ -47,6 +47,9 @@ type Connection struct {
 type NewConnection struct {
 	Kind, Name, Target, Scopes string
 	Secret                     Secret
+	// ID, se informado (UUID), vira o id da conexão. Usado quando algo já foi nomeado por ele antes
+	// da criação (ex.: o volume da conta de assinatura de IA, ADR-0065). Vazio: o banco gera.
+	ID string
 }
 
 // Vault guarda segredos cifrados com chave externa ao banco. Serviços acessam o
@@ -102,9 +105,13 @@ func (v *Vault) Create(ctx context.Context, n NewConnection) (Connection, error)
 	if err := validateSecret(n.Secret); err != nil {
 		return Connection{}, err
 	}
-	var id string
-	if err := v.db.QueryRow(ctx, `SELECT gen_random_uuid()::text`).Scan(&id); err != nil {
-		return Connection{}, persistence.MapError(err)
+	id := n.ID
+	if id == "" {
+		if err := v.db.QueryRow(ctx, `SELECT gen_random_uuid()::text`).Scan(&id); err != nil {
+			return Connection{}, persistence.MapError(err)
+		}
+	} else if !refUUID.MatchString(id) {
+		return Connection{}, fmt.Errorf("%w: id de conexão inválido", persistence.ErrInvalidInput)
 	}
 	sealed, err := v.sealer.Seal([]byte(n.Secret.Reveal()), connAAD(id))
 	if err != nil {
@@ -261,6 +268,8 @@ func (v *Vault) storeRefreshed(ctx context.Context, id string, secret Secret) er
 		WHERE id = $1 AND state = 'active'`, id, sealed, v.sealer.KeyID())
 	return persistence.MapError(err)
 }
+
+var refUUID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 var refPattern = regexp.MustCompile(`^connection:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$`)
 

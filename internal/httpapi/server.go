@@ -4,6 +4,7 @@ package httpapi
 
 import (
 	"context"
+	"github.com/ViniciusBernucci/le-fabrique/internal/clilogin"
 	"github.com/ViniciusBernucci/le-fabrique/internal/guidance"
 	"github.com/ViniciusBernucci/le-fabrique/internal/oauth"
 	"github.com/ViniciusBernucci/le-fabrique/internal/workspace"
@@ -34,17 +35,18 @@ type Store interface {
 
 // Server agrupa dependências dos handlers.
 type Server struct {
-	cfg      config.API
-	db       Store
-	log      *slog.Logger
-	auth     *security.Auth
-	vault    *security.Vault
-	redactor *security.Redactor
-	tester   *integrations.Tester
-	oauth    *oauth.Service
-	ws       workspace.Service
-	trackers func(integrations.Config) (integrations.Tracker, error)
-	policy   *policy.Policy
+	cfg       config.API
+	db        Store
+	log       *slog.Logger
+	auth      *security.Auth
+	vault     *security.Vault
+	redactor  *security.Redactor
+	tester    *integrations.Tester
+	oauth     *oauth.Service
+	cliLogins *clilogin.Store
+	ws        workspace.Service
+	trackers  func(integrations.Config) (integrations.Tracker, error)
+	policy    *policy.Policy
 
 	mcpAllowPrivate bool
 	guidanceLive    guidance.Registry
@@ -86,6 +88,7 @@ func NewServer(cfg config.API, db Store, log *slog.Logger, opts ...Option) (*Ser
 		}, log),
 	}
 	s.oauth = oauth.New(cfg.OAuth, s.vault)
+	s.cliLogins = &clilogin.Store{DB: db}
 	s.vault.SetRefresher(s.oauth.Refresher())
 	s.ws = workspace.Service{Root: workspace.Root{Dir: cfg.WorkspacesDir}}
 	for _, o := range opts {
@@ -168,6 +171,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/oauth/{kind}/start", s.protected(s.oauthStart))
 	mux.HandleFunc("GET /api/oauth/flows/{id}", s.protected(s.oauthFlow))
 	mux.HandleFunc("GET /api/oauth/callback", s.oauthCallback)
+	mux.HandleFunc("POST /api/cli-logins", s.protected(s.startCLILogin))
+	mux.HandleFunc("GET /api/cli-logins/{id}", s.protected(s.getCLILogin))
+	mux.HandleFunc("POST /api/cli-logins/{id}/code", s.protected(s.submitCLILoginCode))
+	mux.HandleFunc("POST /api/cli-logins/{id}/cancel", s.protected(s.cancelCLILogin))
 
 	mux.HandleFunc("POST /api/workflows/{id}/publish", s.protected(s.publishWorkflow))
 	mux.HandleFunc("POST /api/workflows/{id}/unpublish", s.protected(s.unpublishWorkflow))

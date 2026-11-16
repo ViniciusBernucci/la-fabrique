@@ -302,6 +302,126 @@ describe("conexões (cofre)", () => {
     expect(await screen.findByText("Nenhuma conexão cadastrada")).toBeInTheDocument();
   });
 
+  describe("assinaturas de IA (login oficial)", () => {
+    const LID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const view = (o: Record<string, unknown>) => ({
+      id: LID,
+      provider: "codex",
+      name: "Codex",
+      state: "pending",
+      needs_code: false,
+      expires_in: 900,
+      ...o,
+    });
+
+    it("Codex mostra o link e o código para autorizar, e cancelar limpa o desafio", async () => {
+      stub({
+        ...base,
+        "GET /connections": () => json({ items: [] }),
+        "POST /cli-logins": (c) => {
+          expect(c.csrf).toBe("csrf-1");
+          expect(c.body).toEqual({ provider: "codex", name: "Codex" });
+          return json(
+            view({
+              state: "awaiting_user",
+              verification_uri: "https://auth.openai.com/codex/device",
+              user_code: "ABCD-EFGHI",
+            }),
+            201,
+          );
+        },
+        [`POST /cli-logins/${LID}/cancel`]: () =>
+          json(view({ state: "cancelled", error: "Cancelado." })),
+      });
+      renderAt("/connections");
+      await userEvent.click(await screen.findByRole("button", { name: "Conectar com Codex" }));
+      expect(await screen.findByText("ABCD-EFGHI")).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: /auth\.openai\.com\/codex\/device/ }),
+      ).toHaveAttribute("href", "https://auth.openai.com/codex/device");
+      // só um login por vez: os botões ficam desabilitados enquanto há um aberto
+      expect(screen.getByRole("button", { name: "Conectar com Claude" })).toBeDisabled();
+      await userEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+      expect(await screen.findByText("Cancelado.")).toBeInTheDocument();
+      expect(screen.queryByText("ABCD-EFGHI")).not.toBeInTheDocument();
+    });
+
+    it("Claude pede para colar o código mostrado no site e o apaga da tela ao enviar", async () => {
+      stub({
+        ...base,
+        "GET /connections": () => json({ items: [] }),
+        "POST /cli-logins": () =>
+          json(
+            view({
+              provider: "claude",
+              name: "Claude",
+              state: "awaiting_user",
+              needs_code: true,
+              verification_uri: "https://claude.com/cai/oauth/authorize?code=true",
+            }),
+            201,
+          ),
+        [`POST /cli-logins/${LID}/code`]: (c) => {
+          expect(c.body).toEqual({ code: "codigo-colado-123" });
+          return json(view({ provider: "claude", state: "verifying", needs_code: true }));
+        },
+      });
+      renderAt("/connections");
+      await userEvent.click(await screen.findByRole("button", { name: "Conectar com Claude" }));
+      expect(await screen.findByRole("link", { name: "Abrir o login do Claude" })).toHaveAttribute(
+        "href",
+        "https://claude.com/cai/oauth/authorize?code=true",
+      );
+      const input = screen.getByLabelText("Código do Claude");
+      await userEvent.type(input, "codigo-colado-123");
+      await userEvent.click(screen.getByRole("button", { name: "Enviar código" }));
+      expect(await screen.findByText("Confirmando o login…")).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain("codigo-colado-123");
+    });
+
+    it("acompanha o andamento e, ao concluir, recarrega as conexões", async () => {
+      let reloads = 0;
+      const done = {
+        ...baseConn,
+        id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        kind: "cli" as const,
+        name: "Codex",
+        target: "codex",
+      };
+      stub({
+        ...base,
+        "GET /connections": () => {
+          reloads++;
+          return json({ items: reloads > 1 ? [done] : [] });
+        },
+        "POST /cli-logins": () => json(view({ state: "preparing" }), 201),
+        [`GET /cli-logins/${LID}`]: () => json(view({ state: "done", connection: done })),
+      });
+      renderAt("/connections");
+      await userEvent.click(await screen.findByRole("button", { name: "Conectar com Codex" }));
+      expect(await screen.findByText(/Preparando o ambiente de login/)).toBeInTheDocument();
+      expect(
+        await screen.findByText(/Conta conectada\. O login ficou só no volume/, undefined, {
+          timeout: 5000,
+        }),
+      ).toBeInTheDocument();
+      await waitFor(() => expect(reloads).toBeGreaterThan(1));
+      expect(await screen.findByText("Conectado")).toBeInTheDocument();
+    });
+
+    it("mostra o motivo quando o login falha", async () => {
+      stub({
+        ...base,
+        "GET /connections": () => json({ items: [] }),
+        "POST /cli-logins": () =>
+          err(409, "login_in_progress", "Já existe uma conexão deste provedor em andamento."),
+      });
+      renderAt("/connections");
+      await userEvent.click(await screen.findByRole("button", { name: "Conectar com Codex" }));
+      expect(await screen.findByText(/Já existe uma conexão deste provedor/)).toBeInTheDocument();
+    });
+  });
+
   it("mostra o passo a passo do Jira só quando o tipo escolhido é Jira", async () => {
     stub({ ...base, "GET /connections": () => json({ items: [] }) });
     renderAt("/connections");

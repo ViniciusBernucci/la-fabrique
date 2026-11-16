@@ -34,9 +34,17 @@ services:
     read_only: false
     command: ["air", "-c", "/src/infra/images/air.worker.toml"]
     working_dir: /src
+    environment:
+      # Login das contas de IA pelo painel (ADR-0065): liga o runner e deixa o worker construir a imagem
+      # dos clientes (infra/images/Dockerfile.cli) se ela ainda não existir.
+      CLI_LOGIN: "true"
+      CLI_LOGIN_CONTEXT: /src/infra/images
     volumes:
       - .:/src
       - ${WORKSPACES_HOST_DIR:-./workspaces}:/workspaces
+      # ATENÇÃO: o docker.sock equivale a acesso root à máquina. Só em desenvolvimento; o worker o usa
+      # apenas para o login das contas e para o sandbox (ADR-0065).
+      - /var/run/docker.sock:/var/run/docker.sock
       - go_mod_cache:/go/pkg/mod
       - go_build_cache:/root/.cache/go-build
     user: "0:0"

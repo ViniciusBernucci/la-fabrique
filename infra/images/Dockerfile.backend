@@ -14,6 +14,8 @@ RUN go mod download
 
 # Desenvolvimento: hot reload com air; o código vem de bind mount.
 FROM base AS dev
+# docker-cli: o worker de desenvolvimento roda o login das contas de IA em containers (ADR-0065).
+RUN apk add --no-cache docker-cli
 RUN go install github.com/air-verse/air@v1.62.0
 ENV GOFLAGS=
 

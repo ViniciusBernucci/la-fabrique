@@ -5,6 +5,7 @@ import { EmptyState, ErrorState, LoadingState } from "../components/States";
 import { type ApiError, api, type Connection, type ConnectionKind } from "../lib/api";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
+import { CLILoginPanel } from "./CLILoginPanel";
 import { JiraTutorial } from "./JiraTutorial";
 import { OAuthPanel } from "./OAuthPanel";
 
@@ -21,7 +22,10 @@ const kindHint: Record<ConnectionKind, { target: string; secret: string }> = {
   github: { target: "Conta GitHub", secret: "Use make connect-github" },
   jira: { target: "https://<site>.atlassian.net", secret: "Token de API da Atlassian" },
   clickup: { target: "Workspace (opcional)", secret: "Token pessoal da API" },
-  cli: { target: "Nome da CLI (ex.: gh, claude)", secret: "Credencial da CLI" },
+  cli: {
+    target: "claude ou codex",
+    secret: "Qualquer texto (marcador): o login real vem do botão Assinaturas de IA",
+  },
   api: { target: "URL base (opcional)", secret: "Chave de API" },
   mcp: { target: "Servidor MCP (nome ou URL)", secret: "Token do servidor MCP" },
 };
@@ -71,6 +75,10 @@ export function ConnectionsPage() {
           }
           reload();
         }}
+      />
+      <CLILoginPanel
+        onConnected={reload}
+        connections={state.status === "ready" ? state.data.items : []}
       />
       <NewConnectionForm onCreated={reload} />
       <FormError error={error} />

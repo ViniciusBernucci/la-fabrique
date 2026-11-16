@@ -83,6 +83,11 @@ type Worker struct {
 	// PRSync liga a consulta das PRs gerenciadas (SENTINEL_PR_SYNC=true), com agenda própria (PR_POLL_INTERVAL).
 	PRSync         bool
 	PRPollInterval time.Duration
+	// CLILogin liga o login oficial das contas de assinatura de IA pelo painel (CLI_LOGIN=true, ADR-0065).
+	// Desligado por padrão: exige o docker.sock no worker e VAULT_KEY (decisão de implantação).
+	CLILogin        bool
+	CLILoginImage   string
+	CLILoginContext string
 	// Admission liga o laço de admissão da Sentinela (SENTINEL_ADMISSION=true). Sem executor ligado ele roda em
 	// observação (dry-run): decide e audita, não reserva nem altera estado.
 	Admission         bool
@@ -297,7 +302,12 @@ func LoadWorker(lookup Lookup) (Worker, error) {
 	if cfg.PRSync {
 		cfg.PRPollInterval = l.duration("PR_POLL_INTERVAL", 3*time.Minute, 30*time.Second)
 	}
-	if cfg.IssueSync || cfg.PRSync {
+	cfg.CLILogin = l.boolean("CLI_LOGIN", false)
+	if cfg.CLILogin {
+		cfg.CLILoginImage = l.str("CLI_LOGIN_IMAGE", "le-fabrique/cli:dev")
+		cfg.CLILoginContext = l.str("CLI_LOGIN_CONTEXT", "")
+	}
+	if cfg.IssueSync || cfg.PRSync || cfg.CLILogin {
 		cfg.VaultKeyID = l.str("VAULT_KEY_ID", "k1")
 		cfg.VaultKey = l.vaultKey()
 	}

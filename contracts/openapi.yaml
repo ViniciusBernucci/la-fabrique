@@ -241,6 +241,56 @@ paths:
         "403": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
         "409": {$ref: "#/components/responses/Error"}
+  /cli-logins:
+    post:
+      tags: [conexoes]
+      summary: Inicia o login oficial de uma conta de assinatura de IA (claude ou codex)
+      description: |
+        O worker roda o login OFICIAL do cliente num container, num volume por conta; a fábrica nunca lê o
+        token (ADR-0065). Um login aberto por provedor. Depois de iniciar, consulte `GET /cli-logins/{id}`.
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [provider, name], additionalProperties: false, properties: {provider: {type: string, enum: [claude, codex]}, name: {type: string, maxLength: 80}}}}}}
+      responses:
+        "201": {description: Login registrado, content: {application/json: {schema: {$ref: "#/components/schemas/CLILogin"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /cli-logins/{id}:
+    get:
+      tags: [conexoes]
+      summary: Andamento do login (link e código para autorizar, ou a conexão criada)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Login, content: {application/json: {schema: {$ref: "#/components/schemas/CLILogin"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /cli-logins/{id}/code:
+    post:
+      tags: [conexoes]
+      summary: Entrega ao cliente o código que a pessoa colou (Claude)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [code], additionalProperties: false, properties: {code: {type: string, maxLength: 512}}}}}}
+      responses:
+        "200": {description: Código recebido, content: {application/json: {schema: {$ref: "#/components/schemas/CLILogin"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /cli-logins/{id}/cancel:
+    post:
+      tags: [conexoes]
+      summary: Cancela um login aberto (idempotente)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Login cancelado, content: {application/json: {schema: {$ref: "#/components/schemas/CLILogin"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
   /oauth/providers:
     get:
       tags: [conexoes]
@@ -2300,6 +2350,20 @@ components:
       properties:
         secret: {type: string, format: password, maxLength: 8192}
         expected_version: {type: integer, minimum: 1}
+    CLILogin:
+      type: object
+      required: [id, provider, name, state, needs_code, expires_in]
+      properties:
+        id: {type: string, format: uuid}
+        provider: {type: string, enum: [claude, codex]}
+        name: {type: string}
+        state: {type: string, enum: [pending, preparing, awaiting_user, verifying, done, failed, cancelled]}
+        verification_uri: {type: string, description: "Link para autorizar; só em awaiting_user."}
+        user_code: {type: string, description: "Código a digitar no site (Codex); só em awaiting_user."}
+        needs_code: {type: boolean, description: "Claude: a pessoa cola de volta o código que o site mostrou."}
+        error: {type: string}
+        expires_in: {type: integer}
+        connection: {$ref: "#/components/schemas/Connection"}
     OAuthProvider:
       type: object
       required: [kind, flow, available]

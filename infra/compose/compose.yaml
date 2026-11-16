@@ -105,6 +105,12 @@ services:
     environment:
       <<: *go-env
       WORKER_HEALTH_ADDR: 0.0.0.0:8481
+      # Login oficial das contas de assinatura de IA (Claude/Codex) pelo painel (ADR-0065). Desligado por
+      # padrão: precisa do docker.sock no worker (só no overlay de desenvolvimento) e da chave do cofre.
+      CLI_LOGIN: ${CLI_LOGIN:-false}
+      CLI_LOGIN_IMAGE: ${CLI_LOGIN_IMAGE:-le-fabrique/cli:dev}
+      VAULT_KEY: ${VAULT_KEY:-}
+      VAULT_KEY_ID: ${VAULT_KEY_ID:-k1}
     depends_on:
       postgres: {condition: service_healthy}
       migrate: {condition: service_completed_successfully}
