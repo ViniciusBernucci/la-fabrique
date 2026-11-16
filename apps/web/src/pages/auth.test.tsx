@@ -283,6 +283,25 @@ describe("conexões (cofre)", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("conexão revogada pode ser apagada, com confirmação", async () => {
+    let items: Connection[] = [
+      { ...baseConn, state: "revoked", revoked_at: "2026-11-12T10:00:00Z" },
+    ];
+    const calls = stub({
+      ...base,
+      "GET /connections": () => json({ items }),
+      [`DELETE /connections/${baseConn.id}`]: () => {
+        items = [];
+        return new Response(null, { status: 204 });
+      },
+    });
+    renderAt("/connections");
+    await userEvent.click(await screen.findByRole("button", { name: "Apagar" }));
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar exclusão" }));
+    expect(await screen.findByText("Nenhuma conexão cadastrada")).toBeInTheDocument();
+  });
+
   it("mostra o passo a passo do Jira só quando o tipo escolhido é Jira", async () => {
     stub({ ...base, "GET /connections": () => json({ items: [] }) });
     renderAt("/connections");

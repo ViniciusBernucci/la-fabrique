@@ -1217,6 +1217,8 @@ export const api = {
   testConnection: (id: string) => post<Connection>(`/connections/${encodeURIComponent(id)}/test`),
   rotateConnection: (id: string, secret: string, expected_version: number) =>
     post<Connection>(`/connections/${encodeURIComponent(id)}/rotate`, { secret, expected_version }),
+  deleteConnection: (id: string) =>
+    request<void>(`/connections/${encodeURIComponent(id)}`, { method: "DELETE" }),
   revokeConnection: (id: string) =>
     post<Connection>(`/connections/${encodeURIComponent(id)}/revoke`),
 };

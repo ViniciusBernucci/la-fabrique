@@ -230,6 +230,17 @@ paths:
         "200": {description: Conexão, content: {application/json: {schema: {$ref: "#/components/schemas/Connection"}}}}
         "401": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
+    delete:
+      tags: [conexoes]
+      summary: Apaga uma conexão já revogada (recusa a ativa e a que ainda é usada)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "204": {description: Conexão apagada}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
   /oauth/providers:
     get:
       tags: [conexoes]

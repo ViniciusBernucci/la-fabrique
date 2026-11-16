@@ -183,6 +183,10 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 		writeError(w, r, http.StatusBadRequest, "invalid_request", "Os dados enviados são inválidos.", "Corrija os dados e tente novamente.")
 	case errors.Is(err, security.ErrConnectionRevoked):
 		writeError(w, r, http.StatusConflict, "connection_revoked", "A conexão está revogada.", "Crie uma nova conexão para voltar a usar este destino.")
+	case errors.Is(err, security.ErrConnectionActive):
+		writeError(w, r, http.StatusConflict, "connection_active", "A conexão ainda está ativa.", "Revogue a conexão antes de apagá-la.")
+	case errors.Is(err, security.ErrConnectionInUse):
+		writeError(w, r, http.StatusConflict, "connection_in_use", "Esta conexão ainda é usada por um projeto, agente ou servidor MCP.", "Troque a conexão nesses itens e tente apagar de novo.")
 	case errors.Is(err, persistence.ErrNotFound):
 		writeError(w, r, http.StatusNotFound, "not_found", "Recurso não encontrado.", "Verifique o identificador.")
 	case errors.Is(err, persistence.ErrVersionConflict):

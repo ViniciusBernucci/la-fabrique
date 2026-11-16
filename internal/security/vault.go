@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 )
 
@@ -18,6 +20,8 @@ var connectionKinds = map[string]bool{"github": true, "jira": true, "clickup": t
 var (
 	ErrConnectionRevoked = errors.New("conexão revogada")
 	ErrInvalidSecret     = errors.New("segredo inválido")
+	ErrConnectionActive  = errors.New("conexão ainda ativa")
+	ErrConnectionInUse   = errors.New("conexão em uso")
 )
 
 // Connection é a visão pública de uma conexão. NUNCA contém o segredo.
@@ -171,6 +175,26 @@ func (v *Vault) diagnoseNoUpdate(ctx context.Context, id string) error {
 		return ErrConnectionRevoked
 	}
 	return persistence.ErrVersionConflict
+}
+
+// Delete remove uma conexão JÁ revogada (o segredo já foi apagado na revogação). Recusa a ativa
+// (ErrConnectionActive) e a que ainda é referenciada por projeto, agente ou MCP (ErrConnectionInUse).
+func (v *Vault) Delete(ctx context.Context, id string) (Connection, error) {
+	cur, err := v.Get(ctx, id)
+	if err != nil {
+		return Connection{}, err
+	}
+	if cur.State != "revoked" {
+		return cur, ErrConnectionActive
+	}
+	if _, err := v.db.Exec(ctx, `DELETE FROM connections WHERE id = $1 AND state = 'revoked'`, id); err != nil {
+		var pe *pgconn.PgError
+		if errors.As(err, &pe) && pe.Code == "23503" {
+			return cur, ErrConnectionInUse
+		}
+		return cur, persistence.MapError(err)
+	}
+	return cur, nil
 }
 
 // Revoke apaga o segredo e marca a conexão como revogada. Irreversível: para

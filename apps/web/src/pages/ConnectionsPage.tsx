@@ -94,6 +94,7 @@ export function ConnectionsPage() {
                   act(c.id, () => api.rotateConnection(c.id, secret, c.version))
                 }
                 onRevoke={() => act(c.id, () => api.revokeConnection(c.id))}
+                onDelete={() => act(c.id, () => api.deleteConnection(c.id))}
               />
             ))}
           </ul>
@@ -212,16 +213,19 @@ function ConnectionRow({
   onTest,
   onRotate,
   onRevoke,
+  onDelete,
 }: {
   connection: Connection;
   busy: boolean;
   onTest: () => void;
   onRotate: (secret: string) => Promise<void>;
   onRevoke: () => void;
+  onDelete: () => void;
 }) {
   const [rotating, setRotating] = useState(false);
   const [secret, setSecret] = useState("");
   const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const revoked = c.state === "revoked";
 
   async function rotate(event: FormEvent) {
@@ -257,6 +261,24 @@ function ConnectionRow({
             </small>
           )}
         </span>
+        {revoked && (
+          <span className="actions">
+            {confirmDelete ? (
+              <button type="button" disabled={busy} onClick={onDelete}>
+                Confirmar exclusão
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="secondary-action"
+                disabled={busy}
+                onClick={() => setConfirmDelete(true)}
+              >
+                Apagar
+              </button>
+            )}
+          </span>
+        )}
         {!revoked && (
           <span className="actions">
             <button type="button" className="secondary-action" disabled={busy} onClick={onTest}>
