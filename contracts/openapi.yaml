@@ -209,7 +209,7 @@ paths:
         "401": {$ref: "#/components/responses/Error"}
     post:
       tags: [conexoes]
-      summary: "[SENSÍVEL] Cria uma conexão (o segredo é cifrado com chave externa ao banco)"
+      summary: "Cria uma conexão (o segredo é cifrado com chave externa ao banco)"
       description: |
         `secret` é aceito aqui e **nunca** devolvido. Jira: `email:token` com
         `target` https://<site>.atlassian.net. Use escopos mínimos no destino.

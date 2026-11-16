@@ -106,7 +106,6 @@ export function ConnectionsPage() {
 }
 
 function NewConnectionForm({ onCreated }: { onCreated: () => void }) {
-  const { runSensitive } = useReauth();
   const [kind, setKind] = useState<ConnectionKind>("jira");
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
@@ -122,7 +121,7 @@ function NewConnectionForm({ onCreated }: { onCreated: () => void }) {
     setError(null);
     try {
       const value = kind === "jira" ? `${email.trim()}:${secret}` : secret;
-      await runSensitive(() => api.createConnection({ kind, name, target, scopes, secret: value }));
+      await api.createConnection({ kind, name, target, scopes, secret: value });
       setEmail("");
       setName("");
       setTarget("");

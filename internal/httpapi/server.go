@@ -146,7 +146,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Cofre de conexões.
 	mux.HandleFunc("GET /api/connections", s.protected(s.listConnections))
-	mux.HandleFunc("POST /api/connections", s.sensitive(s.createConnection))
+	mux.HandleFunc("POST /api/connections", s.protected(s.createConnection))
 	mux.HandleFunc("GET /api/connections/{id}", s.protected(s.getConnection))
 	mux.HandleFunc("POST /api/connections/{id}/test", s.protected(s.testConnection))
 	mux.HandleFunc("POST /api/connections/{id}/rotate", s.sensitive(s.rotateConnection))

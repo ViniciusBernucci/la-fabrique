@@ -18,7 +18,7 @@ O painel precisa de um único administrador, 2FA obrigatório, sessões revogáv
 **Sessões (T04-02)**
 6. Cookie `lf_session` (256 bits, HttpOnly, SameSite=Strict, `Secure` em produção); só o SHA-256 no banco; validade absoluta de 12 h; revogação vale na próxima requisição. Lista de sessões, revogação individual, "encerrar as outras", logout.
 7. **CSRF em duas camadas:** token por sessão (`X-CSRF-Token`, comparação em tempo constante) em todo método que altera estado **e** checagem de `Origin`/`Sec-Fetch-Site` em todo POST/PUT/PATCH/DELETE, inclusive login. Sem `Origin` nem `Sec-Fetch-Site` (cliente não navegador) vale o token.
-8. **Reautenticação** (senha + código TOTP, replay-safe) abre uma janela de 5 min (`reauth_at`). Sessão recém-criada já conta. Ações sensíveis: criar/rotacionar/revogar conexão, substituir 2FA, encerrar outra sessão. Sem janela: 403 `reauth_required`.
+8. **Reautenticação** (senha + código TOTP, replay-safe) abre uma janela de 5 min (`reauth_at`). Sessão recém-criada já conta. Ações sensíveis: rotacionar/revogar conexão (criar deixou de exigir: [ADR-0063](0063-guardar-conexao-sem-reautenticacao.md)), substituir 2FA, encerrar outra sessão. Sem janela: 403 `reauth_required`.
 9. **HTTPS:** com `REQUIRE_HTTPS` (padrão em produção) a API recusa requisição sem `X-Forwarded-Proto: https` (exceto sondas) e envia HSTS. O IP vem de `X-Forwarded-For` só com `TRUST_PROXY`; o nginx do painel só aceita XFF de redes privadas (`set_real_ip_from`).
 10. **Trilha de autenticação** (`auth_events`): tipo, IP, user agent, correlação e detalhe mínimo. Nunca senha, código, token nem o nome tentado.
 
