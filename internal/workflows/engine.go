@@ -71,6 +71,9 @@ type Executor interface {
 type Engine struct {
 	Exec Executor
 	Now  func() time.Time
+	// OnStep, se informado, é chamado depois de cada passo com o estado já atualizado (para persistir
+	// o progresso de execuções longas). Um erro interrompe o avanço; o estado persiste como está.
+	OnStep func(ctx context.Context, st *RunState) error
 }
 
 var nonIdent = regexp.MustCompile(`[^A-Za-z0-9_]`)
@@ -164,6 +167,11 @@ func (e *Engine) Advance(ctx context.Context, g Graph, st *RunState) error {
 				return nil
 			}
 			e.step(ctx, ix, st, tok)
+			if e.OnStep != nil {
+				if err := e.OnStep(ctx, st); err != nil {
+					return err
+				}
+			}
 			if st.Status == RunFailed {
 				return nil
 			}
