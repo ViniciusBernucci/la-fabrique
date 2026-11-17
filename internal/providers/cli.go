@@ -16,6 +16,8 @@ const (
 	Codex  CLI = "codex"
 )
 
+func (c CLI) String() string { return string(c) }
+
 // Mode é o modo de acesso pedido ao cliente. Os modos que desligam a proteção
 // do próprio cliente (bypassPermissions, danger-full-access) NÃO existem aqui:
 // a fronteira é o sandbox, e a política decide o que cada agente pode.

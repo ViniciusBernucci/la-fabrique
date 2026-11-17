@@ -40,7 +40,7 @@ func (s *Sandbox) Start(ctx context.Context, es ExecSpec) (*Running, error) {
 	}
 	id := randomID()
 	pidfile := "/tmp/run-" + id + ".pid"
-	args := []string{"exec", "-i", "--user", sandboxUID + ":" + sandboxUID}
+	args := []string{"exec", "-i", "--user", s.uid() + ":" + s.uid()}
 	if es.Dir != "" {
 		args = append(args, "--workdir", es.Dir)
 	}
@@ -127,7 +127,7 @@ func (r *Running) Cancel(grace time.Duration) error {
 	signal := func(sig string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_, _, _ = r.s.d.run(ctx, nil, "exec", "--user", sandboxUID+":"+sandboxUID, r.s.Container, "sh", "-c", killTree, "kt", sig, r.pidfile)
+		_, _, _ = r.s.d.run(ctx, nil, "exec", "--user", r.s.uid()+":"+r.s.uid(), r.s.Container, "sh", "-c", killTree, "kt", sig, r.pidfile)
 	}
 	signal("TERM")
 	select {
