@@ -14,6 +14,7 @@ import {
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
 import { DeliveryPanel } from "./DeliveryPanel";
+import { FactoryRuns } from "./FactoryRuns";
 import { MemoryPanel } from "./MemoryPanel";
 import { ProjectManualButton } from "./ProjectManual";
 import { ProjectOpsPanel } from "./ProjectOpsPanel";
@@ -237,6 +238,7 @@ function ProjectDetail({ project, reload }: { project: Project; reload: () => vo
         actions={actions}
       />
       <FormError error={error} />
+      {project.state !== "draft" && <FactoryRuns projectId={project.id} />}
       {project.state !== "draft" && <RunPanel projectId={project.id} />}
       {project.state !== "draft" && <DeliveryPanel projectId={project.id} />}
       {project.state !== "draft" && <MemoryPanel projectId={project.id} />}

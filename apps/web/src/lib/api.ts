@@ -706,6 +706,32 @@ export interface ProjectOverview {
   } | null;
 }
 
+export type WorkflowRunStatus =
+  | "queued"
+  | "running"
+  | "waiting"
+  | "awaiting_decision"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface WorkflowRun {
+  execution_id: string;
+  project_id: string;
+  workflow_version_id: string;
+  title: string;
+  task: string;
+  workspace: string;
+  status: WorkflowRunStatus;
+  outcome: string;
+  failure: string;
+  pending: string[];
+  trace: { node: string; type: string; port?: string; note?: string }[];
+  wake_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ExecutionEvent {
   seq: number;
   type: string;
@@ -1271,6 +1297,29 @@ export const api = {
   testConnection: (id: string) => post<Connection>(`/connections/${encodeURIComponent(id)}/test`),
   rotateConnection: (id: string, secret: string, expected_version: number) =>
     post<Connection>(`/connections/${encodeURIComponent(id)}/rotate`, { secret, expected_version }),
+  // Execuções do workflow do projeto (a fábrica).
+  listRuns: (projectId: string, signal?: AbortSignal) =>
+    request<{ items: WorkflowRun[] }>(`/projects/${encodeURIComponent(projectId)}/runs`, {
+      signal,
+    }),
+  startRun: (
+    projectId: string,
+    input: { title: string; task: string; prd_done: boolean; correction: boolean },
+  ) => post<WorkflowRun>(`/projects/${encodeURIComponent(projectId)}/runs`, input),
+  cancelRun: (projectId: string, runId: string) =>
+    post<WorkflowRun>(
+      `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/cancel`,
+      {},
+    ),
+  decideRun: (projectId: string, runId: string, node: string, choice: "approved" | "rejected") =>
+    post<WorkflowRun>(
+      `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/decide`,
+      { node, choice },
+    ),
+  publishWorkflow: (id: string, expectedVersion: number) =>
+    post<{ number: number; unchanged?: boolean }>(`/workflows/${encodeURIComponent(id)}/publish`, {
+      expected_version: expectedVersion,
+    }),
   deleteConnection: (id: string) =>
     request<void>(`/connections/${encodeURIComponent(id)}`, { method: "DELETE" }),
   revokeConnection: (id: string) =>

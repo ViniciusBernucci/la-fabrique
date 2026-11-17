@@ -100,6 +100,8 @@ function Editor({ initial, nodeTypes }: { initial: Workflow; nodeTypes: NodeType
     description: initial.description,
   });
   const [justSaved, setJustSaved] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [published, setPublished] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [agentNames, setAgentNames] = useState<string[]>([]);
@@ -279,6 +281,19 @@ function Editor({ initial, nodeTypes }: { initial: Workflow; nodeTypes: NodeType
     }
   }
 
+  async function publish() {
+    setPublishing(true);
+    setError(null);
+    try {
+      const v = await api.publishWorkflow(initial.id, version);
+      setPublished(v.number);
+    } catch (e) {
+      setError(toApiError(e));
+    } finally {
+      setPublishing(false);
+    }
+  }
+
   async function save() {
     setSaving(true);
     setError(null);
@@ -337,6 +352,21 @@ function Editor({ initial, nodeTypes }: { initial: Workflow; nodeTypes: NodeType
               </span>
               <button type="button" disabled={saving || !dirty} onClick={save}>
                 Salvar rascunho
+              </button>
+              <button
+                type="button"
+                className="secondary-action"
+                disabled={publishing || dirty || issues.length > 0}
+                title={
+                  dirty
+                    ? "Salve o rascunho antes de publicar"
+                    : issues.length > 0
+                      ? "Resolva as pendências da validação antes de publicar"
+                      : "Congela esta versão para as execuções"
+                }
+                onClick={publish}
+              >
+                {published ? `Publicado (v${published})` : "Publicar"}
               </button>
             </div>
           }

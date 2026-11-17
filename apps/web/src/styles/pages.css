@@ -1061,3 +1061,31 @@
   display: grid;
   gap: 4px;
 }
+
+/* Execuções da fábrica */
+.run-list {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.run-item {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--hud-line);
+  border-radius: var(--hud-radius);
+  background: var(--hud-surface-2);
+}
+.run-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.log.terminal {
+  max-height: 360px;
+  background: var(--hud-bg, transparent);
+  font-family: var(--hud-font-mono);
+}
