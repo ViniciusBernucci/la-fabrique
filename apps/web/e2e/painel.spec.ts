@@ -264,6 +264,20 @@ test("editor de workflows: canvas infinito, arrastar nós, conectar pelas portas
   await expect(page.locator(".react-flow__node")).toHaveCount(3);
 });
 
+test("manual de workflows abre, navega pelo índice e fecha", async () => {
+  await page.goto("/workflows");
+  await page.getByRole("button", { name: "Manual de workflows" }).click();
+  const dialog = page.getByRole("dialog", { name: "Como montar um workflow" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Os tipos de setas, cores e bolinhas" }).click();
+  await expect(
+    dialog.getByRole("heading", { name: "Os tipos de setas, cores e bolinhas" }),
+  ).toBeInViewport();
+  await snap("13-manual-de-workflows");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+});
+
 test("nenhum erro de página nem resposta 5xx durante o ensaio", async () => {
   expect(problems).toEqual([]);
 });

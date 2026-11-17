@@ -29,6 +29,7 @@ import {
 } from "../lib/api";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
+import { WorkflowManualButton } from "./WorkflowManual";
 import { EditorContext, FlowNodeCard, nodeIcon } from "./workflow/FlowNode";
 import {
   autoLayout,
@@ -330,6 +331,7 @@ function Editor({ initial, nodeTypes }: { initial: Workflow; nodeTypes: NodeType
           lead="Rascunho: não executa. Arraste os nós, puxe uma saída até uma entrada para conectar e clique num nó para editar."
           actions={
             <div className="actions">
+              <WorkflowManualButton />
               <span className={dirty ? "badge badge--paused" : "badge badge--active"}>
                 {dirty ? "Alterações não salvas" : justSaved ? "Salvo" : `Versão ${version}`}
               </span>

@@ -380,6 +380,30 @@ describe("editor de workflows", { timeout: 20_000 }, () => {
     expect(saved.edges.map((e) => `${e.from}>${e.to}`)).toEqual(["inicio>b"]);
   });
 
+  it("abre o manual de workflows com nós, expressões e tipos de seta, e fecha com Esc", async () => {
+    stub(editorRoutes(workflow()));
+    renderAt(`/workflows/${ID}`);
+    await canvas();
+    await click("Manual de workflows");
+    const dialog = await screen.findByRole("dialog", { name: "Como montar um workflow" });
+    for (const title of [
+      "O que é um workflow (comece por aqui)",
+      "Os tipos de setas, cores e bolinhas",
+      "Expressões: a linguagem das condições",
+      "O fluxo padrão, nó por nó",
+    ]) {
+      expect(within(dialog).getByRole("heading", { name: title })).toBeInTheDocument();
+    }
+    expect(within(dialog).getAllByText("fabrica.correcao == true").length).toBeGreaterThan(0);
+    expect(within(dialog).getByText("Vermelha, tracejada (traços)")).toBeInTheDocument();
+    // Todo tipo de nó do catálogo real está explicado.
+    for (const label of ["Agente (IA)", "Loop limitado", "Espera durável", "Decisão humana"]) {
+      expect(within(dialog).getAllByText(label.replace(/ \(IA\)/, "")).length).toBeGreaterThan(0);
+    }
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("mostra o conflito de versão ao salvar", async () => {
     stub(
       editorRoutes(workflow(), {

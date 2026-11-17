@@ -6,6 +6,7 @@ import { EmptyState, ErrorState, LoadingState } from "../components/States";
 import { type ApiError, api } from "../lib/api";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
+import { WorkflowManualButton } from "./WorkflowManual";
 
 const kindLabel = { feature: "Fluxo de feature", subflow: "Subfluxo" } as const;
 
@@ -37,6 +38,7 @@ export function WorkflowsPage() {
         label="Workflows"
         title="Workflows"
         lead="Fluxos determinísticos reutilizáveis. Rascunhos não executam: publicação e execução chegam nos próximos tickets do épico."
+        actions={<WorkflowManualButton />}
       />
       <section className="panel panel--pad" aria-label="Novo workflow">
         <form className="form form--grid" onSubmit={create}>
