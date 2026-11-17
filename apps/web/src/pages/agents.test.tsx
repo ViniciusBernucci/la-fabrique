@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -392,8 +392,8 @@ describe("configuração efetiva no editor de workflows", () => {
       [`GET /workflows/${WF}/nodes/ag/effective`]: () => json(effective),
     });
     renderAt(`/workflows/${WF}`);
-    await screen.findByRole("group", { name: "Grafo do workflow" });
-    await userEvent.click(screen.getByRole("button", { name: /^Nó ag/ }));
+    await screen.findByLabelText("Grafo do workflow");
+    fireEvent.click(screen.getByLabelText(/^Nó ag/));
     await userEvent.click(screen.getByRole("button", { name: "Ver configuração efetiva" }));
     const view = await screen
       .findByRole("group", { name: "Configuração efetiva" })
@@ -417,8 +417,8 @@ describe("configuração efetiva no editor de workflows", () => {
         ),
     });
     renderAt(`/workflows/${WF}`);
-    await screen.findByRole("group", { name: "Grafo do workflow" });
-    await userEvent.click(screen.getByRole("button", { name: /^Nó ag/ }));
+    await screen.findByLabelText("Grafo do workflow");
+    fireEvent.click(screen.getByLabelText(/^Nó ag/));
     await userEvent.click(screen.getByRole("button", { name: "Ver configuração efetiva" }));
     expect(await screen.findByText(/não pode ampliar as ferramentas/)).toBeInTheDocument();
   });

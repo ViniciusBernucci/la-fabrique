@@ -11,12 +11,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ViniciusBernucci/le-fabrique/internal/agents"
 	"github.com/ViniciusBernucci/le-fabrique/internal/config"
 	"github.com/ViniciusBernucci/le-fabrique/internal/httpapi"
 	"github.com/ViniciusBernucci/le-fabrique/internal/logging"
 	"github.com/ViniciusBernucci/le-fabrique/internal/models"
 	"github.com/ViniciusBernucci/le-fabrique/internal/policy"
 	"github.com/ViniciusBernucci/le-fabrique/internal/skills"
+	"github.com/ViniciusBernucci/le-fabrique/internal/stdflow"
 )
 
 func main() { os.Exit(run()) }
@@ -69,6 +71,21 @@ func run() int {
 		log.Warn("não consegui instalar os modelos padrão", "error", merr.Error())
 	} else if len(added) > 0 {
 		log.Info("modelos padrão cadastrados", "quantidade", len(added))
+	}
+	// Agentes padrão (um por papel do fluxo) e preenchimento do desenho do fluxo padrão (ADR-0068).
+	agentsCtx, cancelAgents := context.WithTimeout(ctx, 20*time.Second)
+	newAgents, aerr := agents.InstallDefaults(agentsCtx, pool)
+	if aerr != nil {
+		log.Warn("não consegui instalar os agentes padrão", "error", aerr.Error())
+	} else if len(newAgents) > 0 {
+		log.Info("agentes padrão cadastrados", "agentes", newAgents)
+	}
+	filled, ferr := stdflow.BackfillDefaults(agentsCtx, pool)
+	cancelAgents()
+	if ferr != nil {
+		log.Warn("não consegui completar os fluxos padrão", "error", ferr.Error())
+	} else if len(filled) > 0 {
+		log.Info("fluxos padrão completados com os agentes padrão", "workflows", filled)
 	}
 	srv := &http.Server{
 		Addr:              cfg.Addr,

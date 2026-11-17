@@ -33,15 +33,8 @@ func TestNewProjectGetsTheStructuralWorkflowAndKeepsEdits(t *testing.T) {
 	if len(w.Graph.Nodes) != len(workflows.StandardGraph().Nodes) || w.Kind != "feature" {
 		t.Fatalf("%d nós, tipo %s", len(w.Graph.Nodes), w.Kind)
 	}
-	// Diagnóstico por nó: agentes e comandos ainda sem escolha; nenhuma guarda removida.
-	var required int
-	for _, is := range pw.Issues {
-		if is.Code != "required" {
-			t.Fatalf("%+v", is)
-		}
-		required++
-	}
-	if required != 6 {
+	// ADR-0068: o fluxo nasce com os agentes padrão e os checks preenchidos, sem pendências.
+	if len(pw.Issues) != 0 {
 		t.Fatalf("pendências: %v", pw.Issues)
 	}
 	// O administrador edita o rascunho; o provisionamento repetido preserva a edição.

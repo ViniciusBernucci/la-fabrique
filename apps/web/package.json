@@ -17,6 +17,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@xyflow/react": "13.0.2",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-router-dom": "7.18.5"

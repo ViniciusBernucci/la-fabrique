@@ -43,19 +43,61 @@ func TestStandardGraphHasBothPathsAndNoGuardIssues(t *testing.T) {
 	}
 }
 
-func TestStandardGraphIsADraftWithNodeLevelConfigurationGaps(t *testing.T) {
-	is := Validate(StandardGraph())
-	missingAgent := 0
-	for _, i := range is {
-		if i.Code == "required" && i.Field == "agent" {
-			missingAgent++
+// ADR-0068: o desenho padrão já vem completo (agentes padrão e checks), sem pendências de configuração.
+func TestStandardGraphComesFilledWithDefaultAgentsAndChecks(t *testing.T) {
+	g := StandardGraph()
+	if is := Validate(g); len(is) != 0 {
+		t.Fatalf("o fluxo padrão deveria nascer sem pendências: %+v", is)
+	}
+	for id, agent := range StandardAgents {
+		found := false
+		for _, n := range g.Nodes {
+			if n.ID == id {
+				found = true
+				if n.Props["agent"] != agent {
+					t.Errorf("%s deveria usar %q: %v", id, agent, n.Props["agent"])
+				}
+			}
 		}
-		if i.Code != "required" {
-			t.Fatalf("o rascunho padrão só deve ter pendências de configuração: %+v", i)
+		if !found {
+			t.Errorf("nó %s ausente", id)
 		}
 	}
-	if missingAgent != 5 || len(is) != 6 { // 5 agentes sem escolha + os comandos dos checks integrados
-		t.Fatalf("agentes sem escolha: %d (%v)", missingAgent, is)
+}
+
+func TestFillStandardDefaultsOnlyFillsEmptyFields(t *testing.T) {
+	g := StandardGraph()
+	for i := range g.Nodes {
+		switch g.Nodes[i].ID {
+		case GuardPlanning:
+			g.Nodes[i].Props["agent"] = "meu-agente" // escolha da pessoa
+		case GuardImplFront:
+			delete(g.Nodes[i].Props, "agent")
+		case GuardIntegrated:
+			g.Nodes[i].Props["commands"] = "  "
+		}
+	}
+	if n := FillStandardDefaults(&g); n != 2 {
+		t.Fatalf("deveria preencher 2 campos vazios, preencheu %d", n)
+	}
+	for _, n := range g.Nodes {
+		switch n.ID {
+		case GuardPlanning:
+			if n.Props["agent"] != "meu-agente" {
+				t.Fatalf("escolha da pessoa foi sobrescrita: %v", n.Props["agent"])
+			}
+		case GuardImplFront:
+			if n.Props["agent"] != AgentImplFront {
+				t.Fatalf("agente não preenchido: %v", n.Props["agent"])
+			}
+		case GuardIntegrated:
+			if n.Props["commands"] != ChecksCommands {
+				t.Fatalf("checks não preenchidos: %v", n.Props["commands"])
+			}
+		}
+	}
+	if n := FillStandardDefaults(&g); n != 0 {
+		t.Fatalf("segunda passada deveria ser vazia: %d", n)
 	}
 }
 

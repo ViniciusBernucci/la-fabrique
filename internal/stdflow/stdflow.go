@@ -72,3 +72,46 @@ func Managed(ctx context.Context, db persistence.DBTX, workflowID string) (bool,
 	err := db.QueryRow(ctx, `SELECT count(*) FROM project_workflows WHERE workflow_id=$1`, workflowID).Scan(&n)
 	return n > 0, err
 }
+
+// BackfillDefaults completa os workflows de projeto já existentes com os agentes padrão e os checks
+// padrão, mas só onde o campo está vazio (workflows.FillStandardDefaults); o que o administrador
+// escolheu fica como está. Devolve os IDs dos workflows alterados.
+func BackfillDefaults(ctx context.Context, db DB) (changed []string, err error) {
+	rows, err := db.Query(ctx, `SELECT workflow_id::text FROM project_workflows`)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		err := persistence.WithTx(ctx, db, func(tx pgx.Tx) error {
+			w, err := workflows.Get(ctx, tx, id)
+			if err != nil {
+				return err
+			}
+			if workflows.FillStandardDefaults(&w.Graph) == 0 {
+				return nil
+			}
+			if _, err := workflows.Save(ctx, tx, w.ID, w.Version, w.Name, w.Description, w.Graph); err != nil {
+				return err
+			}
+			changed = append(changed, id)
+			return nil
+		})
+		if err != nil {
+			return changed, fmt.Errorf("completar o workflow %s: %w", id, persistence.MapError(err))
+		}
+	}
+	return changed, nil
+}

@@ -1,0 +1,19 @@
+# ADR-0068 — Agentes padrão, fluxo padrão preenchido e editor de workflows com React Flow
+
+- **Estado:** ACEITA · **Relacionadas:** [ADR-0013](0013-catalogo-de-agentes-e-sobrescritas.md), [ADR-0066](0066-skills-padrao-da-fabrica.md), [ADR-0067](0067-catalogo-inicial-de-modelos-e-lista-no-agente.md)
+
+## Contexto
+Depois das skills e dos modelos padrão, o catálogo de **agentes** continuava vazio e o fluxo padrão de cada projeto nascia com os 5 nós de agente e os checks sem preenchimento (6 pendências). Pedido: os agentes da pré-configuração precisam existir e o fluxo desenhado já deve vir configurado. Em seguida: o canvas deve funcionar como o do n8n (infinito, nós arrastáveis, edição ali mesmo) e ser mais elaborado visualmente.
+
+## Decisão
+1. **7 agentes padrão** (`agents.InstallDefaults`, na subida da API; idempotente, não sobrescreve nem recria um agente existente mesmo editado): `redator-prd`, `tech-lead`, `implementador-frontend`, `implementador-backend`, `revisor-frontend`, `revisor-backend`, `analista-ambiente-visual`. Cada um traz instruções, o tempo máximo e a **skill padrão correspondente** (`escrever-prd-e-specs`, `lf-tech-lead`, `lf-implementar-tarefa`, `lf-revisar-*`, `lf-descobrir-ambiente-visual`). Provedor **Claude**, modelo vazio ("Padrão da conta") e **sem conta fixa**: a conta é do ambiente de cada pessoa e se escolhe na tela de Agentes.
+2. **O fluxo padrão nasce preenchido** (`workflows.StandardGraph`): cada nó de agente aponta para o agente padrão do seu papel e os checks integrados trazem `make lint` / `make test` (convenção do projeto). Projetos e workflows **já existentes** são completados na subida (`stdflow.BackfillDefaults`) **só onde o campo está vazio**; o que a pessoa escolheu nunca é sobrescrito. Efeito: o fluxo padrão passa a validar sem pendências.
+3. As coordenadas do fluxo padrão foram refeitas para o cartão novo (240 px de largura).
+4. **Editor com React Flow** (`@xyflow/react` 13.0.2, versão exata): canvas infinito com pan/zoom (rolagem move, Ctrl + rolagem dá zoom), grade, minimapa e controles; cartões por tipo com ícone, resumo do que o nó faz, portas nomeadas (erro e "falso" em vermelho) e selo de pendência; **arrastar** os nós, **puxar da saída até a entrada** para conectar (ligar de novo uma saída substitui a conexão: o servidor só aceita uma por saída); paleta lateral com clique ou arrastar para o canvas (o nó novo procura um lugar livre); **Organizar** (camadas da esquerda para a direita), **Ajustar à tela**, Delete remove a seleção; painel de propriedades ao lado, com o campo Agente sugerindo os agentes do catálogo e "Segue para" por saída (alternativa por teclado ao arrastar). Fluxos salvos pelo editor antigo, cujos cartões menores chegam sobrepostos, são reorganizados ao abrir (só a posição).
+5. O formato salvo (`nodes`/`edges` com `x`, `y`, portas) **não mudou**; coordenadas negativas passam a ser possíveis no canvas infinito.
+
+## Limites
+- Os agentes ficam sem conta e sem modelo: até a pessoa escolher a conta (ou o worker resolver a conta ativa do provedor), a execução real depende dessa escolha. Não há teste de execução real com os agentes padrão.
+- `make lint` / `make test` nos checks é um padrão do repositório La fabrique; projetos com outro comando precisam editar o nó.
+- Sem desfazer/refazer, sem copiar e colar nós e sem múltiplas saídas por porta.
+- O limite de memória do container web de desenvolvimento subiu de 128 MB (feito para o nginx) para 768 MB (`LIMIT_WEB_DEV_MEM`): o Vite pré-empacota o React Flow e era encerrado por falta de memória.
