@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -106,6 +106,15 @@ const catalog: NodeType[] = [
         max: 720,
       },
     ],
+  },
+  {
+    type: "skill",
+    label: "Skill",
+    category: "execução",
+    inputs: ["in"],
+    outputs: ["out", "error"],
+    multi_in: false,
+    fields: [{ name: "skill", label: "Skill", kind: "text", required: true }],
   },
 ];
 
@@ -265,6 +274,37 @@ describe("editor de workflows", { timeout: 20_000 }, () => {
       "agent-1.out>fim.in",
       "inicio.out>agent-1.in",
     ]);
+  });
+
+  it("escolhe o agente e a skill do nó em listas do catálogo", async () => {
+    const calls = stub(
+      editorRoutes(workflow(), {
+        "GET /agents": () => json({ items: [{ name: "tech-lead" }, { name: "revisor-backend" }] }),
+        "GET /skills": () => json({ items: [{ name: "lf-tech-lead" }] }),
+        [`PUT /workflows/${ID}`]: (c) =>
+          json(workflow({ version: 2, graph: c.body?.graph as WorkflowGraph })),
+      }),
+    );
+    renderAt(`/workflows/${ID}`);
+    await canvas();
+    await click("Agente (IA)");
+    const agent = await screen.findByRole("combobox", { name: /^Agente \*/ });
+    await waitFor(() => expect(within(agent).getAllByRole("option")).toHaveLength(3));
+    await userEvent.selectOptions(agent, "tech-lead");
+    expect(
+      await screen.findByText("tech-lead", { selector: ".wf-card-summary" }),
+    ).toBeInTheDocument();
+
+    await click("Skill");
+    const skill = await screen.findByRole("combobox", { name: /^Skill \*/ });
+    await waitFor(() => expect(within(skill).getAllByRole("option")).toHaveLength(2));
+    await userEvent.selectOptions(skill, "lf-tech-lead");
+
+    await click("Salvar rascunho");
+    await screen.findByText("Salvo");
+    const saved = calls.find((c) => c.method === "PUT")?.body?.graph as WorkflowGraph;
+    expect(saved.nodes.find((n) => n.id === "agent-1")?.props.agent).toBe("tech-lead");
+    expect(saved.nodes.find((n) => n.id === "skill-1")?.props.skill).toBe("lf-tech-lead");
   });
 
   it("mostra o erro com o nó e o campo relevantes e permite localizar o nó", async () => {

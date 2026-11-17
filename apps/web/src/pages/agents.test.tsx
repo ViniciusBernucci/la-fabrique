@@ -206,6 +206,30 @@ describe("catálogo de agentes", () => {
     });
   });
 
+  it("escolhe as skills do agente no catálogo e mantém as que saíram dele", async () => {
+    const skills = [
+      { id: "s1", name: "lf-tech-lead", description: "Planeja a feature" },
+      { id: "s2", name: "lf-revisar-backend", description: "Revisa o backend" },
+    ];
+    const calls = stub({
+      "GET /session": () => json(session),
+      "GET /agents": () => json({ items: [agent] }),
+      "GET /connections": () => json(connections),
+      "GET /models": () => json(catalogModels),
+      "GET /skills": () => json({ items: skills }),
+      [`PUT /agents/${AGENT}`]: () => json(agent),
+    });
+    renderAt("/agents");
+    await userEvent.click(await screen.findByRole("button", { name: "Editar dev" }));
+    const box = await screen.findByRole("checkbox", { name: /lf-tech-lead/ });
+    expect(screen.getByRole("checkbox", { name: /revisao/ })).toBeChecked(); // fora do catálogo, preservada
+    expect(screen.getByText("fora do catálogo")).toBeInTheDocument();
+    await userEvent.click(box);
+    await userEvent.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    const put = calls.find((c) => c.method === "PUT");
+    expect(put?.body).toMatchObject({ skills: ["revisao", "lf-tech-lead"] });
+  });
+
   it("carrega a lista de modelos de cada LLM e a troca ao mudar o provedor", async () => {
     stub({
       "GET /session": () => json(session),

@@ -771,6 +771,32 @@
   overflow: auto;
   background: var(--hud-surface);
 }
+.skill-picker {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--hud-line);
+  border-radius: 10px;
+}
+.skill-picker legend {
+  padding: 0 6px;
+  color: var(--hud-text-muted);
+  font: 600 11px var(--hud-font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.skill-picker-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.skill-picker-item span {
+  display: grid;
+}
+.skill-picker-item small {
+  font: 400 11px var(--hud-font-ui);
+}
 .wf-wires {
   display: grid;
   gap: 8px;

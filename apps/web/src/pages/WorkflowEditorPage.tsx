@@ -102,6 +102,7 @@ function Editor({ initial, nodeTypes }: { initial: Workflow; nodeTypes: NodeType
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [agentNames, setAgentNames] = useState<string[]>([]);
+  const [skillNames, setSkillNames] = useState<string[]>([]);
   const [effective, setEffective] = useState<{
     node: string;
     value?: EffectiveAgent;
@@ -120,12 +121,16 @@ function Editor({ initial, nodeTypes }: { initial: Workflow; nodeTypes: NodeType
   }, [issues]);
   const ctx = useMemo(() => ({ types: typeMap, issues: issueCount }), [typeMap, issueCount]);
 
-  // Os nomes de agente do catálogo alimentam a sugestão do campo "Agente"; sem eles o campo segue livre.
+  // Agentes e skills do catálogo viram listas nos campos "Agente" e "Skill"; sem eles o campo segue livre.
   useEffect(() => {
     let alive = true;
     api
       .listAgents()
       .then((r) => alive && setAgentNames(r.items.map((a) => a.name)))
+      .catch(() => {});
+    api
+      .listSkills()
+      .then((r) => alive && setSkillNames(r.items.map((x) => x.name)))
       .catch(() => {});
     return () => {
       alive = false;
@@ -293,6 +298,13 @@ function Editor({ initial, nodeTypes }: { initial: Workflow; nodeTypes: NodeType
       setSaving(false);
     }
   }
+
+  const choicesFor = (type: string, field: string) =>
+    type === "agent" && field === "agent"
+      ? agentNames
+      : type === "skill" && field === "skill"
+        ? skillNames
+        : undefined;
 
   const targets = (fromId: string) =>
     nodes
@@ -483,11 +495,7 @@ function Editor({ initial, nodeTypes }: { initial: Workflow; nodeTypes: NodeType
                     key={f.name}
                     field={f}
                     value={selectedNode.data.props[f.name]}
-                    suggestions={
-                      selectedNode.data.wfType === "agent" && f.name === "agent"
-                        ? agentNames
-                        : undefined
-                    }
+                    choices={choicesFor(selectedNode.data.wfType, f.name)}
                     issues={issues.filter((i) => i.node === selectedNode.id && i.field === f.name)}
                     onChange={(raw) => setProp(selectedNode.id, f, raw)}
                   />
@@ -602,13 +610,14 @@ function FieldEditor({
   field,
   value,
   issues,
-  suggestions,
+  choices,
   onChange,
 }: {
   field: FieldSpec;
   value: string | number | undefined;
   issues: WorkflowIssue[];
-  suggestions?: string[];
+  /** Valores do catálogo; com eles o campo vira uma lista (sem eles segue texto livre). */
+  choices?: string[];
   onChange: (raw: string) => void;
 }) {
   const v = value === undefined ? "" : String(value);
@@ -628,23 +637,25 @@ function FieldEditor({
             </option>
           ))}
         </select>
+      ) : choices && choices.length > 0 ? (
+        <select id={id} value={v} onChange={(e) => onChange(e.target.value)}>
+          <option value="">Selecione…</option>
+          {choices.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+          {v !== "" && !choices.includes(v) && <option value={v}>{v} (fora do catálogo)</option>}
+        </select>
       ) : (
         <input
           id={id}
           type={field.kind === "int" ? "number" : "text"}
-          list={suggestions?.length ? `${id}-options` : undefined}
           value={v}
           min={field.min}
           max={field.max}
           onChange={(e) => onChange(e.target.value)}
         />
-      )}
-      {suggestions && suggestions.length > 0 && (
-        <datalist id={`${id}-options`}>
-          {suggestions.map((n) => (
-            <option key={n} value={n} />
-          ))}
-        </datalist>
       )}
       {field.hint && <small className="muted">{field.hint}</small>}
       {issues.map((i) => (

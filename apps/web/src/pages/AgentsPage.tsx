@@ -2,6 +2,7 @@ import { type FormEvent, useState } from "react";
 import { FormError, toApiError } from "../components/AuthParts";
 import { ModelSelect } from "../components/ModelSelect";
 import { PageHeader } from "../components/PageHeader";
+import { SkillPicker } from "../components/SkillPicker";
 import { EmptyState, ErrorState, LoadingState } from "../components/States";
 import {
   type Agent,
@@ -11,6 +12,7 @@ import {
   api,
   type Connection,
   type Model,
+  type Skill,
 } from "../lib/api";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
@@ -56,6 +58,9 @@ export function AgentsPage() {
   // A lista de modelos é conveniência: se falhar, o campo continua aceitando o nome digitado.
   const modelList = useResource((s) => api.listModels(s), "models", expire);
   const models = modelList.state.status === "ready" ? modelList.state.data.items : [];
+  // Idem para as skills: sem o catálogo, o campo cai para texto separado por vírgula.
+  const skillList = useResource((s) => api.listSkills(s), "skills", expire);
+  const skillCatalog = skillList.state.status === "ready" ? skillList.state.data.items : null;
   const [editing, setEditing] = useState<Agent | null>(null);
 
   if (agents.state.status === "loading" || connections.state.status === "loading") {
@@ -80,6 +85,7 @@ export function AgentsPage() {
         agent={editing}
         connections={connections.state.data.items}
         models={models}
+        skillCatalog={skillCatalog}
         onSaved={() => {
           setEditing(null);
           agents.reload();
@@ -118,17 +124,20 @@ function AgentForm({
   agent,
   connections,
   models,
+  skillCatalog,
   onSaved,
   onCancel,
 }: {
   agent: Agent | null;
   connections: Connection[];
   models: Model[];
+  skillCatalog: Skill[] | null;
   onSaved: () => void;
   onCancel: () => void;
 }) {
   const [f, setF] = useState<AgentInput>(agent ? { ...agent } : empty);
   const [skills, setSkills] = useState((agent?.skills ?? []).join(", "));
+  const [picked, setPicked] = useState<string[]>(agent?.skills ?? []);
   const [tools, setTools] = useState((agent?.tools ?? []).join(", "));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -138,7 +147,11 @@ function AgentForm({
     event.preventDefault();
     setBusy(true);
     setError(null);
-    const input: AgentInput = { ...f, skills: list(skills), tools: list(tools) };
+    const input: AgentInput = {
+      ...f,
+      skills: skillCatalog ? picked : list(skills),
+      tools: list(tools),
+    };
     try {
       if (agent) await api.updateAgent(agent.id, agent.version, input);
       else await api.createAgent(input);
@@ -221,10 +234,14 @@ function AgentForm({
             onChange={(e) => setF({ ...f, timeout_minutes: Number(e.target.value) })}
           />
         </label>
-        <label>
-          Skills (separadas por vírgula)
-          <input value={skills} onChange={(e) => setSkills(e.target.value)} />
-        </label>
+        {skillCatalog ? (
+          <SkillPicker catalog={skillCatalog} value={picked} onChange={setPicked} />
+        ) : (
+          <label>
+            Skills (separadas por vírgula)
+            <input value={skills} onChange={(e) => setSkills(e.target.value)} />
+          </label>
+        )}
         <label>
           Ferramentas (separadas por vírgula)
           <input value={tools} onChange={(e) => setTools(e.target.value)} />
