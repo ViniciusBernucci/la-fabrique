@@ -4,8 +4,9 @@
 FROM node:24-bookworm-slim
 ARG CLAUDE_CODE_VERSION=2.1.325
 ARG CODEX_VERSION=0.164.0
-# ca-certificates: os clientes falam HTTPS com o login da Anthropic e da OpenAI.
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+# ca-certificates: os clientes falam HTTPS com o login da Anthropic e da OpenAI. git, make e tar: o terminal do
+# agente (ADR-0069) lê o histórico, a fábrica recolhe as alterações como patch git e os projetos usam make.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git make tar \
  && rm -rf /var/lib/apt/lists/*
 RUN npm install -g --no-audit --no-fund \
       @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \

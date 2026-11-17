@@ -341,7 +341,7 @@ func Advance(ctx context.Context, db DB, run Run, opt Options) (Run, error) {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	go watchCancel(ctx, db, run.ExecutionID, opt.WatchEvery, cancel)
+	go watchRun(ctx, db, run.ExecutionID, opt.WatchEvery, opt.Lease, cancel)
 
 	st := run.State
 	seen := len(st.Trace)
@@ -378,7 +378,9 @@ func cancelled(ctx context.Context, db DB, id string) bool {
 	return db.QueryRow(ctx, `SELECT status FROM execution_runs WHERE execution_id = $1`, id).Scan(&s) == nil && s == StatusCancelled
 }
 
-func watchCancel(ctx context.Context, db DB, id string, every time.Duration, cancel context.CancelFunc) {
+// watchRun confere a cada tick se a execução foi cancelada (interrompendo o nó em andamento) e renova a
+// posse (lease): um nó longo, como um agente, não pode deixar outro worker reclamar a execução.
+func watchRun(ctx context.Context, db DB, id string, every, lease time.Duration, cancel context.CancelFunc) {
 	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
@@ -390,6 +392,7 @@ func watchCancel(ctx context.Context, db DB, id string, every time.Duration, can
 				cancel()
 				return
 			}
+			_, _ = db.Exec(ctx, `UPDATE execution_runs SET lease_until = now() + make_interval(secs => $2) WHERE execution_id = $1 AND status = 'running'`, id, lease.Seconds())
 		}
 	}
 }

@@ -84,6 +84,7 @@ func registerJobs(w *worker.Worker, pool *pgxpool.Pool, cfg config.Worker) {
 	}
 	registerAdmission(w, sch, pool, cfg)
 	registerCLILogin(w, pool, cfg)
+	registerFactory(w, pool, cfg)
 	w.AddJob(worker.SentinelRoutinesJob(sch, func(ctx context.Context) ([]string, error) { return sentinel.ProjectScopes(ctx, pool) }, cfg.JobsInterval))
 	w.AddJob(worker.RetentionJob(&retention.Retention{DB: pool, Checkpoints: cps}, retention.Policy{}, cfg.RetentionApply, cfg.RetentionInterval))
 }

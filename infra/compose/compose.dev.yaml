@@ -38,6 +38,10 @@ services:
       # Login das contas de IA pelo painel (ADR-0065): liga o runner e deixa o worker construir a imagem
       # dos clientes (infra/images/Dockerfile.cli) se ela ainda não existir.
       CLI_LOGIN: "true"
+      # Fábrica: o worker conduz os workflows publicados (ADR-0069). FACTORY_PUSH liga enviar a branch e abrir a Draft PR.
+      FACTORY_RUN: "true"
+      FACTORY_PUSH: ${FACTORY_PUSH:-false}
+      FACTORY_IMAGE: le-fabrique/cli:dev
       CLI_LOGIN_CONTEXT: /src/infra/images
     volumes:
       - .:/src

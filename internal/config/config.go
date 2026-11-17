@@ -85,8 +85,14 @@ type Worker struct {
 	PRPollInterval time.Duration
 	// CLILogin liga o login oficial das contas de assinatura de IA pelo painel (CLI_LOGIN=true, ADR-0065).
 	// Desligado por padrão: exige o docker.sock no worker e VAULT_KEY (decisão de implantação).
-	CLILogin        bool
-	CLILoginImage   string
+	CLILogin      bool
+	CLILoginImage string
+	// FactoryRun liga a execução dos workflows pelo worker (FACTORY_RUN=true, ADR-0069); FactoryPush libera
+	// enviar a branch e abrir a Draft PR (FACTORY_PUSH=true); FactoryImage é a imagem do terminal do agente.
+	FactoryRun      bool
+	FactoryPush     bool
+	FactoryImage    string
+	WorkspacesDir   string
 	CLILoginContext string
 	// Admission liga o laço de admissão da Sentinela (SENTINEL_ADMISSION=true). Sem executor ligado ele roda em
 	// observação (dry-run): decide e audita, não reserva nem altera estado.
@@ -307,7 +313,16 @@ func LoadWorker(lookup Lookup) (Worker, error) {
 		cfg.CLILoginImage = l.str("CLI_LOGIN_IMAGE", "le-fabrique/cli:dev")
 		cfg.CLILoginContext = l.str("CLI_LOGIN_CONTEXT", "")
 	}
-	if cfg.IssueSync || cfg.PRSync || cfg.CLILogin {
+	cfg.FactoryRun = l.boolean("FACTORY_RUN", false)
+	if cfg.FactoryRun {
+		cfg.FactoryPush = l.boolean("FACTORY_PUSH", false)
+		cfg.FactoryImage = l.str("FACTORY_IMAGE", "le-fabrique/cli:dev")
+		cfg.WorkspacesDir = l.str("WORKSPACES_DIR", "")
+		if cfg.WorkspacesDir == "" {
+			l.fail("WORKSPACES_DIR é obrigatório com FACTORY_RUN=true (a pasta onde ficam os repositórios dos projetos)")
+		}
+	}
+	if cfg.IssueSync || cfg.PRSync || cfg.CLILogin || cfg.FactoryRun {
 		cfg.VaultKeyID = l.str("VAULT_KEY_ID", "k1")
 		cfg.VaultKey = l.vaultKey()
 	}

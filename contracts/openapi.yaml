@@ -963,6 +963,75 @@ paths:
         "401": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
 
+  /projects/{id}/runs:
+    get:
+      tags: [execucoes]
+      summary: Execuções do workflow do projeto, as mais novas primeiro
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Execuções, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/WorkflowRun"}}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [execucoes]
+      summary: Inicia a execução do workflow PUBLICADO do projeto (o worker a conduz)
+      description: >
+        Cria a execução presa à versão publicada. Rascunho não executa (409 `not_published`). `prd_done` e
+        `correction` viram as variáveis `prd.concluido` e `fabrica.correcao` do fluxo padrão.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [title], additionalProperties: false, properties: {title: {type: string, maxLength: 200}, task: {type: string, maxLength: 20000}, correction: {type: boolean}, prd_done: {type: boolean}}}}}
+      responses:
+        "201": {description: Execução criada, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowRun"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /projects/{id}/runs/{runId}:
+    get:
+      tags: [execucoes]
+      summary: Uma execução, com o trajeto percorrido e as decisões pendentes
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: runId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Execução, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowRun"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/runs/{runId}/cancel:
+    post:
+      tags: [execucoes]
+      summary: Cancela uma execução aberta (o nó em andamento é interrompido)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: runId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Execução cancelada, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowRun"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /projects/{id}/runs/{runId}/decide:
+    post:
+      tags: [execucoes]
+      summary: Responde a um nó "Decisão humana" pendente
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: runId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [node, choice], additionalProperties: false, properties: {node: {type: string}, choice: {type: string, enum: [approved, rejected]}}}}}
+      responses:
+        "200": {description: Execução devolvida à fila, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowRun"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+
   /projects/{id}/executions/{executionId}/events:
     get:
       tags: [operacao-ao-vivo]
@@ -2212,6 +2281,24 @@ components:
       description: Falha. `correlation_id` repete o cabeçalho X-Request-ID.
       content: {application/json: {schema: {$ref: "#/components/schemas/ErrorBody"}}}
   schemas:
+    WorkflowRun:
+      type: object
+      required: [execution_id, project_id, workflow_version_id, title, task, workspace, status, outcome, failure, pending, trace, created_at, updated_at]
+      properties:
+        execution_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        workflow_version_id: {type: string, format: uuid}
+        title: {type: string}
+        task: {type: string}
+        workspace: {type: string}
+        status: {type: string, enum: [queued, running, waiting, awaiting_decision, completed, failed, cancelled]}
+        outcome: {type: string, description: "success ou failure, quando concluída"}
+        failure: {type: string}
+        pending: {type: array, items: {type: string}, description: "IDs dos nós Decisão humana pendentes"}
+        trace: {type: array, items: {type: object, required: [node, type], properties: {node: {type: string}, type: {type: string}, port: {type: string}, note: {type: string}}}}
+        wake_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
     CleanupPolicy:
       type: object
       required: [enabled, archive_idle_days, remove_archived_days]

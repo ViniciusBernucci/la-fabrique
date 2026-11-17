@@ -111,6 +111,7 @@ services:
       CLI_LOGIN_IMAGE: ${CLI_LOGIN_IMAGE:-le-fabrique/cli:dev}
       VAULT_KEY: ${VAULT_KEY:-}
       VAULT_KEY_ID: ${VAULT_KEY_ID:-k1}
+      WORKSPACES_DIR: /workspaces
     depends_on:
       postgres: {condition: service_healthy}
       migrate: {condition: service_completed_successfully}

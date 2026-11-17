@@ -7,8 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ViniciusBernucci/le-fabrique/internal/agents"
+	"github.com/ViniciusBernucci/le-fabrique/internal/policy"
 	"github.com/ViniciusBernucci/le-fabrique/internal/releases"
 	"github.com/ViniciusBernucci/le-fabrique/internal/runner"
+	"github.com/ViniciusBernucci/le-fabrique/internal/skills"
+	"github.com/ViniciusBernucci/le-fabrique/internal/stdflow"
 	"github.com/ViniciusBernucci/le-fabrique/internal/workflows"
 )
 
@@ -170,4 +174,50 @@ func TestRunnerCancelStopsARunningNode(t *testing.T) {
 	if again, _ := runner.Claim(context.Background(), db, "w", time.Minute); again != nil {
 		t.Fatal("execução cancelada não é reclamada")
 	}
+}
+
+// ADR-0069 — com o fluxo padrão REAL do projeto (agentes e skills padrão instalados), a API publica, inicia,
+// lista, detalha, decide e cancela execuções; rascunho não inicia.
+func TestRunsAPIStartsListsAndCancels(t *testing.T) {
+	r := newRelEnv(t)
+	db := r.e.db.Pool
+	ctx := context.Background()
+	if _, err := skills.InstallDefaults(ctx, db, policy.DefaultPolicy(policy.Options{})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := agents.InstallDefaults(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	wf, _, err := stdflow.Provision(ctx, db, r.proj, "Projeto de ensaio")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := "/api/projects/" + r.proj + "/runs"
+	r.c.expect(r.c.post(base, map[string]any{"title": "x"}), 409) // não publicado
+	var w wfResp
+	r.c.expect(r.c.get("/api/workflows/"+wf.ID), 200).JSON(&w)
+	r.c.expect(r.publish(w), 201)
+	r.c.expect(r.c.post(base, map[string]any{"title": " "}), 400)
+
+	var run runner.Run
+	r.c.expect(r.c.post(base, map[string]any{"title": "Tela", "task": "fazer", "prd_done": true}), 201).JSON(&run)
+	if run.Status != "queued" || run.Title != "Tela" || run.Task != "fazer" {
+		t.Fatalf("%+v", run)
+	}
+	var list struct {
+		Items []runner.Run `json:"items"`
+	}
+	r.c.expect(r.c.get(base), 200).JSON(&list)
+	if len(list.Items) != 1 || list.Items[0].ExecutionID != run.ExecutionID {
+		t.Fatalf("lista: %+v", list)
+	}
+	var one runner.Run
+	r.c.expect(r.c.get(base+"/"+run.ExecutionID), 200).JSON(&one)
+	if one.ExecutionID != run.ExecutionID || one.Trace == nil || one.Pending == nil {
+		t.Fatalf("detalhe: %+v", one)
+	}
+	r.c.expect(r.c.post(base+"/"+run.ExecutionID+"/decide", map[string]any{"node": "h", "choice": "approved"}), 409)
+	r.c.expect(r.c.post(base+"/"+run.ExecutionID+"/cancel", map[string]any{}), 200)
+	r.c.expect(r.c.post(base+"/"+run.ExecutionID+"/cancel", map[string]any{}), 400)
+	r.c.expect(r.c.get(base+"/00000000-0000-0000-0000-000000000000"), 404)
 }
