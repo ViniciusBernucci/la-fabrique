@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -47,6 +48,7 @@ const (
 	EventFinished = "run_finished"
 	EventCancel   = "run_cancelled"
 	EventNode     = "node_event" // eventos livres de um nó (ex.: saída do agente)
+	EventDiag     = "run_diag"   // diagnóstico técnico (pré-voo, sandbox, CLI, patch, tempos); não é o terminal
 )
 
 // StartInput descreve a execução pedida.
@@ -274,7 +276,7 @@ func wakeAt(st workflows.RunState) *time.Time {
 }
 
 // save grava o estado, o resumo e os passos novos como eventos. Recusa gravar sobre uma execução cancelada.
-func save(ctx context.Context, db DB, run *Run, st workflows.RunState, seen int, lease time.Duration) error {
+func save(ctx context.Context, db DB, run *Run, st workflows.RunState, seen int, lease time.Duration, sinceMS int64) error {
 	raw, _ := json.Marshal(st)
 	status := runStatus(st)
 	return persistence.WithTx(ctx, db, func(tx pgx.Tx) error {
@@ -299,7 +301,8 @@ func save(ctx context.Context, db DB, run *Run, st workflows.RunState, seen int,
 			return err
 		}
 		for _, step := range st.Trace[seen:] {
-			if _, err := persistence.AppendEvent(ctx, tx, run.ProjectID, run.ExecutionID, EventStep, step); err != nil {
+			if _, err := persistence.AppendEvent(ctx, tx, run.ProjectID, run.ExecutionID, EventStep, map[string]any{
+				"node": step.Node, "type": step.Type, "port": step.Port, "note": step.Note, "ms": sinceMS}); err != nil {
 				return err
 			}
 		}
@@ -328,6 +331,10 @@ type Options struct {
 	Now   func() time.Time
 	// WatchEvery é de quanto em quanto tempo se confere se a execução foi cancelada enquanto um nó roda.
 	WatchEvery time.Duration
+	// Before roda uma vez, antes do primeiro passo (o pré-voo do ambiente). Seus eventos de diagnóstico ficam na execução.
+	Before func(ctx context.Context, run Run)
+	// Log recebe um registro por passo e por evento de diagnóstico (nunca segredos).
+	Log *slog.Logger
 }
 
 type ctxKey struct{}
@@ -363,14 +370,28 @@ func Advance(ctx context.Context, db DB, run Run, opt Options) (Run, error) {
 		_ = Emit(context.WithoutCancel(ctx), db, run.ProjectID, run.ExecutionID, t, p)
 	}}
 	ctx = context.WithValue(ctx, ctxKey{}, info)
+	lg := opt.Log
+	if lg == nil {
+		lg = slog.Default()
+	}
+	lg = lg.With("execution", run.ExecutionID, "project", run.ProjectID, "kind", run.Kind)
+	lastStep := time.Now()
+	if opt.Before != nil && len(st.Trace) == 0 {
+		opt.Before(ctx, run)
+	}
 	eng := &workflows.Engine{Exec: opt.Exec, Now: opt.Now}
 	if run.Kind == KindTest {
 		// o teste do fluxo não dorme: a espera programada (ex.: um dia pelo merge) vira um instante
 		eng.WaitFor = func(int) time.Duration { return 0 }
 	}
 	eng.OnStep = func(ctx context.Context, s *workflows.RunState) error {
-		if err := save(ctx, db, &run, *s, seen, opt.Lease); err != nil {
+		ms := time.Since(lastStep).Milliseconds()
+		lastStep = time.Now()
+		if err := save(ctx, db, &run, *s, seen, opt.Lease, ms); err != nil {
 			return err
+		}
+		for _, step := range s.Trace[seen:] {
+			lg.Info("passo do fluxo", "node", step.Node, "type", step.Type, "port", step.Port, "note", step.Note, "ms", ms)
 		}
 		seen = len(s.Trace)
 		return nil
@@ -385,7 +406,7 @@ func Advance(ctx context.Context, db DB, run Run, opt Options) (Run, error) {
 		}
 		return run, err
 	}
-	if err := save(context.WithoutCancel(ctx), db, &run, st, seen, opt.Lease); err != nil {
+	if err := save(context.WithoutCancel(ctx), db, &run, st, seen, opt.Lease, time.Since(lastStep).Milliseconds()); err != nil {
 		return run, err
 	}
 	return Get(context.WithoutCancel(ctx), db, run.ProjectID, run.ExecutionID)

@@ -70,7 +70,7 @@ func driveRun(t *testing.T, r *relEnv, fx *factory.Executor, run runner.Run) run
 	if err != nil || claimed == nil {
 		t.Fatalf("claim: %v %v", claimed, err)
 	}
-	done, err := runner.Advance(ctx, r.e.db.Pool, *claimed, runner.Options{Exec: fx, Lease: 5 * time.Minute})
+	done, err := runner.Advance(ctx, r.e.db.Pool, *claimed, runner.Options{Exec: fx, Lease: 5 * time.Minute, Before: fx.Preflight})
 	if err != nil {
 		t.Fatalf("advance: %v", err)
 	}
@@ -139,6 +139,20 @@ func TestFlowTestRunsTheStandardFlowInAProjectWithoutRepository(t *testing.T) {
 			t.Errorf("a trilha deveria ter criado %s: %v", f, err)
 		}
 	}
+	// diagnóstico: relatório com pré-voo, sandbox, CLI, patch e tempos; run.log com as mesmas linhas
+	var diag struct {
+		Report string `json:"report"`
+		Hints  []any  `json:"hints"`
+	}
+	r.c.expect(r.c.get("/api/projects/"+r.proj+"/runs/"+run.ExecutionID+"/diagnostics"), 200).JSON(&diag)
+	for _, want := range []string{"## Pré-voo do ambiente", "✔ docker", "sandbox.provision", "sandbox.seed", "cli.command", "cli.run", "patch.export", "repo.ready", "Nenhuma falha registrada."} {
+		if !strings.Contains(diag.Report, want) {
+			t.Errorf("o relatório deveria conter %q:\n%s", want, diag.Report)
+		}
+	}
+	if logb, err := os.ReadFile(filepath.Join(fx.Cfg.Workspaces, ".factory", run.ExecutionID, "run.log")); err != nil || !strings.Contains(string(logb), `"step":"cli.run"`) {
+		t.Errorf("run.log deveria ter as linhas de diagnóstico: %v", err)
+	}
 	var simulated, prompts, configs int
 	_ = db.QueryRow(ctx, `SELECT count(*) FILTER (WHERE payload->>'text' LIKE '%SIMULADO%'),
 		count(*) FILTER (WHERE payload->>'kind' = 'prompt' AND payload->>'text' LIKE '%MODO TESTE DA FÁBRICA%'),
@@ -189,6 +203,15 @@ func TestFlowTestReportsWhereAnyFlowFails(t *testing.T) {
 		WHERE execution_id = $1 AND type = 'node_event' AND payload->>'kind' = 'error' ORDER BY seq DESC LIMIT 1`, run.ExecutionID).Scan(&where, &why)
 	if where != "chk" || !strings.Contains(why, "falhou") {
 		t.Fatalf("a falha deveria apontar o nó chk e o comando: nó=%q motivo=%q", where, why)
+	}
+	var diag struct {
+		Report  string                        `json:"report"`
+		Hints   []struct{ Cause, Fix string } `json:"hints"`
+		Failure struct{ Node, Reason string } `json:"failure"`
+	}
+	r.c.expect(r.c.get("/api/projects/"+r.proj+"/runs/"+run.ExecutionID+"/diagnostics"), 200).JSON(&diag)
+	if diag.Failure.Node != "chk" || len(diag.Hints) == 0 || !strings.Contains(diag.Report, "## Causas prováveis e o que fazer") || !strings.Contains(diag.Report, "command.run") {
+		t.Errorf("diagnóstico da falha: %+v\n%s", diag.Failure, diag.Report)
 	}
 	// um subfluxo não tem execução própria
 	sub := r.draft(t, "sub", "subflow", workflows.Starter())

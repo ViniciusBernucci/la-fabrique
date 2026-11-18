@@ -5,9 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -40,7 +42,9 @@ type Config struct {
 	RemoteURL func(owner, name string) string // URL do remoto (padrão https://github.com/<dono>/<nome>.git)
 	Binary    map[string]string               // provedor → executável (ensaios com um CLI de mentira)
 	Profiles  map[string]execution.Profile    // sobrescreve perfis (ensaios)
-	AgentWait time.Duration                   // tempo máximo de um agente quando o cadastro não diz
+	AgentWait time.Duration
+	Log       *slog.Logger        // log estruturado (padrão: slog.Default)
+	Redact    func(string) string // redação de segredos nos diagnósticos (padrão: nenhuma)                   // tempo máximo de um agente quando o cadastro não diz
 }
 
 // Executor implementa workflows.Executor para os nós de trabalho.
@@ -57,6 +61,9 @@ func (e *Executor) Run(ctx context.Context, n workflows.Node, vars map[string]an
 		return workflows.ExecResult{}, errors.New("o executor só roda dentro de uma execução")
 	}
 	info.Emit(runner.EventNode, map[string]any{"node": n.ID, "kind": "start", "text": "iniciando " + n.Type})
+	e.diag(info, n.ID, "node.start", map[string]any{"type": n.Type, "agent": propStr(n, "agent"), "skill": propStr(n, "skill"),
+		"operation": propStr(n, "operation"), "profile": propStr(n, "profile")})
+	began := time.Now()
 	var res workflows.ExecResult
 	var err error
 	switch n.Type {
@@ -81,6 +88,18 @@ func (e *Executor) Run(ctx context.Context, n workflows.Node, vars map[string]an
 	default:
 		return fail(info, n, "o tipo de nó %q ainda não tem executor na fábrica", n.Type), nil
 	}
+	port := res.Port
+	if port == "" {
+		port = workflows.PortOut
+	}
+	f := map[string]any{"type": n.Type, "port": port, "ms": time.Since(began).Milliseconds()}
+	if err != nil {
+		f["erro_infra"] = err.Error()
+	}
+	if port == workflows.PortError {
+		f["erro"] = fmt.Sprint(res.Outputs["erro"])
+	}
+	e.diag(info, n.ID, "node.end", f)
 	return res, err
 }
 
@@ -112,6 +131,14 @@ func tail(s string, max int) string {
 		return s
 	}
 	return "…" + s[len(s)-max:]
+}
+
+// repoFor prepara (ou reaproveita) a cópia de trabalho e registra o diagnóstico.
+func (e *Executor) repoFor(ctx context.Context, info runner.Info, n workflows.Node) (string, projects.Project, error) {
+	done := e.timed(info, n.ID, "repo.ready", map[string]any{"workspace": info.Run.Workspace, "kind": info.Run.Kind})
+	repo, p, err := e.ensureRepo(ctx, info.Run)
+	done(map[string]any{"path": repo, "branch": branchOf(info.Run.ExecutionID)}, err)
+	return repo, p, err
 }
 
 // ---- repositório de trabalho da execução ----
@@ -230,8 +257,9 @@ func (e *Executor) profile(name string) (execution.Profile, bool) {
 }
 
 // withSandbox provisiona um sandbox, semeia o repositório de trabalho, roda fn e o destrói.
-func (e *Executor) withSandbox(ctx context.Context, run runner.Run, profile string, mounts []execution.Mount, repo string,
+func (e *Executor) withSandbox(ctx context.Context, info runner.Info, node, profile string, mounts []execution.Mount, repo string,
 	fn func(*execution.Sandbox) error) error {
+	run := info.Run
 	if e.Cfg.Docker == nil {
 		return errors.New("o executor não tem acesso ao Docker (monte o docker.sock no worker)")
 	}
@@ -239,18 +267,30 @@ func (e *Executor) withSandbox(ctx context.Context, run runner.Run, profile stri
 	if !ok {
 		return fmt.Errorf("perfil de sandbox desconhecido: %q", profile)
 	}
+	provisioned := e.timed(info, node, "sandbox.provision", map[string]any{"profile": p.Name, "image": p.Image, "network": string(p.Network),
+		"uid": p.UID, "cpus": p.CPUs, "memory_mb": p.MemoryMB, "mounts": len(mounts)})
 	sb, err := e.Cfg.Docker.Provision(ctx, execution.Spec{ProjectID: run.ProjectID, FeatureID: strings.ReplaceAll(run.ExecutionID, "-", ""), Profile: p, Mounts: mounts})
 	if err != nil {
+		provisioned(nil, err)
 		return fmt.Errorf("criar o terminal isolado: %w", err)
 	}
-	defer func() { _ = sb.Destroy(context.WithoutCancel(ctx)) }()
+	provisioned(map[string]any{"container": sb.Container}, nil)
+	defer func() {
+		destroyed := e.timed(info, node, "sandbox.destroy", map[string]any{"container": sb.Container})
+		derr := sb.Destroy(context.WithoutCancel(ctx))
+		destroyed(nil, derr)
+	}()
+	seeded := e.timed(info, node, "sandbox.seed", nil)
 	seed, err := e.tarWorktree(ctx, repo)
 	if err != nil {
+		seeded(nil, err)
 		return err
 	}
 	if err := sb.Seed(ctx, bytes.NewReader(seed)); err != nil {
+		seeded(map[string]any{"bytes": len(seed)}, err)
 		return fmt.Errorf("semear o código no terminal: %w", err)
 	}
+	seeded(map[string]any{"bytes": len(seed)}, nil)
 	return fn(sb)
 }
 
@@ -268,7 +308,10 @@ func (e *Executor) tarWorktree(ctx context.Context, repo string) ([]byte, error)
 const maxPatch = 3 << 20
 
 // exportPatch lê do terminal as alterações feitas (patch git binário) e as aplica na cópia de trabalho.
-func (e *Executor) exportPatch(ctx context.Context, sb *execution.Sandbox, repo string) (changed bool, err error) {
+func (e *Executor) exportPatch(ctx context.Context, info runner.Info, node string, sb *execution.Sandbox, repo string) (changed bool, err error) {
+	done := e.timed(info, node, "patch.export", nil)
+	patchBytes := 0
+	defer func() { done(map[string]any{"patch_bytes": patchBytes, "changed": changed}, err) }()
 	res, err := sb.Exec(ctx, execution.ExecSpec{Timeout: 2 * time.Minute, Env: map[string]string{"HOME": "/tmp"}, Cmd: []string{"sh", "-c",
 		"git -c safe.directory=/workspace -c user.name=x -c user.email=x@x add -A >/dev/null 2>&1; " +
 			"git -c safe.directory=/workspace diff --cached --binary HEAD"}})
@@ -281,6 +324,7 @@ func (e *Executor) exportPatch(ctx context.Context, sb *execution.Sandbox, repo 
 	if len(res.Stdout) >= 4<<20 {
 		return false, errors.New("as alterações do agente passam do limite de tamanho recolhível")
 	}
+	patchBytes = len(res.Stdout)
 	if strings.TrimSpace(res.Stdout) == "" {
 		return false, nil
 	}
@@ -359,9 +403,11 @@ func (e *Executor) docs(ctx context.Context, info runner.Info, n workflows.Node)
 func (e *Executor) runAgent(ctx context.Context, info runner.Info, n workflows.Node, eff agents.Effective) (workflows.ExecResult, error) {
 	acct, err := e.resolveAccount(ctx, eff)
 	if err != nil {
+		e.diag(info, n.ID, "account.error", map[string]any{"provider": eff.Provider, "erro": err.Error()})
 		return fail(info, n, "%v", err), nil
 	}
-	repo, proj, err := e.ensureRepo(ctx, info.Run)
+	e.diag(info, n.ID, "account.resolved", map[string]any{"provider": eff.Provider, "account": acct.Name, "account_id": acct.ID, "fixed": eff.ConnectionID != nil, "volume": acct.VolumeName()})
+	repo, proj, err := e.repoFor(ctx, info, n)
 	if err != nil {
 		return fail(info, n, "%v", err), nil
 	}
@@ -388,7 +434,7 @@ func (e *Executor) runAgent(ctx context.Context, info runner.Info, n workflows.N
 
 	out := map[string]any{"ok": false}
 	var res providers.Result
-	err = e.withSandbox(runCtx, info.Run, "agent", []execution.Mount{{Volume: acct.VolumeName(), Target: providers.AccountMount}}, repo, func(sb *execution.Sandbox) error {
+	err = e.withSandbox(runCtx, info, n.ID, "agent", []execution.Mount{{Volume: acct.VolumeName(), Target: providers.AccountMount}}, repo, func(sb *execution.Sandbox) error {
 		if len(skillTarBytes) > 0 {
 			if err := sb.Seed(runCtx, bytes.NewReader(skillTarBytes)); err != nil {
 				return fmt.Errorf("gravar as skills do agente: %w", err)
@@ -403,16 +449,22 @@ func (e *Executor) runAgent(ctx context.Context, info runner.Info, n workflows.N
 			}
 		}
 		req := providers.Request{Account: acct, Prompt: prompt, Mode: providers.ModeWorkspaceWrite, Model: eff.Model, Binary: e.Cfg.Binary[eff.Provider]}
+		cliDone := e.timed(info, n.ID, "cli.run", nil)
+		if cmd, cerr := providers.BuildCommand(req); cerr == nil {
+			e.diag(info, n.ID, "cli.command", map[string]any{"argv": strings.Join(cmd.Args, " "), "env": envKeys(cmd.Env), "prompt_bytes": len(prompt), "timeout": timeout.String()})
+		}
 		res, err = providers.Run(runCtx, providers.SandboxRunner{S: sb}, req, func(ev providers.Event) {
 			if ev.Kind == providers.EvUsage || ev.Text == "" && ev.Tool == "" {
 				return
 			}
 			info.Emit(runner.EventNode, map[string]any{"node": n.ID, "kind": ev.Kind, "text": tail(ev.Text, 1500), "tool": ev.Tool})
 		})
+		cliDone(map[string]any{"exit_code": res.ExitCode, "failed": res.Failed, "failure": res.Failure, "stderr": res.Stderr, "events": res.Events,
+			"tokens_in": res.InputTokens, "tokens_out": res.OutputTokens, "session": res.Session, "cancelled": res.Cancelled}, err)
 		if err != nil {
 			return fmt.Errorf("terminal do agente: %w", err)
 		}
-		changed, perr := e.exportPatch(context.WithoutCancel(runCtx), sb, repo)
+		changed, perr := e.exportPatch(context.WithoutCancel(runCtx), info, n.ID, sb, repo)
 		if perr != nil {
 			return perr
 		}
@@ -449,7 +501,7 @@ func (e *Executor) commands(ctx context.Context, info runner.Info, n workflows.N
 	if len(cmds) == 0 {
 		return fail(info, n, "nenhum comando informado"), nil
 	}
-	repo, _, err := e.ensureRepo(ctx, info.Run)
+	repo, _, err := e.repoFor(ctx, info, n)
 	if err != nil {
 		return fail(info, n, "%v", err), nil
 	}
@@ -460,13 +512,16 @@ func (e *Executor) commands(ctx context.Context, info runner.Info, n workflows.N
 	}
 	out := map[string]any{"ok": true, "codigo": 0, "saida": ""}
 	var log strings.Builder
-	err = e.withSandbox(ctx, info.Run, profile, nil, repo, func(sb *execution.Sandbox) error {
+	err = e.withSandbox(ctx, info, n.ID, profile, nil, repo, func(sb *execution.Sandbox) error {
 		for _, c := range cmds {
 			info.Emit(runner.EventNode, map[string]any{"node": n.ID, "kind": "command", "text": "$ " + c})
+			cmdDone := e.timed(info, n.ID, "command.run", map[string]any{"cmd": c})
 			r, err := sb.Exec(ctx, execution.ExecSpec{Cmd: []string{"sh", "-c", c}, Timeout: timeout, Env: map[string]string{"HOME": "/tmp", "CI": "true"}})
 			if err != nil {
+				cmdDone(nil, err)
 				return err
 			}
+			cmdDone(map[string]any{"exit_code": r.ExitCode, "timed_out": r.TimedOut, "stderr": tail(r.Stderr, 600), "ok": r.ExitCode == 0 && !r.TimedOut}, nil)
 			text := strings.TrimSpace(r.Stdout + "\n" + r.Stderr)
 			log.WriteString("$ " + c + "\n" + text + "\n")
 			if text != "" {
@@ -478,12 +533,15 @@ func (e *Executor) commands(ctx context.Context, info runner.Info, n workflows.N
 					out["erro"] = "tempo máximo excedido em: " + c
 				} else {
 					out["erro"] = fmt.Sprintf("falhou (código %d): %s", r.ExitCode, c)
+					if last := lastLine(r.Stderr + "\n" + r.Stdout); last != "" {
+						out["erro"] = fmt.Sprint(out["erro"]) + " — " + last
+					}
 				}
 				return nil
 			}
 		}
 		if keepChanges {
-			if _, err := e.exportPatch(context.WithoutCancel(ctx), sb, repo); err != nil {
+			if _, err := e.exportPatch(context.WithoutCancel(ctx), info, n.ID, sb, repo); err != nil {
 				return err
 			}
 		}
@@ -501,4 +559,24 @@ func (e *Executor) commands(ctx context.Context, info runner.Info, n workflows.N
 		return workflows.ExecResult{Port: workflows.PortError, Outputs: out}, nil
 	}
 	return workflows.ExecResult{Outputs: out}, nil
+}
+
+func envKeys(m map[string]string) string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ",")
+}
+
+// lastLine devolve a última linha não vazia (a mensagem de erro costuma ser a última do comando).
+func lastLine(s string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if l := strings.TrimSpace(lines[i]); l != "" {
+			return tail(l, 240)
+		}
+	}
+	return ""
 }

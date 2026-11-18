@@ -35,7 +35,7 @@ func (e *Executor) skill(ctx context.Context, info runner.Info, n workflows.Node
 	}
 	var out skills.Result
 	var runErr error
-	err = e.withSandbox(ctx, info.Run, "base", nil, repo, func(sb *execution.Sandbox) error {
+	err = e.withSandbox(ctx, info, n.ID, "base", nil, repo, func(sb *execution.Sandbox) error {
 		env := skills.Env{Sandbox: sb, Guard: &policy.Guard{Policy: policy.DefaultPolicy(policy.Options{})},
 			AI: func(ctx context.Context, instructions, input string) (string, error) {
 				eff := agents.Effective{AgentName: sk.Name, Provider: "claude", Instructions: instructions, Prompt: input, TimeoutMinutes: 30}
@@ -53,7 +53,7 @@ func (e *Executor) skill(ctx context.Context, info runner.Info, n workflows.Node
 		defer cancel()
 		out, runErr = skills.Run(skCtx, env, sk, in)
 		if runErr == nil {
-			_, _ = e.exportPatch(context.WithoutCancel(ctx), sb, repo)
+			_, _ = e.exportPatch(context.WithoutCancel(ctx), info, n.ID, sb, repo)
 		}
 		return nil
 	})

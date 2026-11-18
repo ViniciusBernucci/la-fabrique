@@ -31,11 +31,18 @@ func registerFactory(w *worker.Worker, pool *pgxpool.Pool, cfg config.Worker) {
 		fmt.Fprintln(os.Stderr, "worker: cofre da fábrica: "+err.Error())
 		return
 	}
-	vault := security.NewVault(pool, sealer, security.NewRedactor())
+	rd := security.NewRedactor()
+	vault := security.NewVault(pool, sealer, rd)
+	loadCtx, cancelLoad := context.WithTimeout(context.Background(), 15*time.Second)
+	if _, err := vault.LoadRedactor(loadCtx); err != nil {
+		fmt.Fprintln(os.Stderr, "worker: redator da fábrica: "+err.Error())
+	}
+	cancelLoad()
 	vault.SetRefresher(oauth.NewRefresher(oauth.FromEnv(os.LookupEnv)))
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil)).With("service", "worker", "job", "fabrica")
 	ex := &factory.Executor{DB: pool, Cfg: factory.Config{
 		Workspaces: cfg.WorkspacesDir, CLIImage: cfg.FactoryImage, ToolImage: cfg.FactoryToolImage, Docker: &execution.Docker{}, Vault: vault, AllowPush: cfg.FactoryPush,
+		Log: log, Redact: rd.Redact,
 	}}
 	owner := fmt.Sprintf("worker-%d", os.Getpid())
 	w.AddJob(worker.Job{Name: "fabrica", Every: 3 * time.Second, Run: func(ctx context.Context) (string, error) {
@@ -44,7 +51,7 @@ func registerFactory(w *worker.Worker, pool *pgxpool.Pool, cfg config.Worker) {
 			return "", err
 		}
 		log.Info("execução reclamada", "execution", run.ExecutionID, "title", run.Title)
-		done, err := runner.Advance(ctx, pool, *run, runner.Options{Exec: ex, Lease: 2 * time.Minute})
+		done, err := runner.Advance(ctx, pool, *run, runner.Options{Exec: ex, Lease: 2 * time.Minute, Before: ex.Preflight, Log: log})
 		switch {
 		case errors.Is(err, runner.ErrCancelled):
 			return fmt.Sprintf("execução %s cancelada", run.ExecutionID), nil

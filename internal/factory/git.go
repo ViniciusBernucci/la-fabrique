@@ -29,6 +29,8 @@ func (e *Executor) git(ctx context.Context, info runner.Info, n workflows.Node) 
 	emit := func(text string) {
 		info.Emit(runner.EventNode, map[string]any{"node": n.ID, "kind": "command", "text": text})
 	}
+	opDone := e.timed(info, n.ID, "git.op", map[string]any{"op": op, "branch": branch})
+	defer func() { opDone(nil, nil) }()
 	switch op {
 	case "branch":
 		emit("branch " + branch)

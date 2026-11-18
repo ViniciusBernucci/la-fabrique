@@ -1024,6 +1024,20 @@ paths:
         "200": {description: Execução, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowRun"}}}}
         "401": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/runs/{runId}/diagnostics:
+    get:
+      tags: [execucoes]
+      summary: Relatório de diagnóstico da execução (Markdown), onde e por que falhou e o que fazer
+      description: >
+        Reúne veredito, local e motivo da falha, causas prováveis com a correção sugerida, o pré-voo do ambiente
+        (Docker, imagens, contas, repositório), a linha do tempo com durações e o detalhe técnico por nó. Sem segredos.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: runId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Relatório, content: {application/json: {schema: {type: object, required: [report, hints, failure], properties: {report: {type: string}, hints: {type: array, items: {type: object, required: [cause, fix], properties: {cause: {type: string}, fix: {type: string}}}}, failure: {type: object, required: [node, reason], properties: {node: {type: string}, reason: {type: string}}}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
   /projects/{id}/runs/{runId}/cancel:
     post:
       tags: [execucoes]

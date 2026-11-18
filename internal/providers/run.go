@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/ViniciusBernucci/le-fabrique/internal/execution"
@@ -53,6 +54,7 @@ type Result struct {
 	OutputTokens int
 	Events       int
 	Session      string // id da sessão nativa informado pelo cliente (vazio se não informou)
+	Stderr       string // fim do stderr do cliente (diagnóstico; o chamador deve passar pela redação)
 }
 
 const maxLine = 1 << 20
@@ -109,6 +111,7 @@ func Run(ctx context.Context, rn Runner, req Request, onEvent func(Event)) (Resu
 	}
 	code, werr := proc.Wait()
 	res.ExitCode = code
+	res.Stderr = tailText(proc.Stderr(), 2000)
 	if ctx.Err() != nil || code == -1 {
 		res.Cancelled, res.Failed = true, true
 		if res.Failure == "" {
@@ -118,6 +121,9 @@ func Run(ctx context.Context, rn Runner, req Request, onEvent func(Event)) (Resu
 		res.Failed = true
 		if res.Failure == "" {
 			res.Failure = "o cliente terminou com código de saída diferente de zero"
+			if res.Stderr != "" {
+				res.Failure += ": " + tailText(res.Stderr, 400)
+			}
 		}
 	}
 	if res.Final == "" {
@@ -127,4 +133,13 @@ func Run(ctx context.Context, rn Runner, req Request, onEvent func(Event)) (Resu
 		return res, werr
 	}
 	return res, nil
+}
+
+// tailText devolve o fim do texto (sem espaços nas pontas), com reticências se cortou.
+func tailText(s string, max int) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= max {
+		return s
+	}
+	return "…" + s[len(s)-max:]
 }

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
@@ -201,4 +202,42 @@ func (s *Server) startTestRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, run)
+}
+
+// runDiagnostics devolve o relatório de diagnóstico da execução (Markdown pronto para colar), onde e por que
+// falhou e as causas prováveis com o que fazer.
+func (s *Server) runDiagnostics(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.projectID(w, r)
+	if !ok {
+		return
+	}
+	runID, ok := s.runID(w, r)
+	if !ok {
+		return
+	}
+	run, err := runner.Get(r.Context(), s.db, id, runID)
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	events, err := persistence.EventsAfter(r.Context(), s.db, id, runID, 0, 5000)
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	node, reason := runner.Failure(run, events)
+	hints := runner.HintsFor(reason)
+	if len(hints) == 0 {
+		var sb strings.Builder
+		for _, e := range events {
+			sb.Write(e.Payload)
+			sb.WriteByte('\n')
+		}
+		hints = runner.HintsFor(sb.String())
+	}
+	if hints == nil {
+		hints = []runner.Hint{}
+	}
+	report := s.redactor.Redact(runner.Report(run, events))
+	writeJSON(w, http.StatusOK, map[string]any{"report": report, "hints": hints, "failure": map[string]string{"node": node, "reason": s.redactor.Redact(reason)}})
 }
