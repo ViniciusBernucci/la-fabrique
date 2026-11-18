@@ -1307,6 +1307,14 @@ export const api = {
     projectId: string,
     input: { title: string; task: string; prd_done: boolean; correction: boolean },
   ) => post<WorkflowRun>(`/projects/${encodeURIComponent(projectId)}/runs`, input),
+  runDiagnostics: (projectId: string, runId: string, signal?: AbortSignal) =>
+    request<{
+      report: string;
+      hints: { cause: string; fix: string }[];
+      failure: { node: string; reason: string };
+    }>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/diagnostics`, {
+      signal,
+    }),
   getRun: (projectId: string, runId: string, signal?: AbortSignal) =>
     request<WorkflowRun>(
       `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}`,

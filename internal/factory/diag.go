@@ -137,6 +137,26 @@ func (e *Executor) Preflight(ctx context.Context, run runner.Run) {
 		check("conta "+prov, n >= 1, plural(n, "conta ativa", "contas ativas"),
 			"Conecte a conta em Conexões (botão de login oficial); sem conta o agente "+prov+" não roda.")
 	}
+	// o login de cada conta vive num volume Docker (lf-acct-<id>): sem o volume a conta existe no painel mas não loga
+	if dockerOK {
+		rows, err := e.DB.Query(ctx, `SELECT id::text, name, target FROM connections WHERE kind = 'cli' AND state = 'active' ORDER BY created_at`)
+		if err == nil {
+			type acct struct{ id, name, target string }
+			var accts []acct
+			for rows.Next() {
+				var a acct
+				if rows.Scan(&a.id, &a.name, &a.target) == nil {
+					accts = append(accts, a)
+				}
+			}
+			rows.Close()
+			for _, a := range accts {
+				err := exec.CommandContext(ctx, "docker", "volume", "inspect", "lf-acct-"+a.id).Run()
+				check("login da conta "+a.name+" ("+a.target+")", err == nil, boolText(err == nil, "volume do login presente", "volume do login AUSENTE"),
+					"Refaça o login da conta em Conexões: sem o volume lf-acct-"+a.id+" o CLI não tem credenciais (not logged in).")
+			}
+		}
+	}
 	emit("preflight", map[string]any{"check": "configuração", "ok": true, "detail": "push_ao_github=" + boolText(e.Cfg.AllowPush, "ligado", "desligado") +
 		", imagem_dos_checks=" + boolText(e.Cfg.ToolImage != "", e.Cfg.ToolImage, "padrão dos perfis") + ", modo=" + run.Kind})
 }

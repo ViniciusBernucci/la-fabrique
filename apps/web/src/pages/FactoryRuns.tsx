@@ -45,6 +45,12 @@ export function terminalLine(e: ExecutionEvent): string {
           return `${node} ${text(p.text)}`;
       }
     }
+    case "run_diag": {
+      const ok = p.ok === false ? "✖" : "·";
+      const ms = typeof p.ms === "number" ? ` ${p.ms} ms` : "";
+      const detail = text(p.detail) || text(p.erro) || text(p.text);
+      return `${ok} diag ${text(p.node) ? `[${text(p.node)}] ` : ""}${text(p.step)}${text(p.check) ? ` ${text(p.check)}` : ""}${ms}${detail ? ` — ${detail}` : ""}`;
+    }
     case "run_decision":
       return `✔ decisão em ${text(p.node)}: ${text(p.choice)}`;
     case "run_finished":
@@ -59,7 +65,9 @@ export function terminalLine(e: ExecutionEvent): string {
 /** O terminal ao vivo de uma execução: o que a fábrica fez e o que o CLI do agente imprimiu. */
 export function Terminal({ projectId, executionId }: { projectId: string; executionId: string }) {
   const { events, status } = useEventStream(projectId, executionId);
-  const lines = events.filter((e) => e.type.startsWith("run_") || e.type === "node_event");
+  const lines = events.filter(
+    (e) => (e.type.startsWith("run_") && e.type !== "run_diag") || e.type === "node_event",
+  );
   return (
     <div>
       <p className="state-meta" role="status">

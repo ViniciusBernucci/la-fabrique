@@ -260,4 +260,63 @@ describe("Painel de teste do fluxo", () => {
     expect(await screen.findByText(/não pôde ser preparado para o teste/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Testar de novo" })).toBeInTheDocument();
   });
+
+  it("mostra os problemas do pré-voo, as causas prováveis e copia o relatório de diagnóstico", async () => {
+    const report = "# Relatório de diagnóstico da execução\n- Nó: `chk`";
+    const calls = stub({
+      [`POST /projects/${PID}/runs/test`]: () =>
+        json(run({ status: "completed", outcome: "failure" }), 201),
+      [`GET /projects/${PID}/runs/${RID}`]: () =>
+        json(run({ status: "completed", outcome: "failure" })),
+      [`GET /projects/${PID}/runs/${RID}/diagnostics`]: () =>
+        json({
+          report,
+          hints: [
+            { cause: "A imagem dos checks não tem o comando.", fix: "Defina FACTORY_TOOL_IMAGE." },
+          ],
+          failure: { node: "chk", reason: "falhou (código 127): make lint" },
+        }),
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText: write } });
+    mount();
+    await waitFor(() => expect(FakeEventSource.all.length).toBeGreaterThan(0));
+    const es = FakeEventSource.all[0] as FakeEventSource;
+    act(() => {
+      es.emit(
+        ev(1, "run_diag", {
+          step: "preflight",
+          check: "conta claude",
+          ok: false,
+          detail: "0 contas ativas",
+          dica: "Conecte a conta em Conexões.",
+        }),
+      );
+      es.emit(
+        ev(2, "run_diag", {
+          node: "chk",
+          step: "command.run",
+          ms: 120,
+          exit_code: 127,
+          cmd: "make lint",
+        }),
+      );
+      es.emit(
+        ev(3, "node_event", { node: "chk", kind: "error", text: "falhou (código 127): make lint" }),
+      );
+      es.emit(ev(4, "run_step", { node: "chk", type: "checks", port: "error" }));
+    });
+    const amb = await screen.findByRole("alert", { name: "Problemas do ambiente" });
+    expect(amb).toHaveTextContent("conta claude");
+    expect(amb).toHaveTextContent("Conecte a conta em Conexões.");
+    const causas = await screen.findByRole("status", { name: "Causas prováveis" });
+    expect(causas).toHaveTextContent("A imagem dos checks não tem o comando.");
+    expect(causas).toHaveTextContent("Defina FACTORY_TOOL_IMAGE.");
+    const tech = screen.getByRole("log", { name: "Diagnóstico técnico" });
+    expect(tech).toHaveTextContent("[chk] command.run 120 ms");
+    await userEvent.click(screen.getByRole("button", { name: "Copiar relatório de diagnóstico" }));
+    await waitFor(() => expect(write).toHaveBeenCalledWith(report));
+    expect(await screen.findByText(/Relatório copiado/)).toBeInTheDocument();
+    expect(calls.filter((c) => c.url.endsWith("/diagnostics")).length).toBeGreaterThan(0);
+  });
 });

@@ -344,6 +344,10 @@ describe("editor de workflows", { timeout: 20_000 }, () => {
     renderAt(`/workflows/${ID}`);
     await canvas();
     clickNode("fim");
+    // a seleção chega ao painel de forma assíncrona: espera o botão habilitar
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Remover seleção" })).toBeEnabled(),
+    );
     await click("Remover seleção");
     expect(screen.queryByLabelText(/^Nó fim /)).not.toBeInTheDocument();
     await click("Salvar rascunho");

@@ -697,6 +697,14 @@ const sections: Section[] = [
               "Se algo falhar, uma caixa vermelha diz o nó, o tipo e o motivo (por exemplo, o comando de check que reprovou).",
             ],
             ["Linha do tempo", "Todos os eventos da execução, para auditoria."],
+            [
+              "Pré-voo do ambiente",
+              "Antes do primeiro passo a fábrica confere o ambiente (Docker, imagens, pasta de workspaces, git, contas de IA) e mostra no painel o que estiver errado, com a dica do que fazer.",
+            ],
+            [
+              "Diagnóstico",
+              "Registro técnico de cada etapa com os tempos (criação do terminal isolado, comando do CLI e o stderr dele, recolhimento do patch, cada comando de check). Os botões “Copiar relatório de diagnóstico” e “Baixar relatório” geram um texto pronto para colar numa conversa de suporte, com as causas prováveis e a correção sugerida. O mesmo registro fica em <code>run.log</code>, na pasta da execução, e nos logs do worker.",
+            ],
           ]}
         />
         <h4>Como o teste se comporta (e por que é seguro)</h4>

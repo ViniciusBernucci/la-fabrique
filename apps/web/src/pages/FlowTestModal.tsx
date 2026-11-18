@@ -10,6 +10,12 @@ import {
 import { useEventStream } from "../lib/useEventStream";
 import { terminalLine } from "./FactoryRuns";
 
+type Diagnostics = {
+  report: string;
+  hints: { cause: string; fix: string }[];
+  failure: { node: string; reason: string };
+};
+
 type Payload = Record<string, unknown>;
 const txt = (v: unknown) => (typeof v === "string" ? v : "");
 const payloadOf = (e: ExecutionEvent): Payload =>
@@ -249,6 +255,8 @@ export function FlowTestModal({
   const [round, setRound] = useState(0);
   const [clock, setClock] = useState(0);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
+  const [copied, setCopied] = useState("");
   const { events, status } = useEventStream(projectId, run?.execution_id ?? null);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: round reinicia o teste.
@@ -302,6 +310,60 @@ export function FlowTestModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // O relatório de diagnóstico é buscado quando o teste termina (e sob demanda, enquanto roda).
+  const finishedKey = finished ? (run?.status ?? "") : "";
+  useEffect(() => {
+    if (!runId || !finishedKey) return;
+    api
+      .runDiagnostics(projectId, runId)
+      .then(setDiagnostics)
+      .catch(() => {});
+  }, [projectId, runId, finishedKey]);
+
+  async function fetchReport(): Promise<Diagnostics | null> {
+    if (!runId) return null;
+    try {
+      const d = await api.runDiagnostics(projectId, runId);
+      setDiagnostics(d);
+      return d;
+    } catch (e) {
+      setError(toApiError(e));
+      return null;
+    }
+  }
+
+  async function copyReport() {
+    const d = await fetchReport();
+    if (!d) return;
+    try {
+      await navigator.clipboard.writeText(d.report);
+      setCopied("Relatório copiado. Cole na conversa de suporte.");
+    } catch {
+      setCopied("Não consegui copiar sozinho: use “Baixar relatório” ou selecione o texto abaixo.");
+    }
+  }
+
+  async function downloadReport() {
+    const d = await fetchReport();
+    if (!d) return;
+    const url = URL.createObjectURL(new Blob([d.report], { type: "text/markdown;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `diagnostico-${runId}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const preflight = useMemo(
+    () =>
+      events
+        .filter((e) => e.type === "run_diag" && txt(payloadOf(e).step) === "preflight")
+        .map((e) => payloadOf(e)),
+    [events],
+  );
+  const preflightProblems = preflight.filter((p) => p.ok === false);
+  const diagEvents = useMemo(() => events.filter((e) => e.type === "run_diag"), [events]);
 
   const steps = useMemo(() => stepsOf(graph, events, run), [graph, events, run]);
   const failure = useMemo(() => failureOf(steps, events, run), [steps, events, run]);
@@ -487,6 +549,60 @@ export function FlowTestModal({
                 ))}
               </section>
             </div>
+            {preflightProblems.length > 0 && (
+              <section className="ft-failure" aria-label="Problemas do ambiente" role="alert">
+                <h3>O ambiente tem problemas (pré-voo)</h3>
+                <ul>
+                  {preflightProblems.map((p) => (
+                    <li key={txt(p.check)}>
+                      <strong>{txt(p.check)}</strong>: {txt(p.detail)}
+                      {txt(p.dica) && <small className="muted"> — {txt(p.dica)}</small>}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            <section className="ft-diagnostics" aria-label="Diagnóstico">
+              <h3>Diagnóstico</h3>
+              {diagnostics && diagnostics.hints.length > 0 && failure && (
+                <div role="status" aria-label="Causas prováveis">
+                  <p>
+                    <strong>Causas prováveis e o que fazer:</strong>
+                  </p>
+                  <ul>
+                    {diagnostics.hints.map((h) => (
+                      <li key={h.cause}>
+                        <strong>{h.cause}</strong> {h.fix}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <p className="muted">
+                O relatório reúne o veredito, o pré-voo do ambiente, a linha do tempo com tempos e o
+                detalhe técnico de cada etapa (sandbox, CLI, patch, comandos). Copie e cole na
+                conversa para pedir ajuda com o problema.
+              </p>
+              <div className="actions">
+                <button type="button" className="secondary-action" onClick={copyReport}>
+                  Copiar relatório de diagnóstico
+                </button>
+                <button type="button" className="secondary-action" onClick={downloadReport}>
+                  Baixar relatório (.md)
+                </button>
+              </div>
+              {copied && (
+                <p className="state-meta" role="status">
+                  {copied}
+                </p>
+              )}
+              <details>
+                <summary>Diagnóstico técnico em tempo real ({diagEvents.length} registros)</summary>
+                <pre className="log" role="log" aria-label="Diagnóstico técnico">
+                  {diagEvents.map(terminalLine).join("\n") || "(nada ainda)"}
+                </pre>
+              </details>
+            </section>
             <details className="ft-timeline">
               <summary>Linha do tempo completa ({events.length} eventos)</summary>
               <pre className="log" role="log" aria-label="Linha do tempo">
