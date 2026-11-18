@@ -24,13 +24,13 @@ const flowTestFakeCLI = `#!/bin/sh
 p=$(cat)
 case "$p" in *"subtarefas BACKEND"*)
   mkdir -p fabrica-teste/backend
-  printf '# Endpoint de saúde\nGET /saude\n{"status":"ok"}\n' > fabrica-teste/backend/saude.md ;;
+  printf '# Endpoint de saúde\nGET /saude\n{"status":"ok"}\n' > fabrica-teste/backend/saude.md
+  case "$p" in *"MODO TESTE DA FÁBRICA"*) echo modo_teste_ok >> fabrica-teste/backend/saude.md ;; esac ;;
 esac
 case "$p" in *"subtarefas FRONTEND"*)
   mkdir -p fabrica-teste/frontend
   printf '<p class="selo">Sistema saudável</p><!-- /saude -->\n' > fabrica-teste/frontend/selo-saude.html ;;
 esac
-case "$p" in *"MODO TESTE DA FÁBRICA"*) echo "modo_teste_ok" >> .teste-modo ;; esac
 echo '{"type":"system","subtype":"init","session_id":"sess-teste"}'
 echo '{"type":"assistant","message":{"content":[{"type":"text","text":"feito"}]}}'
 echo '{"type":"result","is_error":false,"result":"etapa concluída","usage":{"input_tokens":3,"output_tokens":2}}'
@@ -152,6 +152,21 @@ func TestFlowTestRunsTheStandardFlowInAProjectWithoutRepository(t *testing.T) {
 	}
 	if logb, err := os.ReadFile(filepath.Join(fx.Cfg.Workspaces, ".factory", run.ExecutionID, "run.log")); err != nil || !strings.Contains(string(logb), `"step":"cli.run"`) {
 		t.Errorf("run.log deveria ter as linhas de diagnóstico: %v", err)
+	}
+	// só as etapas que de fato editaram arquivos contam como "alterou": o patch é cumulativo e as revisões não mudam nada
+	changedBy := map[string]string{}
+	crows, _ := db.Query(ctx, `SELECT payload->>'node', payload->>'changed' FROM execution_events
+		WHERE execution_id = $1 AND type = 'run_diag' AND payload->>'step' = 'patch.export'`, run.ExecutionID)
+	for crows.Next() {
+		var n, c string
+		_ = crows.Scan(&n, &c)
+		changedBy[n] = c
+	}
+	crows.Close()
+	for node, want := range map[string]string{"guard_planning": "false", "guard_impl_front": "true", "guard_impl_back": "true", "guard_review_front": "false", "guard_review_back": "false"} {
+		if changedBy[node] != want {
+			t.Errorf("patch.export de %s: changed=%q, esperado %q (todos: %v)", node, changedBy[node], want, changedBy)
+		}
 	}
 	var simulated, prompts, configs int
 	_ = db.QueryRow(ctx, `SELECT count(*) FILTER (WHERE payload->>'text' LIKE '%SIMULADO%'),

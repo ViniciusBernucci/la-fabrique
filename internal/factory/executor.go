@@ -3,6 +3,8 @@ package factory
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ViniciusBernucci/le-fabrique/internal/agents"
@@ -51,6 +54,10 @@ type Config struct {
 type Executor struct {
 	DB  runner.DB
 	Cfg Config
+
+	// baselines guarda, por sandbox, o hash do patch cumulativo logo depois de semear o código: o que já veio das
+	// etapas anteriores não conta como alteração da etapa atual.
+	baselines sync.Map
 }
 
 // Run implementa workflows.Executor. Falhas esperadas (CLI recusou, comando falhou) saem pela porta
@@ -291,6 +298,10 @@ func (e *Executor) withSandbox(ctx context.Context, info runner.Info, node, prof
 		return fmt.Errorf("semear o código no terminal: %w", err)
 	}
 	seeded(map[string]any{"bytes": len(seed)}, nil)
+	if base, err := e.readPatch(ctx, sb); err == nil {
+		e.baselines.Store(sb.ID, patchHash(base))
+		defer e.baselines.Delete(sb.ID)
+	}
 	return fn(sb)
 }
 
@@ -307,25 +318,44 @@ func (e *Executor) tarWorktree(ctx context.Context, repo string) ([]byte, error)
 
 const maxPatch = 3 << 20
 
+// readPatch lê do terminal o patch git binário (cumulativo desde o último commit) da árvore de trabalho.
+func (e *Executor) readPatch(ctx context.Context, sb *execution.Sandbox) (string, error) {
+	res, err := sb.Exec(ctx, execution.ExecSpec{Timeout: 2 * time.Minute, Env: map[string]string{"HOME": "/tmp"}, Cmd: []string{"sh", "-c",
+		"git -c safe.directory=/workspace -c user.name=x -c user.email=x@x add -A >/dev/null 2>&1; " +
+			"git -c safe.directory=/workspace diff --cached --binary HEAD"}})
+	if err != nil {
+		return "", err
+	}
+	if res.ExitCode != 0 {
+		return "", fmt.Errorf("recolher as alterações: %s", tail(res.Stderr, 300))
+	}
+	if len(res.Stdout) >= 4<<20 {
+		return "", errors.New("as alterações do agente passam do limite de tamanho recolhível")
+	}
+	return res.Stdout, nil
+}
+
+func patchHash(p string) string {
+	h := sha256.Sum256([]byte(p))
+	return hex.EncodeToString(h[:])
+}
+
 // exportPatch lê do terminal as alterações feitas (patch git binário) e as aplica na cópia de trabalho.
 func (e *Executor) exportPatch(ctx context.Context, info runner.Info, node string, sb *execution.Sandbox, repo string) (changed bool, err error) {
 	done := e.timed(info, node, "patch.export", nil)
 	patchBytes := 0
 	defer func() { done(map[string]any{"patch_bytes": patchBytes, "changed": changed}, err) }()
-	res, err := sb.Exec(ctx, execution.ExecSpec{Timeout: 2 * time.Minute, Env: map[string]string{"HOME": "/tmp"}, Cmd: []string{"sh", "-c",
-		"git -c safe.directory=/workspace -c user.name=x -c user.email=x@x add -A >/dev/null 2>&1; " +
-			"git -c safe.directory=/workspace diff --cached --binary HEAD"}})
+	patch, err := e.readPatch(ctx, sb)
 	if err != nil {
 		return false, err
 	}
-	if res.ExitCode != 0 {
-		return false, fmt.Errorf("recolher as alterações: %s", tail(res.Stderr, 300))
+	patchBytes = len(patch)
+	if strings.TrimSpace(patch) == "" {
+		return false, nil
 	}
-	if len(res.Stdout) >= 4<<20 {
-		return false, errors.New("as alterações do agente passam do limite de tamanho recolhível")
-	}
-	patchBytes = len(res.Stdout)
-	if strings.TrimSpace(res.Stdout) == "" {
+	// o patch é cumulativo (tudo desde o último commit): só conta como alteração desta etapa o que difere do que já
+	// veio semeado. Sem diferença, a cópia de trabalho não é tocada.
+	if base, ok := e.baselines.Load(sb.ID); ok && base == patchHash(patch) {
 		return false, nil
 	}
 	if _, err := e.git1(ctx, repo, nil, nil, "checkout", "--quiet", "--", "."); err != nil {
@@ -334,7 +364,7 @@ func (e *Executor) exportPatch(ctx context.Context, info runner.Info, node strin
 	if _, err := e.git1(ctx, repo, nil, nil, "clean", "-fdq"); err != nil {
 		return false, err
 	}
-	if _, err := e.git1(ctx, repo, []byte(res.Stdout), nil, "apply", "--whitespace=nowarn", "-"); err != nil {
+	if _, err := e.git1(ctx, repo, []byte(patch), nil, "apply", "--whitespace=nowarn", "-"); err != nil {
 		return false, fmt.Errorf("aplicar as alterações do agente: %w", err)
 	}
 	return true, nil
@@ -460,7 +490,8 @@ func (e *Executor) runAgent(ctx context.Context, info runner.Info, n workflows.N
 			info.Emit(runner.EventNode, map[string]any{"node": n.ID, "kind": ev.Kind, "text": tail(ev.Text, 1500), "tool": ev.Tool})
 		})
 		cliDone(map[string]any{"exit_code": res.ExitCode, "failed": res.Failed, "failure": res.Failure, "stderr": res.Stderr, "events": res.Events,
-			"tokens_in": res.InputTokens, "tokens_out": res.OutputTokens, "session": res.Session, "cancelled": res.Cancelled}, err)
+			"tokens_in": res.InputTokens, "tokens_out": res.OutputTokens, "session": res.Session, "cancelled": res.Cancelled,
+			"final": tail(res.Final, 1500)}, err)
 		if err != nil {
 			return fmt.Errorf("terminal do agente: %w", err)
 		}

@@ -30,7 +30,8 @@ func (e *Executor) git(ctx context.Context, info runner.Info, n workflows.Node) 
 		info.Emit(runner.EventNode, map[string]any{"node": n.ID, "kind": "command", "text": text})
 	}
 	opDone := e.timed(info, n.ID, "git.op", map[string]any{"op": op, "branch": branch})
-	defer func() { opDone(nil, nil) }()
+	extra := map[string]any{}
+	defer func() { opDone(extra, nil) }()
 	switch op {
 	case "branch":
 		emit("branch " + branch)
@@ -40,6 +41,7 @@ func (e *Executor) git(ctx context.Context, info runner.Info, n workflows.Node) 
 		if err != nil {
 			return fail(info, n, "commit: %v", err), nil
 		}
+		extra["commit"], extra["committed"] = sha, committed
 		if committed {
 			emit("commit " + sha[:12])
 		} else {
@@ -53,6 +55,7 @@ func (e *Executor) git(ctx context.Context, info runner.Info, n workflows.Node) 
 			if err != nil {
 				return fail(info, n, "commit antes do envio: %v", err), nil
 			}
+			extra["simulated"], extra["commit"] = true, sha
 			emit("modo teste: " + op + " SIMULADO (nada é enviado ao GitHub); branch " + branch + " em " + sha[:12])
 			return workflows.ExecResult{Outputs: map[string]any{"ok": true, "branch": branch, "commit": sha, "simulado": true, "pr_url": "(simulada)"}}, nil
 		}
