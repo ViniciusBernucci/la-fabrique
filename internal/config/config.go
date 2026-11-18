@@ -96,8 +96,12 @@ type Worker struct {
 	FactoryToolImage string
 	// FactoryChecksNetwork é a rede dos scripts e checks: "none" (padrão) ou "egress" (precisam baixar dependências).
 	FactoryChecksNetwork string
-	WorkspacesDir        string
-	CLILoginContext      string
+	// Filtro de saída do terminal do agente (padrão ligado): rede interna + proxy que só deixa passar FactoryEgressAllow.
+	FactoryEgressFilter bool
+	FactoryEgressImage  string
+	FactoryEgressAllow  string
+	WorkspacesDir       string
+	CLILoginContext     string
 	// Admission liga o laço de admissão da Sentinela (SENTINEL_ADMISSION=true). Sem executor ligado ele roda em
 	// observação (dry-run): decide e audita, não reserva nem altera estado.
 	Admission         bool
@@ -323,6 +327,9 @@ func LoadWorker(lookup Lookup) (Worker, error) {
 		cfg.FactoryImage = l.str("FACTORY_IMAGE", "le-fabrique/cli:dev")
 		cfg.FactoryToolImage = l.str("FACTORY_TOOL_IMAGE", "")
 		cfg.FactoryChecksNetwork = l.str("FACTORY_CHECKS_NETWORK", "none")
+		cfg.FactoryEgressFilter = l.boolean("FACTORY_EGRESS_FILTER", true)
+		cfg.FactoryEgressImage = l.str("FACTORY_EGRESS_IMAGE", "le-fabrique/egress:dev")
+		cfg.FactoryEgressAllow = l.str("FACTORY_EGRESS_ALLOW", ".anthropic.com,.claude.ai,.claude.com,.openai.com,.chatgpt.com")
 		if cfg.FactoryChecksNetwork != "none" && cfg.FactoryChecksNetwork != "egress" {
 			l.fail("FACTORY_CHECKS_NETWORK deve ser none ou egress")
 		}

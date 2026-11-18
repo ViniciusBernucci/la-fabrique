@@ -50,6 +50,9 @@ services:
       # Checks e scripts com a toolchain deste repositório (make tools-image). Rede dos checks: none (padrão) ou egress.
       FACTORY_TOOL_IMAGE: ${FACTORY_TOOL_IMAGE:-le-fabrique/tools:dev}
       FACTORY_CHECKS_NETWORK: ${FACTORY_CHECKS_NETWORK:-none}
+      # Filtro de saída do terminal do agente (make egress-image): rede interna + proxy com lista de destinos.
+      FACTORY_EGRESS_FILTER: ${FACTORY_EGRESS_FILTER:-true}
+      FACTORY_EGRESS_IMAGE: ${FACTORY_EGRESS_IMAGE:-le-fabrique/egress:dev}
       CLI_LOGIN_CONTEXT: /src/infra/images
     volumes:
       - .:/src

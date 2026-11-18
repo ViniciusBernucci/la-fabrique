@@ -1,0 +1,7 @@
+# Proxy de saída dos terminais dos agentes (ADR-0069). O binário é compilado pelo `make egress-image`
+# (CGO desligado, para a arquitetura do Docker) em egress-build/ e copiado para uma imagem mínima.
+FROM alpine:3.22
+COPY egress-build/egressproxy /usr/local/bin/egressproxy
+USER 65534:65534
+EXPOSE 3128
+ENTRYPOINT ["/usr/local/bin/egressproxy"]

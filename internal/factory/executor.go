@@ -36,6 +36,9 @@ type Config struct {
 	ToolImage string
 	// ChecksNetwork: "egress" dá internet aos scripts e checks (baixar dependências); vazio ou "none" os isola.
 	ChecksNetwork string
+	// EgressFilter coloca o terminal do agente numa rede interna cuja única saída é o proxy de saída (Docker.EgressProxy).
+	// Sem o proxy rodando, a criação do terminal falha (falha fechada).
+	EgressFilter bool
 	// TestModel é o modelo (Claude) dos agentes no botão Testar o fluxo quando o agente não fixa um (padrão claude-haiku-5-5).
 	TestModel string
 	Docker    *execution.Docker
@@ -258,7 +261,7 @@ func (e *Executor) profile(name string) (execution.Profile, bool) {
 	}
 	if name == "agent" {
 		return execution.Profile{Name: "agent", UID: "10002", Image: e.Cfg.CLIImage, CPUs: 2, MemoryMB: 2048, PidsLimit: 512,
-			TmpMB: 512, WorkspaceMB: 2048, Network: execution.NetEgress}, e.Cfg.CLIImage != ""
+			TmpMB: 512, WorkspaceMB: 2048, Network: e.agentNetwork()}, e.Cfg.CLIImage != ""
 	}
 	p, ok := execution.Profiles[name]
 	if ok && e.Cfg.ToolImage != "" {
@@ -501,11 +504,18 @@ func (e *Executor) runAgent(ctx context.Context, info runner.Info, n workflows.N
 			return errors.New("preparar a exclusão das skills e do canal da fábrica do patch")
 		}
 		req := providers.Request{Account: acct, Prompt: prompt, Mode: providers.ModeWorkspaceWrite, Model: eff.Model, Binary: e.Cfg.Binary[eff.Provider]}
+		if acct.CLI == providers.Claude {
+			req.AllowedTools = claudeTools(eff.Tools)
+		}
 		cliDone := e.timed(info, n.ID, "cli.run", nil)
 		if cmd, cerr := providers.BuildCommand(req); cerr == nil {
 			e.diag(info, n.ID, "cli.command", map[string]any{"argv": strings.Join(cmd.Args, " "), "env": envKeys(cmd.Env), "prompt_bytes": len(prompt), "timeout": timeout.String()})
 		}
-		res, err = providers.Run(runCtx, providers.SandboxRunner{S: sb}, req, func(ev providers.Event) {
+		var proxyEnv map[string]string
+		if sb.Profile.Network == execution.NetProxied {
+			proxyEnv = execution.ProxyEnv()
+		}
+		res, err = providers.Run(runCtx, providers.SandboxRunner{S: sb, Env: proxyEnv}, req, func(ev providers.Event) {
 			if ev.Kind == providers.EvUsage || ev.Text == "" && ev.Tool == "" {
 				return
 			}
@@ -645,4 +655,12 @@ func lastLine(s string) string {
 		}
 	}
 	return ""
+}
+
+// agentNetwork é a rede do terminal do agente: filtrada pelo proxy de saída (padrão) ou aberta (só se o filtro foi desligado).
+func (e *Executor) agentNetwork() execution.NetworkMode {
+	if e.Cfg.EgressFilter {
+		return execution.NetProxied
+	}
+	return execution.NetEgress
 }

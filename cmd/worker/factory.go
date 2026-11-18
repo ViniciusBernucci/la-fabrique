@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ViniciusBernucci/le-fabrique/internal/config"
+	"github.com/ViniciusBernucci/le-fabrique/internal/egress"
 	"github.com/ViniciusBernucci/le-fabrique/internal/execution"
 	"github.com/ViniciusBernucci/le-fabrique/internal/factory"
 	"github.com/ViniciusBernucci/le-fabrique/internal/oauth"
@@ -41,8 +42,17 @@ func registerFactory(w *worker.Worker, pool *pgxpool.Pool, cfg config.Worker) {
 	cancelLoad()
 	vault.SetRefresher(oauth.NewRefresher(oauth.FromEnv(os.LookupEnv)))
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil)).With("service", "worker", "job", "fabrica")
+	docker := &execution.Docker{}
+	if cfg.FactoryEgressFilter {
+		epCtx, cancelEP := context.WithTimeout(context.Background(), 60*time.Second)
+		if err := docker.EnsureEgressProxy(epCtx, execution.EgressConfig{Image: cfg.FactoryEgressImage, Allow: egress.ParseList(cfg.FactoryEgressAllow)}); err != nil {
+			// falha fechada: sem o proxy o terminal do agente não abre
+			log.Error("proxy de saída indisponível: os agentes não vão abrir terminal até ele subir (make egress-image)", "error", err.Error())
+		}
+		cancelEP()
+	}
 	ex := &factory.Executor{DB: pool, Cfg: factory.Config{
-		Workspaces: cfg.WorkspacesDir, CLIImage: cfg.FactoryImage, ToolImage: cfg.FactoryToolImage, ChecksNetwork: cfg.FactoryChecksNetwork, Docker: &execution.Docker{}, Vault: vault, AllowPush: cfg.FactoryPush,
+		Workspaces: cfg.WorkspacesDir, CLIImage: cfg.FactoryImage, ToolImage: cfg.FactoryToolImage, ChecksNetwork: cfg.FactoryChecksNetwork, EgressFilter: cfg.FactoryEgressFilter, Docker: docker, Vault: vault, AllowPush: cfg.FactoryPush,
 		Log: log, Redact: rd.Redact,
 	}}
 	bridge := &runner.IssueBridge{DB: pool, Coord: &sentinel.Coordinator{DB: pool}}

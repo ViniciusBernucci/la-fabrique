@@ -25,7 +25,12 @@ type Runner interface {
 }
 
 // SandboxRunner roda o comando dentro de um sandbox provisionado.
-type SandboxRunner struct{ S *execution.Sandbox }
+// SandboxRunner roda o comando dentro de um sandbox provisionado. Env soma variáveis ao ambiente do comando
+// (ex.: o proxy de saída do terminal do agente).
+type SandboxRunner struct {
+	S   *execution.Sandbox
+	Env map[string]string
+}
 
 type sandboxProcess struct{ r *execution.Running }
 
@@ -36,7 +41,14 @@ func (p sandboxProcess) Cancel(g time.Duration) error { return p.r.Cancel(g) }
 
 // Start implementa Runner.
 func (sr SandboxRunner) Start(ctx context.Context, cmd Command, dir string) (Process, error) {
-	r, err := sr.S.Start(ctx, execution.ExecSpec{Cmd: cmd.Args, Env: cmd.Env, Dir: dir, Stdin: stringsReader(cmd.Stdin)})
+	env := map[string]string{}
+	for k, v := range cmd.Env {
+		env[k] = v
+	}
+	for k, v := range sr.Env {
+		env[k] = v
+	}
+	r, err := sr.S.Start(ctx, execution.ExecSpec{Cmd: cmd.Args, Env: env, Dir: dir, Stdin: stringsReader(cmd.Stdin)})
 	if err != nil {
 		return nil, err
 	}

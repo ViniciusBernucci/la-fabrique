@@ -127,6 +127,13 @@ func (e *Executor) Preflight(ctx context.Context, run runner.Run) {
 				"Construa ou baixe a imagem (para o terminal do agente: make cli-image).")
 		}
 	}
+	if dockerOK && e.Cfg.EgressFilter {
+		ok := e.Cfg.Docker.EgressProxyRunning(ctx)
+		check("filtro de saída", ok, boolText(ok, "proxy de saída rodando: o terminal do agente só alcança os destinos permitidos", "proxy de saída NÃO está rodando"),
+			"Construa a imagem do proxy (make egress-image) e reinicie o worker; sem o proxy o terminal do agente não abre (falha fechada).")
+	} else if dockerOK {
+		check("filtro de saída", false, "desligado (FACTORY_EGRESS_FILTER=false): o terminal do agente tem internet livre", "Ligue FACTORY_EGRESS_FILTER=true.")
+	}
 	wsOK := e.Cfg.Workspaces != "" && writable(e.Cfg.Workspaces)
 	check("pasta de workspaces", wsOK, e.Cfg.Workspaces, "Defina WORKSPACES_DIR no worker e monte a pasta com permissão de escrita.")
 	_, gitErr := exec.LookPath("git")

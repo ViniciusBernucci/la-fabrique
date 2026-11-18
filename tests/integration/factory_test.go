@@ -25,6 +25,12 @@ import (
 // CLI de mentira: confere que a skill do agente chegou ao terminal, registra o comando recebido e edita um arquivo.
 const factoryFakeCLI = `#!/bin/sh
 cat > PROMPT.txt
+if grep -q "FORMATO DE SAÍDA OBRIGATÓRIO DO PLANO" PROMPT.txt; then
+  mkdir -p .fabrica
+  cat > .fabrica/plano.json <<'JSON'
+{"summary":"Atualizar o README","tasks":[{"key":"readme","title":"Atualizar o README","description":"Registrar a edição do agente","track":"BACKEND","risk":"low","order":1,"depends_on":[],"paths":["README.md"],"criteria":[{"text":"o README existe","check":"file","path":"README.md"}]}]}
+JSON
+fi
 if [ -f .claude/skills/lf-tech-lead/SKILL.md ]; then echo "skill_ok" >> PROMPT.txt; fi
 if [ -f .claude/skills/lf-tech-lead/references/proposta-de-plano.md ]; then echo "references_ok" >> PROMPT.txt; fi
 echo "feito pelo agente" >> README.md

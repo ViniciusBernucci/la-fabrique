@@ -40,6 +40,7 @@ var hintRules = []hintRule{
 	{[]string{"unknown option", "unrecognized option", "unexpected argument", "unknown argument"}, Hint{"O CLI recusou uma opção: a versão instalada pode diferir da verificada.", "Compare a versão do CLI na imagem (claude --version) com a da ADR-0011 e ajuste a imagem."}},
 	{[]string{"o cliente terminou com código de saída diferente de zero"}, Hint{"O CLI saiu com erro.", "Leia o stderr no diagnóstico cli.run: ele mostra o motivo real."}},
 	{[]string{"fabrica-teste", "test -f", "grep -q"}, Hint{"Os checks do teste não acharam os arquivos da feature fictícia.", "Veja o terminal dos agentes de implementação: o CLI pode não ter criado os arquivos (prompt ignorado, permissão de escrita, erro de autenticação)."}},
+	{[]string{"proxy de saída"}, Hint{"O filtro de saída do terminal do agente não está disponível.", "Rode `make egress-image` e reinicie o worker (ou FACTORY_EGRESS_FILTER=false para liberar a internet, o que não recomendo)."}},
 	{[]string{"em quarentena"}, Hint{"O sandbox ficou em estado incerto.", "Cancele a execução e teste de novo; verifique processos presos com `docker ps` (rótulo lf.managed)."}},
 }
 
