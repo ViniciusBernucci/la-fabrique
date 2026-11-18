@@ -610,23 +610,67 @@ const sections: Section[] = [
             trabalho; as skills da fábrica não entram no patch. Depois o terminal é destruído.
           </li>
           <li>
+            <strong>Ferramentas:</strong> as ferramentas do cadastro do agente viram permissões do
+            CLI. Com <code>run_command</code> o agente pode <strong>executar comandos</strong> no
+            terminal (por exemplo, rodar os testes); com <code>git_status</code> e{" "}
+            <code>git_diff</code>, consultar o git. Leitura, busca e edição de arquivos sempre
+            existem.
+          </li>
+          <li>
+            <strong>Tech Lead (planejamento):</strong> o agente com a skill{" "}
+            <code>lf-tech-lead</code> recebe o formato obrigatório do plano e grava{" "}
+            <code>.fabrica/plano.json</code>. A fábrica <strong>valida o plano</strong> (trilhas
+            FRONTEND e BACKEND, dependências sem ciclo, critérios verificáveis), guarda a versão e{" "}
+            <strong>cria as subtarefas</strong> na fábrica. Plano ausente ou recusado faz a etapa
+            falhar dizendo o motivo. Os agentes seguintes recebem{" "}
+            <strong>só as subtarefas da sua trilha</strong> e o que as etapas anteriores relataram.
+          </li>
+          <li>
+            <strong>Revisão visual do Frontend:</strong> o agente com a skill{" "}
+            <code>lf-revisar-frontend</code> ganha um <strong>navegador isolado</strong> (Chromium
+            sem interface, controlado pelo servidor MCP do Chrome DevTools). A fábrica sobe o app em
+            teste dentro do mesmo terminal e o agente o abre em <code>localhost</code>, clica,
+            preenche, lê o console e tira capturas de tela, que ficam salvas na pasta da execução (
+            <code>.factory/&lt;execução&gt;/evidencias/</code>). Em execuções reais é preciso ter o{" "}
+            <strong>ambiente de teste aprovado</strong> do projeto (comando para subir o app e a
+            URL); sem ele a revisão segue <strong>sem navegador</strong>, os cenários visuais ficam{" "}
+            <strong>PENDENTES</strong> (a saída do nó traz <code>revisao_visual = pendente</code>) e
+            o agente é instruído a não aprovar o que não viu.
+          </li>
+          <li>
             Sucesso segue por <code>out</code>; falha (CLI recusou, passou do tempo, conta ausente)
             segue por <code>error</code>.
           </li>
         </ol>
         <p className="muted">
-          Atenção: o terminal do agente <strong>tem acesso à internet</strong> (o CLI precisa falar
-          com a Anthropic ou a OpenAI) e a fábrica ainda não restringe o destino. Scripts e checks,
-          ao contrário, rodam sem rede.
+          Segurança de rede: o terminal do agente fica numa{" "}
+          <strong>rede interna, sem rota para a internet</strong>. O único caminho é um{" "}
+          <strong>proxy de saída</strong> que só deixa passar os serviços da conta de IA (Anthropic
+          e OpenAI). Um comando do agente não consegue enviar dados para qualquer outro destino. Se
+          o proxy não estiver rodando, o terminal nem abre. Scripts e checks rodam sem rede, na
+          imagem com a toolchain do projeto.
+        </p>
+        <h4>Quando a execução vem de uma Issue</h4>
+        <p>
+          Na tela <em>Issues</em>, as Issues em <code>PRD-DOC-CONCLUIDO</code> ou{" "}
+          <code>CORRECAO_PR</code> têm o botão <strong>Executar na fábrica</strong>: a fábrica lê os
+          requisitos na origem (Jira) e roda o fluxo publicado. Conforme o fluxo avança, a Sentinela
+          pede a mudança de status da Issue com a <strong>evidência real</strong> (plano aceito,
+          checks aprovados, PR aberta) e o status é gravado na origem: <code>PLANEJAMENTO</code>,{" "}
+          <code>IMPLEMENTACAO</code>, <code>REVIEW</code> e <code>DRAFT_PR</code>. A Draft PR aberta
+          passa a ser acompanhada: uma rodada de revisão humana vira uma Issue de correção e o merge
+          conclui a Issue. Sem a evidência exigida, a mudança de status é recusada e o motivo
+          aparece no diagnóstico da execução.
         </p>
         <h4>Os outros nós de trabalho</h4>
         <ul>
           <li>
             <strong>Script e Testes e checks:</strong> rodam os comandos num terminal isolado{" "}
             <em>sem rede</em>, sobre a cópia atual do código. Checks param no primeiro comando que
-            falhar. O Script mantém as alterações de arquivos que fizer; os Checks não. Imagens
-            mínimas não têm <code>make</code>: o administrador pode apontar uma imagem com a
-            toolchain do projeto (<code>FACTORY_TOOL_IMAGE</code>).
+            falhar. O Script mantém as alterações de arquivos que fizer; os Checks não. Eles usam a
+            imagem com a toolchain do projeto (<code>FACTORY_TOOL_IMAGE</code>, com make, git, Go e
+            Node neste repositório); se os checks precisam baixar dependências, o administrador
+            libera a rede deles (<code>FACTORY_CHECKS_NETWORK=egress</code>).
           </li>
           <li>
             <strong>Git:</strong> <code>commit</code> grava as alterações na branch da execução (sem
@@ -636,7 +680,9 @@ const sections: Section[] = [
             como ligar. A fábrica nunca envia para a branch base.
           </li>
           <li>
-            <strong>Skill:</strong> ainda não tem executor na fábrica (o nó falha explicando isso).
+            <strong>Skill:</strong> executa a skill sem agente de IA: passos de IA rodam no terminal
+            do agente e scripts, num terminal sem rede, sempre pela política de segurança. As
+            variáveis que a skill grava viram as saídas do nó.
           </li>
         </ul>
         <h4>Paradas e retomada</h4>
@@ -944,7 +990,9 @@ const sections: Section[] = [
               <>
                 {c("ok")} (verdadeiro/falso), {c("resumo")} (a resposta final do agente),{" "}
                 {c("alterou_arquivos")}, {c("sessao")}, {c("tokens_entrada")}, {c("tokens_saida")}{" "}
-                e, se falhou, {c("erro")}. Ex.: {c("guard_planning.alterou_arquivos == true")}.
+                e, se falhou, {c("erro")}. Ex.: {c("guard_planning.alterou_arquivos == true")}. O
+                Tech Lead devolve ainda {c("plano_versao")}, {c("subtarefas")},{" "}
+                {c("subtarefas_frontend")}, {c("subtarefas_backend")} e {c("plano_resumo")}.
               </>,
             ],
             [

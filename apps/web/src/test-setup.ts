@@ -1,6 +1,9 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterEach } from "vitest";
+
+// Máquinas carregadas (Docker, proxy e worker de desenvolvimento rodando) estouravam o limite padrão de 1 s dos findBy/waitFor.
+configure({ asyncUtilTimeout: 5000 });
 
 afterEach(() => cleanup());
 

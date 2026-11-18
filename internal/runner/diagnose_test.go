@@ -19,7 +19,7 @@ func TestHintsRecognizeTheUsualFailures(t *testing.T) {
 		"não há conta claude conectada: conecte em Conexões":        "Nenhuma conta de IA ativa",
 		"falhou (código 127): make lint — sh: make: not found":      "FACTORY_TOOL_IMAGE",
 		"Cannot connect to the Docker daemon at unix:///x":          "Docker",
-		"Unable to find image 'le-fabrique/cli:dev' locally":        "make cli-image",
+		"Unable to find image 'le-fabrique/cli:dev' locally":        "make agent-image",
 		"Invalid API key · Please run /login":                       "login",
 		"o envio ao GitHub está desligado: ligue FACTORY_PUSH":      "FACTORY_PUSH",
 		"falhou (código 1): test -f fabrica-teste/backend/saude.md": "arquivos da feature fictícia",

@@ -466,6 +466,25 @@ func (e *Executor) runAgent(ctx context.Context, info runner.Info, n workflows.N
 	} else {
 		extra = e.planContext(ctx, info, n, eff, vars)
 	}
+	var app *appSpec
+	visualPending := false
+	if needsBrowser(eff) && acct.CLI == providers.Claude {
+		spec, serr := e.appSpecFor(ctx, info)
+		switch {
+		case errors.Is(serr, errNoAppEnv):
+			// sem ambiente aprovado: segue sem navegador, com os cenários visuais PENDENTES
+			e.diag(info, n.ID, "app.skipped", map[string]any{"motivo": serr.Error()})
+			info.Emit(runner.EventNode, map[string]any{"node": n.ID, "kind": "note", "text": "revisão visual PENDENTE: o projeto não tem ambiente de teste aprovado; a revisão segue sem navegador"})
+			extra = strings.TrimSpace(extra + "\n\n" + noBrowserPrompt)
+			visualPending = true
+		case serr != nil:
+			e.diag(info, n.ID, "app.error", map[string]any{"erro": serr.Error()})
+			return fail(info, n, "revisão visual: %v", serr), nil
+		default:
+			app = &spec
+			extra = strings.TrimSpace(extra + "\n\n" + browserPrompt(spec))
+		}
+	}
 	prompt := Prompt(eff, proj.Name, info.Run.Title, info.Run.Task, sdir, info.Run.Kind == runner.KindTest, extra)
 	info.Emit(runner.EventNode, map[string]any{"node": n.ID, "kind": "agent", "agent": eff.AgentName, "provider": eff.Provider,
 		"model": eff.Model, "account": acct.Name, "skills": eff.Skills, "timeout_minutes": eff.TimeoutMinutes})
@@ -507,6 +526,13 @@ func (e *Executor) runAgent(ctx context.Context, info runner.Info, n workflows.N
 		if acct.CLI == providers.Claude {
 			req.AllowedTools = claudeTools(eff.Tools)
 		}
+		if app != nil {
+			if aerr := e.startApp(runCtx, info, n.ID, sb, *app); aerr != nil {
+				return fmt.Errorf("ambiente de teste: %w", aerr)
+			}
+			req.MCPConfig = mcpConfig
+			req.AllowedTools = append(req.AllowedTools, "mcp__"+mcpServerName)
+		}
 		cliDone := e.timed(info, n.ID, "cli.run", nil)
 		if cmd, cerr := providers.BuildCommand(req); cerr == nil {
 			e.diag(info, n.ID, "cli.command", map[string]any{"argv": strings.Join(cmd.Args, " "), "env": envKeys(cmd.Env), "prompt_bytes": len(prompt), "timeout": timeout.String()})
@@ -526,6 +552,9 @@ func (e *Executor) runAgent(ctx context.Context, info runner.Info, n workflows.N
 			"final": tail(res.Final, 1500)}, err)
 		if err != nil {
 			return fmt.Errorf("terminal do agente: %w", err)
+		}
+		if app != nil {
+			e.collectEvidence(context.WithoutCancel(runCtx), info, n.ID, sb)
 		}
 		if planner && !res.Failed {
 			// o plano estruturado do Tech Lead vira subtarefas da fábrica (ou a etapa falha dizendo por quê)
@@ -555,6 +584,11 @@ func (e *Executor) runAgent(ctx context.Context, info runner.Info, n workflows.N
 	}
 	if planFail != nil {
 		return fail(info, n, "%v", planFail), nil
+	}
+	if visualPending {
+		out["revisao_visual"] = "pendente"
+	} else if app != nil {
+		out["revisao_visual"] = "feita"
 	}
 	out["resumo"], out["sessao"] = tail(res.Final, 4000), res.Session
 	out["tokens_entrada"], out["tokens_saida"] = res.InputTokens, res.OutputTokens

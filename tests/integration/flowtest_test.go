@@ -54,7 +54,11 @@ func flowTestImage(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(dir, "fakecli"), []byte(flowTestFakeCLI), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	df := "FROM le-fabrique/worker:dev\nUSER root\nCOPY fakecli /usr/local/bin/fakecli\nRUN chmod 0755 /usr/local/bin/fakecli\n"
+	base := "le-fabrique/worker:dev"
+	if out, _ := exec.Command("docker", "images", "-q", "le-fabrique/tools:dev").Output(); strings.TrimSpace(string(out)) != "" {
+		base = "le-fabrique/tools:dev" // tem Node: o revisor visual sobe o app no terminal
+	}
+	df := "FROM " + base + "\nUSER root\nCOPY fakecli /usr/local/bin/fakecli\nRUN chmod 0755 /usr/local/bin/fakecli\n"
 	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte(df), 0o644); err != nil {
 		t.Fatal(err)
 	}

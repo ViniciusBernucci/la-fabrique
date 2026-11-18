@@ -211,7 +211,12 @@ describe("editor de workflows", { timeout: 20_000 }, () => {
   const canvas = () => screen.findByLabelText("Grafo do workflow");
   const node = (id: string) => screen.getByLabelText(new RegExp(`^Nó ${id} `));
   // O d3-drag do React Flow lê event.view.document no mousedown, que o jsdom não preenche; um clique simples basta.
-  const clickNode = (id: string) => fireEvent.click(node(id));
+  // sob carga o React Flow ainda pode estar medindo os nós e ignora o primeiro clique: repete até o painel mostrar o nó.
+  const clickNode = (id: string) =>
+    waitFor(() => {
+      fireEvent.click(node(id));
+      expect(screen.getByLabelText("Propriedades")).toHaveTextContent(id);
+    });
   // A seleção do nó chega ao painel de forma assíncrona: espera o campo aparecer antes de usá-lo.
   const wire = async (port: string, target: string) =>
     userEvent.selectOptions(await screen.findByLabelText(`Ligar saída ${port} a`), target);
@@ -255,7 +260,7 @@ describe("editor de workflows", { timeout: 20_000 }, () => {
     await wire("out", "fim|in"); // agente → fim
 
     // Seleciona o início e liga ao agente.
-    clickNode("inicio");
+    await clickNode("inicio");
     await wire("out", "agent-1|in");
 
     await click("Salvar rascunho");
@@ -343,7 +348,7 @@ describe("editor de workflows", { timeout: 20_000 }, () => {
     );
     renderAt(`/workflows/${ID}`);
     await canvas();
-    clickNode("fim");
+    await clickNode("fim");
     // a seleção chega ao painel de forma assíncrona: espera o botão habilitar
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Remover seleção" })).toBeEnabled(),
@@ -376,7 +381,7 @@ describe("editor de workflows", { timeout: 20_000 }, () => {
     );
     renderAt(`/workflows/${ID}`);
     await canvas();
-    clickNode("inicio");
+    await clickNode("inicio");
     await wire("out", "b|in");
     await click("Salvar rascunho");
     await screen.findByText("Salvo");

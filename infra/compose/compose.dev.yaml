@@ -46,7 +46,8 @@ services:
       SENTINEL_ISSUE_SYNC: ${SENTINEL_ISSUE_SYNC:-false}
       SENTINEL_PR_SYNC: ${SENTINEL_PR_SYNC:-false}
       FACTORY_PUSH: ${FACTORY_PUSH:-false}
-      FACTORY_IMAGE: le-fabrique/cli:dev
+      # Terminal do agente: toolchain + Claude/Codex + Chromium + Chrome DevTools MCP (make agent-image).
+      FACTORY_IMAGE: le-fabrique/agent:dev
       # Checks e scripts com a toolchain deste repositório (make tools-image). Rede dos checks: none (padrão) ou egress.
       FACTORY_TOOL_IMAGE: ${FACTORY_TOOL_IMAGE:-le-fabrique/tools:dev}
       FACTORY_CHECKS_NETWORK: ${FACTORY_CHECKS_NETWORK:-none}

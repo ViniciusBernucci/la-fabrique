@@ -113,7 +113,7 @@ func (e *Executor) Preflight(ctx context.Context, run runner.Run) {
 	if dockerOK {
 		images := map[string]string{}
 		if e.Cfg.CLIImage != "" {
-			images[e.Cfg.CLIImage] = "terminal do agente (make cli-image)"
+			images[e.Cfg.CLIImage] = "terminal do agente (make agent-image)"
 		}
 		for _, name := range []string{"base", "go", "node"} {
 			if p, ok := e.profile(name); ok {
@@ -124,7 +124,7 @@ func (e *Executor) Preflight(ctx context.Context, run runner.Run) {
 			out, err := exec.CommandContext(ctx, "docker", "image", "inspect", "--format", "{{.Id}}", img).Output()
 			ok := err == nil && strings.TrimSpace(string(out)) != ""
 			check("imagem "+img, ok, why+": "+boolText(ok, "presente", "ausente"),
-				"Construa ou baixe a imagem (para o terminal do agente: make cli-image).")
+				"Construa ou baixe a imagem (terminal do agente: make agent-image; checks: make tools-image; proxy de saída: make egress-image).")
 		}
 	}
 	if dockerOK && e.Cfg.EgressFilter {

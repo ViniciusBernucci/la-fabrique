@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -417,11 +417,16 @@ describe("configuração efetiva no editor de workflows", () => {
     });
     renderAt(`/workflows/${WF}`);
     await screen.findByLabelText("Grafo do workflow");
-    fireEvent.click(screen.getByLabelText(/^Nó ag/));
-    await userEvent.click(screen.getByRole("button", { name: "Ver configuração efetiva" }));
-    const view = await screen
-      .findByRole("group", { name: "Configuração efetiva" })
-      .catch(() => screen.findByLabelText("Configuração efetiva"));
+    // sob carga o React Flow ainda pode estar medindo os nós e ignora o primeiro clique: repete até o painel mostrar o nó
+    await waitFor(() => {
+      fireEvent.click(screen.getByLabelText(/^Nó ag/));
+      expect(screen.getByLabelText("Propriedades")).toHaveTextContent("ag");
+    });
+    // a seleção do nó chega ao painel de forma assíncrona: espera o botão aparecer e habilitar
+    const effectiveButton = await screen.findByRole("button", { name: "Ver configuração efetiva" });
+    await waitFor(() => expect(effectiveButton).toBeEnabled());
+    await userEvent.click(effectiveButton);
+    const view = await screen.findByLabelText("Configuração efetiva");
     expect(within(view).getByText(/dev \(versão 3\)/)).toBeInTheDocument();
     expect(within(view).getByText(/claude-haiku-5-5/)).toBeInTheDocument();
     expect(within(view).getByText("(do nó)")).toBeInTheDocument();
@@ -442,8 +447,15 @@ describe("configuração efetiva no editor de workflows", () => {
     });
     renderAt(`/workflows/${WF}`);
     await screen.findByLabelText("Grafo do workflow");
-    fireEvent.click(screen.getByLabelText(/^Nó ag/));
-    await userEvent.click(screen.getByRole("button", { name: "Ver configuração efetiva" }));
+    // sob carga o React Flow ainda pode estar medindo os nós e ignora o primeiro clique: repete até o painel mostrar o nó
+    await waitFor(() => {
+      fireEvent.click(screen.getByLabelText(/^Nó ag/));
+      expect(screen.getByLabelText("Propriedades")).toHaveTextContent("ag");
+    });
+    // a seleção do nó chega ao painel de forma assíncrona: espera o botão aparecer e habilitar
+    const effectiveButton = await screen.findByRole("button", { name: "Ver configuração efetiva" });
+    await waitFor(() => expect(effectiveButton).toBeEnabled());
+    await userEvent.click(effectiveButton);
     expect(await screen.findByText(/não pode ampliar as ferramentas/)).toBeInTheDocument();
   });
 });

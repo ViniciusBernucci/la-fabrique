@@ -324,7 +324,7 @@ func LoadWorker(lookup Lookup) (Worker, error) {
 	cfg.FactoryRun = l.boolean("FACTORY_RUN", false)
 	if cfg.FactoryRun {
 		cfg.FactoryPush = l.boolean("FACTORY_PUSH", false)
-		cfg.FactoryImage = l.str("FACTORY_IMAGE", "le-fabrique/cli:dev")
+		cfg.FactoryImage = l.str("FACTORY_IMAGE", "le-fabrique/agent:dev")
 		cfg.FactoryToolImage = l.str("FACTORY_TOOL_IMAGE", "")
 		cfg.FactoryChecksNetwork = l.str("FACTORY_CHECKS_NETWORK", "none")
 		cfg.FactoryEgressFilter = l.boolean("FACTORY_EGRESS_FILTER", true)
