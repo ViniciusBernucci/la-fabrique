@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { FormError, toApiError } from "../components/AuthParts";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../components/States";
 import { ApiError, api, type IssueProgress, type IssueSyncRun } from "../lib/api";
@@ -43,7 +44,26 @@ export function IssuesPage() {
     expire,
   );
   const [busy, setBusy] = useState(false);
+  const [runningKey, setRunningKey] = useState("");
+  const [runError, setRunError] = useState<ApiError | null>(null);
+  const [started, setStarted] = useState("");
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function runIssue(key: string) {
+    setRunningKey(key);
+    setRunError(null);
+    setStarted("");
+    try {
+      const run = await api.startIssueRun(projectId, key);
+      setStarted(
+        `Execução de ${run.issue_key || key} iniciada. Acompanhe ao vivo no projeto, em “Executar a fábrica”.`,
+      );
+    } catch (e) {
+      setRunError(toApiError(e));
+    } finally {
+      setRunningKey("");
+    }
+  }
 
   async function sync() {
     setBusy(true);
@@ -127,6 +147,12 @@ export function IssuesPage() {
             {view.state.status === "error" && (
               <ErrorState error={view.state.error} onRetry={view.reload} />
             )}
+            <FormError error={runError} />
+            {started && (
+              <p className="callout" role="status">
+                {started}
+              </p>
+            )}
             {view.state.status === "ready" &&
               (view.state.data.issues.length === 0 ? (
                 <EmptyState title="Nenhuma Issue importada">
@@ -147,7 +173,21 @@ export function IssuesPage() {
                             {i.kind === "correction" ? "correção de PR" : "feature"}
                           </small>
                         </span>
-                        <span className="badge">{i.status_code || "sem mapa"}</span>
+                        <span className="actions">
+                          <span className="badge">{i.status_code || "sem mapa"}</span>
+                          {(i.status_code === "PRD-DOC-CONCLUIDO" ||
+                            i.status_code === "CORRECAO_PR") && (
+                            <button
+                              type="button"
+                              className="secondary-action"
+                              disabled={runningKey !== ""}
+                              onClick={() => runIssue(i.key)}
+                              aria-label={`Executar ${i.key} na fábrica`}
+                            >
+                              Executar na fábrica
+                            </button>
+                          )}
+                        </span>
                       </div>
                       {progressByKey[i.key] ? (
                         <ProgressDetail progress={progressByKey[i.key] as IssueProgress} />

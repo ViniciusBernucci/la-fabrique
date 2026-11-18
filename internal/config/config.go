@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/ViniciusBernucci/le-fabrique/internal/oauth"
 	"net"
 	"net/url"
 	"sort"
@@ -45,12 +46,19 @@ type API struct {
 	// RequireHTTPS recusa requisições que o proxy não marcou como HTTPS
 	// (X-Forwarded-Proto) e envia HSTS. Padrão: ligado em produção.
 	RequireHTTPS bool
+	// SkipTOTP dispensa o 2º fator no login (somente APP_ENV=development; ADR-0059).
+	SkipTOTP bool
 	// TrustProxy confia em X-Forwarded-For/Host/Proto (API atrás do nginx do painel).
 	TrustProxy bool
 	// VaultKey é a chave AES-256 (32 bytes) do cofre e do segredo TOTP. Fica
 	// fora do banco e nunca é logada.
 	VaultKey   []byte
 	VaultKeyID string
+	// OAuth configura as conexões por OAuth (ADR-0060).
+	OAuth oauth.Config
+	// WorkspacesDir é a raiz onde a fábrica clona, abre e cria repositórios (ADR-0061).
+	// Vazio = só repositórios que o worker clona sozinho.
+	WorkspacesDir string
 }
 
 // Worker é a configuração do cmd/worker.
@@ -75,6 +83,25 @@ type Worker struct {
 	// PRSync liga a consulta das PRs gerenciadas (SENTINEL_PR_SYNC=true), com agenda própria (PR_POLL_INTERVAL).
 	PRSync         bool
 	PRPollInterval time.Duration
+	// CLILogin liga o login oficial das contas de assinatura de IA pelo painel (CLI_LOGIN=true, ADR-0065).
+	// Desligado por padrão: exige o docker.sock no worker e VAULT_KEY (decisão de implantação).
+	CLILogin      bool
+	CLILoginImage string
+	// FactoryRun liga a execução dos workflows pelo worker (FACTORY_RUN=true, ADR-0069); FactoryPush libera
+	// enviar a branch e abrir a Draft PR (FACTORY_PUSH=true); FactoryImage é a imagem do terminal do agente.
+	FactoryRun   bool
+	FactoryPush  bool
+	FactoryImage string
+	// FactoryToolImage troca a imagem dos perfis de scripts e checks (FACTORY_TOOL_IMAGE).
+	FactoryToolImage string
+	// FactoryChecksNetwork é a rede dos scripts e checks: "none" (padrão) ou "egress" (precisam baixar dependências).
+	FactoryChecksNetwork string
+	// Filtro de saída do terminal do agente (padrão ligado): rede interna + proxy que só deixa passar FactoryEgressAllow.
+	FactoryEgressFilter bool
+	FactoryEgressImage  string
+	FactoryEgressAllow  string
+	WorkspacesDir       string
+	CLILoginContext     string
 	// Admission liga o laço de admissão da Sentinela (SENTINEL_ADMISSION=true). Sem executor ligado ele roda em
 	// observação (dry-run): decide e audita, não reserva nem altera estado.
 	Admission         bool
@@ -230,6 +257,12 @@ func LoadAPI(lookup Lookup) (API, error) {
 		l.fail("DEV_AUTH_ENABLED foi removida no T04-01 (ADR-0005); crie a conta com `make create-admin`")
 	}
 	cfg.RequireHTTPS = l.boolean("REQUIRE_HTTPS", cfg.Env == Production)
+	cfg.OAuth = oauth.FromEnv(lookup)
+	cfg.WorkspacesDir = l.str("WORKSPACES_DIR", "")
+	cfg.SkipTOTP = l.boolean("AUTH_SKIP_TOTP", false)
+	if cfg.SkipTOTP && cfg.Env != Development {
+		l.fail("AUTH_SKIP_TOTP só é aceita com APP_ENV=development (ADR-0059)")
+	}
 	cfg.TrustProxy = l.boolean("TRUST_PROXY", false)
 	cfg.VaultKeyID = l.str("VAULT_KEY_ID", "k1")
 	cfg.VaultKey = l.vaultKey()
@@ -283,7 +316,29 @@ func LoadWorker(lookup Lookup) (Worker, error) {
 	if cfg.PRSync {
 		cfg.PRPollInterval = l.duration("PR_POLL_INTERVAL", 3*time.Minute, 30*time.Second)
 	}
-	if cfg.IssueSync || cfg.PRSync {
+	cfg.CLILogin = l.boolean("CLI_LOGIN", false)
+	if cfg.CLILogin {
+		cfg.CLILoginImage = l.str("CLI_LOGIN_IMAGE", "le-fabrique/cli:dev")
+		cfg.CLILoginContext = l.str("CLI_LOGIN_CONTEXT", "")
+	}
+	cfg.FactoryRun = l.boolean("FACTORY_RUN", false)
+	if cfg.FactoryRun {
+		cfg.FactoryPush = l.boolean("FACTORY_PUSH", false)
+		cfg.FactoryImage = l.str("FACTORY_IMAGE", "le-fabrique/agent:dev")
+		cfg.FactoryToolImage = l.str("FACTORY_TOOL_IMAGE", "")
+		cfg.FactoryChecksNetwork = l.str("FACTORY_CHECKS_NETWORK", "none")
+		cfg.FactoryEgressFilter = l.boolean("FACTORY_EGRESS_FILTER", true)
+		cfg.FactoryEgressImage = l.str("FACTORY_EGRESS_IMAGE", "le-fabrique/egress:dev")
+		cfg.FactoryEgressAllow = l.str("FACTORY_EGRESS_ALLOW", ".anthropic.com,.claude.ai,.claude.com,.openai.com,.chatgpt.com")
+		if cfg.FactoryChecksNetwork != "none" && cfg.FactoryChecksNetwork != "egress" {
+			l.fail("FACTORY_CHECKS_NETWORK deve ser none ou egress")
+		}
+		cfg.WorkspacesDir = l.str("WORKSPACES_DIR", "")
+		if cfg.WorkspacesDir == "" {
+			l.fail("WORKSPACES_DIR é obrigatório com FACTORY_RUN=true (a pasta onde ficam os repositórios dos projetos)")
+		}
+	}
+	if cfg.IssueSync || cfg.PRSync || cfg.CLILogin || cfg.FactoryRun {
 		cfg.VaultKeyID = l.str("VAULT_KEY_ID", "k1")
 		cfg.VaultKey = l.vaultKey()
 	}

@@ -289,3 +289,28 @@ func TestNativeSessionIsOptInAndResumeIsClaudeOnly(t *testing.T) {
 		t.Fatalf("%v %q %v", c.Args, c.Stdin, err)
 	}
 }
+
+func TestMCPConfigAndMCPToolsAreAcceptedOnlyForClaude(t *testing.T) {
+	acct := Account{ID: "11111111-1111-4111-8111-111111111111", Name: "x", CLI: Claude}
+	cfg := `{"mcpServers":{"chrome-devtools":{"command":"chrome-devtools-mcp","args":["--headless"]}}}`
+	cmd, err := BuildCommand(Request{Account: acct, Prompt: "p", Mode: ModeWorkspaceWrite, AllowedTools: []string{"Bash", "mcp__chrome-devtools"}, MCPConfig: cfg})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(cmd.Args, " ")
+	for _, want := range []string{"--mcp-config " + cfg, "--strict-mcp-config", "Bash,mcp__chrome-devtools"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("o comando deveria conter %q: %s", want, joined)
+		}
+	}
+	if _, err := BuildCommand(Request{Account: acct, Prompt: "p", Mode: ModeWorkspaceWrite, MCPConfig: "{não é json"}); err == nil {
+		t.Error("MCP inválido deveria ser recusado")
+	}
+	if _, err := BuildCommand(Request{Account: acct, Prompt: "p", Mode: ModeWorkspaceWrite, AllowedTools: []string{"mcp__x; rm"}}); err == nil {
+		t.Error("nome de ferramenta com lixo deveria ser recusado")
+	}
+	codex := Account{ID: acct.ID, Name: "x", CLI: Codex}
+	if _, err := BuildCommand(Request{Account: codex, Prompt: "p", Mode: ModeWorkspaceWrite, MCPConfig: cfg}); err == nil {
+		t.Error("o Codex não tem MCP verificado")
+	}
+}

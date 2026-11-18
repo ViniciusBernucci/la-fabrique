@@ -203,6 +203,81 @@ test("controles do projeto: pausar após a feature atual e retomar", async () =>
   await expect(controls.getByRole("button", { name: "Pausar após a feature atual" })).toBeVisible();
 });
 
+test("fluxo padrão do projeto abre completo, com agentes padrão e sem pendências", async () => {
+  await openProject();
+  const projectId = page.url().split("/projects/")[1]?.split(/[/?#]/)[0];
+  const res = await page.request.get(`/api/projects/${projectId}/workflow`); // provisiona o fluxo padrão
+  const { workflow_id: workflowId } = (await res.json()) as { workflow_id: string };
+  await page.goto(`/workflows/${workflowId}`);
+  await expect(page.getByLabel("Grafo do workflow")).toBeVisible();
+  await expect(page.locator(".react-flow__node")).toHaveCount(18);
+  await expect(page.getByText("Nenhum problema encontrado.")).toBeVisible();
+  await expect(page.locator(".wf-card-summary", { hasText: "tech-lead" })).toBeVisible();
+  await page.waitForTimeout(600);
+  await snap("12-fluxo-padrao");
+});
+
+test("editor de workflows: canvas infinito, arrastar nós, conectar pelas portas e salvar", async () => {
+  await page.goto("/workflows");
+  await page.getByLabel("Nome").fill("Fluxo do ensaio");
+  await page.getByRole("button", { name: "Criar rascunho" }).click();
+  const flow = page.getByLabel("Grafo do workflow");
+  await expect(flow).toBeVisible();
+  await expect(page.locator(".react-flow__node")).toHaveCount(2);
+  await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+  await page.waitForTimeout(600); // o ajuste inicial do zoom termina
+
+  // Arrastar o nó de início muda a posição e marca o rascunho como alterado.
+  const inicio = page.locator('.react-flow__node[data-id="inicio"]');
+  const before = await inicio.boundingBox();
+  if (!before) throw new Error("nó inicio sem caixa");
+  await page.mouse.move(before.x + before.width / 2, before.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(before.x + before.width / 2 + 40, before.y + 120, { steps: 8 });
+  await page.mouse.up();
+  const after = await inicio.boundingBox();
+  expect(Math.abs((after?.y ?? 0) - before.y)).toBeGreaterThan(40);
+  await expect(page.getByText("Alterações não salvas")).toBeVisible();
+
+  // Um agente vem da paleta; puxar a saída do início até a entrada dele cria a conexão.
+  await page.getByRole("button", { name: "Agente (IA)", exact: true }).click();
+  await expect(page.locator(".react-flow__node")).toHaveCount(3);
+  await page.waitForTimeout(300);
+  const out = await page
+    .locator('.react-flow__handle[data-nodeid="inicio"][data-handleid="out"]')
+    .boundingBox();
+  const target = await page
+    .locator('.react-flow__handle[data-nodeid="agent-1"][data-handleid="in"]')
+    .boundingBox();
+  if (!out || !target) throw new Error("portas sem caixa");
+  await page.mouse.move(out.x + out.width / 2, out.y + out.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 12 });
+  await page.mouse.up();
+  await inicio.click({ position: { x: 100, y: 20 } });
+  await expect(page.getByLabel("Ligar saída out a")).toHaveValue("agent-1|in");
+
+  await page.getByRole("button", { name: "Salvar rascunho" }).click();
+  await expect(page.getByText("Salvo", { exact: true })).toBeVisible();
+  await snap("11-editor-workflow");
+  await page.reload();
+  await expect(page.locator(".react-flow__node")).toHaveCount(3);
+});
+
+test("manual de workflows abre, navega pelo índice e fecha", async () => {
+  await page.goto("/workflows");
+  await page.getByRole("button", { name: "Manual de workflows" }).click();
+  const dialog = page.getByRole("dialog", { name: "Como montar um workflow" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Os tipos de setas, cores e bolinhas" }).click();
+  await expect(
+    dialog.getByRole("heading", { name: "Os tipos de setas, cores e bolinhas" }),
+  ).toBeInViewport();
+  await snap("13-manual-de-workflows");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+});
+
 test("nenhum erro de página nem resposta 5xx durante o ensaio", async () => {
   expect(problems).toEqual([]);
 });

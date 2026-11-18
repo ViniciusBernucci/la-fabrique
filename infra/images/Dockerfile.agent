@@ -1,0 +1,20 @@
+# Terminal dos agentes da fábrica (ADR-0069): a toolchain do projeto + os CLIs oficiais (Claude Code e Codex) + o Chromium
+# e o servidor MCP oficial do Chrome DevTools, para a revisão visual do Frontend. O app em teste sobe dentro deste mesmo
+# terminal e o agente o navega por MCP em localhost; a saída de rede é só pelo proxy de saída (make egress-image).
+# Versões fixadas: as mesmas contra as quais as capacidades foram verificadas (ADR-0011).
+ARG BASE=le-fabrique/tools:dev
+FROM ${BASE}
+ARG CLAUDE_CODE_VERSION=2.1.325
+ARG CODEX_VERSION=0.164.0
+ARG CHROME_DEVTOOLS_MCP_VERSION=1.13.0
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends chromium fonts-liberation fonts-noto-color-emoji ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+RUN npm install -g --no-audit --no-fund \
+      @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
+      @openai/codex@${CODEX_VERSION} \
+      chrome-devtools-mcp@${CHROME_DEVTOOLS_MCP_VERSION} \
+ && npm cache clean --force \
+ && useradd -m -u 10002 -s /usr/sbin/nologin lfcli
+USER 10002:10002
+ENV HOME=/tmp CHROME_PATH=/usr/bin/chromium

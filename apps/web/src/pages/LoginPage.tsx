@@ -43,10 +43,13 @@ export function LoginPage({ notice }: { notice?: string }) {
   function credentials(event: FormEvent) {
     event.preventDefault();
     void run(async () => {
-      const { status } = await api.login(username, password);
+      const { status, session } = await api.login(username, password);
       setPassword("");
       setCode("");
-      if (status === "totp_enrollment_required") {
+      if (status === "authenticated" && session) {
+        // AUTH_SKIP_TOTP (só dev): a API já abriu a sessão.
+        setSession(session);
+      } else if (status === "totp_enrollment_required") {
         setStep({ name: "enroll", enrollment: await api.totpSetup() });
       } else {
         setStep({ name: "totp" });

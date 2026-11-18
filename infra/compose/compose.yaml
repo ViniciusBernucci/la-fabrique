@@ -60,6 +60,17 @@ services:
       <<: *go-env
       API_ADDR: 0.0.0.0:8480
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      # Só dev (ADR-0059): a API recusa subir com true fora de APP_ENV=development.
+      AUTH_SKIP_TOTP: ${AUTH_SKIP_TOTP:-false}
+      # Conexões por OAuth (ADR-0060). Vazio = provedor indisponível na tela.
+      GITHUB_OAUTH_CLIENT_ID: ${GITHUB_OAUTH_CLIENT_ID:-}
+      CLICKUP_OAUTH_CLIENT_ID: ${CLICKUP_OAUTH_CLIENT_ID:-}
+      CLICKUP_OAUTH_CLIENT_SECRET: ${CLICKUP_OAUTH_CLIENT_SECRET:-}
+      JIRA_OAUTH_CLIENT_ID: ${JIRA_OAUTH_CLIENT_ID:-}
+      JIRA_OAUTH_CLIENT_SECRET: ${JIRA_OAUTH_CLIENT_SECRET:-}
+      OAUTH_REDIRECT_BASE: ${OAUTH_REDIRECT_BASE:-http://localhost:${WEB_PORT:-5180}}
+      # Raiz dos repositórios dos projetos (clonar, pasta existente, criar do zero; ADR-0061).
+      WORKSPACES_DIR: /workspaces
       # Chave AES-256 do cofre e do segredo TOTP: fora do banco, só no .env (openssl rand -base64 32).
       VAULT_KEY: ${VAULT_KEY:?defina VAULT_KEY no .env (openssl rand -base64 32)}
       VAULT_KEY_ID: ${VAULT_KEY_ID:-k1}
@@ -71,6 +82,8 @@ services:
       postgres: {condition: service_healthy}
       migrate: {condition: service_completed_successfully}
     networks: [private, egress]
+    volumes:
+      - ${WORKSPACES_HOST_DIR:-workspaces}:/workspaces
     read_only: true
     tmpfs: [/tmp]
     mem_limit: ${LIMIT_API_MEM:-512m}
@@ -92,10 +105,19 @@ services:
     environment:
       <<: *go-env
       WORKER_HEALTH_ADDR: 0.0.0.0:8481
+      # Login oficial das contas de assinatura de IA (Claude/Codex) pelo painel (ADR-0065). Desligado por
+      # padrão: precisa do docker.sock no worker (só no overlay de desenvolvimento) e da chave do cofre.
+      CLI_LOGIN: ${CLI_LOGIN:-false}
+      CLI_LOGIN_IMAGE: ${CLI_LOGIN_IMAGE:-le-fabrique/cli:dev}
+      VAULT_KEY: ${VAULT_KEY:-}
+      VAULT_KEY_ID: ${VAULT_KEY_ID:-k1}
+      WORKSPACES_DIR: /workspaces
     depends_on:
       postgres: {condition: service_healthy}
       migrate: {condition: service_completed_successfully}
     networks: [private, egress]
+    volumes:
+      - ${WORKSPACES_HOST_DIR:-workspaces}:/workspaces
     read_only: true
     tmpfs: [/tmp]
     mem_limit: ${LIMIT_WORKER_MEM:-1g}
@@ -137,3 +159,5 @@ networks:
 
 volumes:
   postgres_data:
+  # Repositórios dos projetos (clonados, abertos ou criados). Em dev, vira uma pasta do host (compose.dev.yaml).
+  workspaces:

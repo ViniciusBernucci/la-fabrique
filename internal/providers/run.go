@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/ViniciusBernucci/le-fabrique/internal/execution"
@@ -24,7 +25,12 @@ type Runner interface {
 }
 
 // SandboxRunner roda o comando dentro de um sandbox provisionado.
-type SandboxRunner struct{ S *execution.Sandbox }
+// SandboxRunner roda o comando dentro de um sandbox provisionado. Env soma variáveis ao ambiente do comando
+// (ex.: o proxy de saída do terminal do agente).
+type SandboxRunner struct {
+	S   *execution.Sandbox
+	Env map[string]string
+}
 
 type sandboxProcess struct{ r *execution.Running }
 
@@ -35,7 +41,14 @@ func (p sandboxProcess) Cancel(g time.Duration) error { return p.r.Cancel(g) }
 
 // Start implementa Runner.
 func (sr SandboxRunner) Start(ctx context.Context, cmd Command, dir string) (Process, error) {
-	r, err := sr.S.Start(ctx, execution.ExecSpec{Cmd: cmd.Args, Env: cmd.Env, Dir: dir, Stdin: stringsReader(cmd.Stdin)})
+	env := map[string]string{}
+	for k, v := range cmd.Env {
+		env[k] = v
+	}
+	for k, v := range sr.Env {
+		env[k] = v
+	}
+	r, err := sr.S.Start(ctx, execution.ExecSpec{Cmd: cmd.Args, Env: env, Dir: dir, Stdin: stringsReader(cmd.Stdin)})
 	if err != nil {
 		return nil, err
 	}
@@ -53,6 +66,7 @@ type Result struct {
 	OutputTokens int
 	Events       int
 	Session      string // id da sessão nativa informado pelo cliente (vazio se não informou)
+	Stderr       string // fim do stderr do cliente (diagnóstico; o chamador deve passar pela redação)
 }
 
 const maxLine = 1 << 20
@@ -109,6 +123,7 @@ func Run(ctx context.Context, rn Runner, req Request, onEvent func(Event)) (Resu
 	}
 	code, werr := proc.Wait()
 	res.ExitCode = code
+	res.Stderr = tailText(proc.Stderr(), 2000)
 	if ctx.Err() != nil || code == -1 {
 		res.Cancelled, res.Failed = true, true
 		if res.Failure == "" {
@@ -118,6 +133,9 @@ func Run(ctx context.Context, rn Runner, req Request, onEvent func(Event)) (Resu
 		res.Failed = true
 		if res.Failure == "" {
 			res.Failure = "o cliente terminou com código de saída diferente de zero"
+			if res.Stderr != "" {
+				res.Failure += ": " + tailText(res.Stderr, 400)
+			}
 		}
 	}
 	if res.Final == "" {
@@ -127,4 +145,13 @@ func Run(ctx context.Context, rn Runner, req Request, onEvent func(Event)) (Resu
 		return res, werr
 	}
 	return res, nil
+}
+
+// tailText devolve o fim do texto (sem espaços nas pontas), com reticências se cortou.
+func tailText(s string, max int) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= max {
+		return s
+	}
+	return "…" + s[len(s)-max:]
 }

@@ -1,21 +1,25 @@
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { FormError, toApiError } from "../components/AuthParts";
+import { ConnectionSelect } from "../components/ConnectionSelect";
 import { PageHeader } from "../components/PageHeader";
 import { ErrorState, LoadingState } from "../components/States";
 import {
   type ApiError,
   api,
   type Connection,
+  type PrepareRepository,
   type Project,
   type ProjectPatch,
-  type RepositoryConfig,
+  type RepoCheck,
   type SourceCheck,
   type SourceConfig,
   type WizardStep,
 } from "../lib/api";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
+import { RepositoryStep } from "./RepositoryStep";
+import { SetupTutorial } from "./SetupTutorial";
 
 const steps: { id: WizardStep; label: string }[] = [
   { id: "basics", label: "Dados" },
@@ -68,6 +72,26 @@ function Wizard({ initial, connections }: { initial: Project; connections: Conne
   }
 
   const [check, setCheck] = useState<SourceCheck | null>(null);
+  const [notes, setNotes] = useState<string[]>([]);
+
+  /** Clona, abre ou cria o repositório (ADR-0061), grava e segue para a Origem. */
+  async function prepare(body: PrepareRepository) {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api.prepareRepository(project.id, project.version, body);
+      const updated = await api.updateProject(res.project.id, res.project.version, {
+        wizard_step: "source",
+      });
+      setProject(updated);
+      setNotes(res.notes);
+      setStep("source");
+    } catch (e) {
+      setError(toApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   /** Salva a origem e a verifica com a conexão do cofre, sem sair da etapa. */
   async function saveAndCheck(source: SourceConfig) {
@@ -131,6 +155,7 @@ function Wizard({ initial, connections }: { initial: Project; connections: Conne
         className="panel panel--pad"
         aria-label={`Etapa ${steps.find((s) => s.id === step)?.label}`}
       >
+        <SetupTutorial step={step} />
         {step === "basics" && (
           <BasicsStep project={project} busy={busy} onSave={(c) => save(c, "repository")} />
         )}
@@ -141,8 +166,15 @@ function Wizard({ initial, connections }: { initial: Project; connections: Conne
             busy={busy}
             locked={locked}
             onBack={() => goto("basics")}
-            onSave={(repository) => save({ repository }, "source")}
+            onPrepare={prepare}
           />
+        )}
+        {step === "source" && notes.length > 0 && (
+          <div className="callout" role="status">
+            {notes.map((n) => (
+              <p key={n}>{n}</p>
+            ))}
+          </div>
         )}
         {step === "source" && (
           <SourceStep
@@ -220,121 +252,6 @@ function BasicsStep({
       </label>
       <div className="actions">
         <button type="submit" disabled={busy}>
-          Salvar e continuar
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function ConnectionSelect({
-  label,
-  kind,
-  connections,
-  value,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  kind: Connection["kind"] | "";
-  connections: Connection[];
-  value: string | null;
-  onChange: (id: string | null) => void;
-  disabled?: boolean;
-}) {
-  const options = connections.filter((c) => c.kind === kind && c.state === "active");
-  return (
-    <label>
-      {label}
-      <select
-        value={value ?? ""}
-        disabled={disabled || kind === ""}
-        onChange={(e) => onChange(e.target.value || null)}
-      >
-        <option value="">Selecione…</option>
-        {options.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-        {value && !options.some((c) => c.id === value) && (
-          <option value={value}>Conexão indisponível (revogada ou de outro tipo)</option>
-        )}
-      </select>
-      {kind !== "" && options.length === 0 && (
-        <small className="muted">
-          Nenhuma conexão ativa deste tipo. <Link to="/connections">Cadastre em Conexões</Link>.
-        </small>
-      )}
-    </label>
-  );
-}
-
-function RepositoryStep({
-  project,
-  connections,
-  busy,
-  locked,
-  onBack,
-  onSave,
-}: {
-  project: Project;
-  connections: Connection[];
-  busy: boolean;
-  locked: boolean;
-  onBack: () => void;
-  onSave: (repository: RepositoryConfig) => void;
-}) {
-  const [repo, setRepo] = useState<RepositoryConfig>(project.repository);
-  const set = (patch: Partial<RepositoryConfig>) => setRepo({ ...repo, ...patch });
-
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    onSave(repo);
-  }
-
-  return (
-    <form className="form form--grid" onSubmit={submit}>
-      <h2>Repositório GitHub</h2>
-      <fieldset className="fieldset-plain" disabled={locked}>
-        <label>
-          Dono (usuário ou organização)
-          <input
-            value={repo.owner}
-            maxLength={39}
-            onChange={(e) => set({ owner: e.target.value })}
-          />
-        </label>
-        <label>
-          Repositório
-          <input
-            value={repo.name}
-            maxLength={100}
-            onChange={(e) => set({ name: e.target.value })}
-          />
-        </label>
-        <label>
-          Branch base
-          <input
-            value={repo.base_branch}
-            maxLength={200}
-            placeholder="main"
-            onChange={(e) => set({ base_branch: e.target.value })}
-          />
-        </label>
-        <ConnectionSelect
-          label="Conexão GitHub"
-          kind="github"
-          connections={connections}
-          value={repo.connection_id}
-          onChange={(connection_id) => set({ connection_id })}
-        />
-      </fieldset>
-      <div className="actions">
-        <button type="button" className="secondary-action" onClick={onBack}>
-          Voltar
-        </button>
-        <button type="submit" disabled={busy || locked}>
           Salvar e continuar
         </button>
       </div>
@@ -614,6 +531,21 @@ function ReviewStep({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [repoCheck, setRepoCheck] = useState<RepoCheck | null>(null);
+
+  /** Prova pasta, origin, branch base, conta e push; a ativação exige o resultado (ADR-0062). */
+  async function verifyRepository() {
+    setBusy(true);
+    setError(null);
+    try {
+      setRepoCheck(await api.checkRepository(project.id));
+      reload();
+    } catch (e) {
+      setError(toApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function activate() {
     setBusy(true);
@@ -659,7 +591,12 @@ function ReviewStep({
               <strong>{c.label}</strong>
               <small>{c.status === "ok" ? "Preenchido" : c.action}</small>
             </span>
-            {c.status === "pending" && (
+            {c.status === "pending" && c.id === "repository.verified" && (
+              <button type="button" disabled={busy} onClick={verifyRepository}>
+                Verificar repositório
+              </button>
+            )}
+            {c.status === "pending" && c.id !== "repository.verified" && (
               <button
                 type="button"
                 className="secondary-action"
@@ -671,6 +608,28 @@ function ReviewStep({
           </li>
         ))}
       </ul>
+      {repoCheck && (
+        <ul
+          className="checklist"
+          aria-label="Resultado da verificação do repositório"
+          data-ok={repoCheck.ok}
+        >
+          {repoCheck.steps.map((st) => (
+            <li
+              key={st.id}
+              className={`checklist-item checklist-item--${st.status === "ok" ? "ok" : "pending"}`}
+            >
+              <span className="checklist-mark" aria-hidden="true">
+                {st.status === "ok" ? "✓" : st.status === "skipped" ? "–" : "!"}
+              </span>
+              <span>
+                <strong>{st.label}</strong>
+                <small>{st.detail}</small>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
       {report.not_verified.length > 0 && (
         <div className="callout">
           <strong>Ainda não verificado nesta versão:</strong>

@@ -90,7 +90,7 @@ echo "$cpu $io $n"`
 
 // probe amostra a árvore de processos do comando dentro do container.
 func (r *Running) probe(ctx context.Context) (Sample, error) {
-	out, _, err := r.s.d.run(ctx, nil, "exec", "--user", sandboxUID+":"+sandboxUID, r.s.Container, "sh", "-c", probeScript, "probe", r.pidfile)
+	out, _, err := r.s.d.run(ctx, nil, "exec", "--user", r.s.uid()+":"+r.s.uid(), r.s.Container, "sh", "-c", probeScript, "probe", r.pidfile)
 	if err != nil {
 		return Sample{}, fmt.Errorf("amostragem falhou: %w", err)
 	}
@@ -211,7 +211,7 @@ const quiescentScript = `ps -o pid=,args= | awk '{pid=$1; $1=""; sub(/^ /,"",$0)
 // VerifyQuiescent confirma que não há processo do projeto vivo no sandbox e, se
 // confirmar, libera a quarentena.
 func (s *Sandbox) VerifyQuiescent(ctx context.Context) (bool, error) {
-	out, _, err := s.d.run(ctx, nil, "exec", "--user", sandboxUID+":"+sandboxUID, s.Container, "sh", "-c", quiescentScript, "lf-quiescence-check")
+	out, _, err := s.d.run(ctx, nil, "exec", "--user", s.uid()+":"+s.uid(), s.Container, "sh", "-c", quiescentScript, "lf-quiescence-check")
 	if err != nil {
 		return false, fmt.Errorf("verificação falhou: %w", err)
 	}

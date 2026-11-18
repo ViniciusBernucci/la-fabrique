@@ -66,7 +66,20 @@ export function SkillsPage() {
               <li key={s.id}>
                 <div className="item-link">
                   <span>
-                    <strong>{s.name}</strong>
+                    <strong>
+                      {s.name}
+                      {s.is_default && (
+                        <>
+                          {" "}
+                          <span
+                            className="badge badge--active"
+                            title="Já vem instalada e associada a todos os projetos"
+                          >
+                            Padrão
+                          </span>
+                        </>
+                      )}
+                    </strong>
                     <small>
                       {executorLabel[s.executor]} · {s.source_kind}
                       {s.source_ref ? ` (${s.source_ref})` : ""} · versão {s.version} ·{" "}

@@ -32,7 +32,13 @@ export type ProjectState = "draft" | "active" | "paused" | "archived";
 
 export type WizardStep = "basics" | "repository" | "source" | "review";
 
+/** Como o repositório chega à fábrica (ADR-0061). */
+export type RepoMode = "github" | "local" | "new";
+
 export interface RepositoryConfig {
+  mode: RepoMode;
+  /** Pasta relativa à raiz de workspaces; vazio = o worker clona sozinho. */
+  path: string;
   owner: string;
   name: string;
   base_branch: string;
@@ -74,6 +80,19 @@ export interface SourceCheck {
   steps: SourceStep[];
   items: PreviewItem[];
   has_more: boolean;
+  checked_at: string;
+}
+
+export interface RepoCheckStep {
+  id: string;
+  label: string;
+  status: "ok" | "warn" | "failed" | "skipped";
+  detail: string;
+}
+
+export interface RepoCheck {
+  ok: boolean;
+  steps: RepoCheckStep[];
   checked_at: string;
 }
 
@@ -133,7 +152,13 @@ export interface ProjectChange {
     | "source_checked"
     | "activated"
     | "suspended"
-    | "resumed";
+    | "resumed"
+    | "repository_checked"
+    | "setup_approved"
+    | "setup_revoked"
+    | "setup_ran"
+    | "cleanup_policy_changed"
+    | "cleanup_applied";
   detail: Record<string, unknown>;
   created_at: string;
 }
@@ -255,7 +280,7 @@ export interface Session {
   totp_reset_required: boolean;
 }
 
-export type LoginStatus = "totp_required" | "totp_enrollment_required";
+export type LoginStatus = "totp_required" | "totp_enrollment_required" | "authenticated";
 
 export interface Enrollment {
   secret: string;
@@ -300,6 +325,67 @@ export interface Connection {
   updated_at: string;
 }
 
+export interface OAuthProvider {
+  kind: "github" | "clickup" | "jira";
+  flow: "device" | "redirect";
+  available: boolean;
+  hint?: string;
+}
+
+export interface OAuthStarted {
+  flow_id: string;
+  flow: "device" | "redirect";
+  user_code?: string;
+  verification_uri?: string;
+  interval?: number;
+  authorize_url?: string;
+  expires_in: number;
+}
+
+export interface OAuthStatus {
+  status: "pending" | "done" | "failed";
+  error?: string;
+  connection?: Connection;
+}
+
+/** Modelo do catálogo (ADR-0021/0067). */
+export interface Model {
+  id: string;
+  provider: AgentProvider;
+  /** Só no provedor api: openrouter ou vercel. Vazio nos demais. */
+  gateway: "" | "openrouter" | "vercel";
+  name: string;
+  label: string;
+  supports_tools: boolean;
+  supports_streaming: boolean;
+  context_window: number;
+  max_output_tokens: number;
+  state: "active" | "disabled";
+  version: number;
+}
+
+/** Recurso global associado a um projeto (workflow, agente, skill, ferramenta ou modelo). */
+export interface ProjectResource {
+  kind: "workflow" | "agent" | "skill" | "tool" | "model";
+  ref: string;
+  name: string;
+}
+
+/** Login oficial de uma conta de assinatura de IA (ADR-0065). */
+export type CLIProvider = "claude" | "codex";
+export interface CLILogin {
+  id: string;
+  provider: CLIProvider;
+  name: string;
+  state: "pending" | "preparing" | "awaiting_user" | "verifying" | "done" | "failed" | "cancelled";
+  verification_uri?: string;
+  user_code?: string;
+  needs_code: boolean;
+  error?: string;
+  expires_in: number;
+  connection?: Connection;
+}
+
 export interface NewConnection {
   kind: ConnectionKind;
   name: string;
@@ -324,7 +410,8 @@ export interface NodeType {
   label: string;
   category: "fluxo" | "execução" | "controle";
   inputs: string[] | null;
-  outputs: string[];
+  /** Nulo quando o tipo não tem saídas (ex.: "end"), como a API antiga devolvia. */
+  outputs: string[] | null;
   multi_in: boolean;
   fields: FieldSpec[] | null;
 }
@@ -455,6 +542,8 @@ export interface Skill {
     steps: SkillStep[];
   };
   needs_approval: boolean;
+  /** Skill padrão da fábrica (ADR-0066): já vem instalada e associada a todos os projetos. */
+  is_default: boolean;
   version: number;
   files?: { path: string; sha256: string; size: number }[];
   created_at: string;
@@ -615,6 +704,34 @@ export interface ProjectOverview {
     conflicts: number;
     error?: string;
   } | null;
+}
+
+export type WorkflowRunStatus =
+  | "queued"
+  | "running"
+  | "waiting"
+  | "awaiting_decision"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface WorkflowRun {
+  execution_id: string;
+  project_id: string;
+  workflow_version_id: string;
+  title: string;
+  task: string;
+  workspace: string;
+  kind: "manual" | "test";
+  issue_key: string;
+  status: WorkflowRunStatus;
+  outcome: string;
+  failure: string;
+  pending: string[];
+  trace: { node: string; type: string; port?: string; note?: string }[];
+  wake_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ExecutionEvent {
@@ -807,7 +924,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
       action: "Verifique a conexão e tente novamente.",
     });
   }
-  if (response.ok) return (await response.json()) as T;
+  if (response.ok) return (response.status === 204 ? undefined : await response.json()) as T;
 
   let body: {
     error?: { code?: string; message?: string; action?: string; correlation_id?: string };
@@ -852,6 +969,78 @@ function put<T>(path: string, body: unknown): Promise<T> {
   });
 }
 
+export interface SetupRun {
+  id: string;
+  status: "ok" | "failed" | "timeout";
+  exit_code: number;
+  output_tail: string;
+  finished_at: string;
+}
+export interface SetupState {
+  ref: string;
+  commit: string;
+  found: boolean;
+  sha256: string;
+  content: string;
+  approved: boolean;
+  approval_id?: string;
+  approved_at?: string;
+  last_run?: SetupRun;
+}
+export interface CleanupPolicy {
+  enabled: boolean;
+  archive_idle_days: number;
+  remove_archived_days: number;
+}
+export interface CleanupItem {
+  attempt_id: string;
+  branch: string;
+  action: "archive" | "remove" | "skip";
+  reason: string;
+}
+export interface CleanupPlan {
+  policy: CleanupPolicy;
+  items: CleanupItem[];
+  hash: string;
+  generated_at: string;
+}
+
+export interface WorkspaceEntry {
+  name: string;
+  path: string;
+  is_repo: boolean;
+  empty: boolean;
+}
+
+export interface WorkspaceListing {
+  enabled: boolean;
+  path: string;
+  parent: string | null;
+  is_repo: boolean;
+  entries: WorkspaceEntry[];
+}
+
+export interface GitHubRepo {
+  full_name: string;
+  owner: string;
+  name: string;
+  private: boolean;
+  default_branch: string;
+  can_push: boolean;
+  description: string;
+}
+
+export interface PrepareRepository {
+  mode: RepoMode;
+  path?: string;
+  owner?: string;
+  name?: string;
+  base_branch?: string;
+  connection_id?: string | null;
+  create_remote?: boolean;
+  private?: boolean;
+}
+
 export const api = {
   session: (signal?: AbortSignal) => request<Session>("/session", { signal }),
   ready: (signal?: AbortSignal) => request<{ status: string }>("/readyz", { signal }),
@@ -859,14 +1048,55 @@ export const api = {
   getProject: (id: string, signal?: AbortSignal) =>
     request<Project>(`/projects/${encodeURIComponent(id)}`, { signal }),
   createProject: (input: NewProject) => post<Project>("/projects", input),
+  /** Apaga projeto em rascunho ou suspenso (sem reautenticação; só sessão e CSRF). */
+  deleteProject: (id: string) =>
+    request<void>(`/projects/${encodeURIComponent(id)}`, { method: "DELETE" }),
   /** Persiste uma etapa do assistente com controle otimista de versão. */
   updateProject: (id: string, expected_version: number, changes: ProjectPatch) =>
     patch<Project>(`/projects/${encodeURIComponent(id)}`, { expected_version, ...changes }),
+  /** Clona, abre ou cria o repositório do projeto e grava na configuração (ADR-0061). */
+  prepareRepository: (id: string, expected_version: number, body: PrepareRepository) =>
+    post<{ project: Project; notes: string[] }>(
+      `/projects/${encodeURIComponent(id)}/repository/prepare`,
+      { expected_version, ...body },
+    ),
+  /** Prova pasta, origin, branch base, conta e push; a ativação exige o resultado. */
+  checkRepository: (id: string) =>
+    post<RepoCheck>(`/projects/${encodeURIComponent(id)}/repository/check`),
+  setupState: (id: string, signal?: AbortSignal) =>
+    request<SetupState>(`/projects/${encodeURIComponent(id)}/setup`, { signal }),
+  approveSetup: (id: string, ref: string, sha256: string) =>
+    post<SetupState>(`/projects/${encodeURIComponent(id)}/setup/approve`, { ref, sha256 }),
+  revokeSetup: (id: string, approvalId: string) =>
+    request<void>(
+      `/projects/${encodeURIComponent(id)}/setup/approvals/${encodeURIComponent(approvalId)}`,
+      { method: "DELETE" },
+    ),
+  cleanupPlan: (id: string, signal?: AbortSignal) =>
+    request<CleanupPlan>(`/projects/${encodeURIComponent(id)}/cleanup`, { signal }),
+  setCleanupPolicy: (id: string, policy: CleanupPolicy) =>
+    put<CleanupPolicy>(`/projects/${encodeURIComponent(id)}/cleanup/policy`, policy),
+  applyCleanup: (id: string, hash: string) =>
+    post<{ archived: number; removed: number; failed: number }>(
+      `/projects/${encodeURIComponent(id)}/cleanup/apply`,
+      { hash },
+    ),
+  browseWorkspace: (path: string, signal?: AbortSignal) =>
+    request<WorkspaceListing>(`/workspace/browse?path=${encodeURIComponent(path)}`, { signal }),
+  githubRepos: (connectionId: string, signal?: AbortSignal) =>
+    request<{ items: GitHubRepo[] }>(
+      `/github/repos?connection_id=${encodeURIComponent(connectionId)}`,
+      { signal },
+    ),
   /** Prova o acesso à origem e devolve o preview dos itens elegíveis (não escreve na origem). */
   checkSource: (id: string) =>
     post<SourceCheck>(`/projects/${encodeURIComponent(id)}/source/check`),
   validateProject: (id: string, signal?: AbortSignal) =>
     request<ValidationReport>(`/projects/${encodeURIComponent(id)}/validation`, { signal }),
+  projectResources: (id: string, signal?: AbortSignal) =>
+    request<{ resources: ProjectResource[] }>(`/projects/${encodeURIComponent(id)}/resources`, {
+      signal,
+    }),
   projectChanges: (id: string, signal?: AbortSignal) =>
     request<{ items: ProjectChange[] }>(`/projects/${encodeURIComponent(id)}/changes`, { signal }),
   activateProject: (id: string, expected_version: number) =>
@@ -1015,6 +1245,8 @@ export const api = {
       { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file },
     ),
 
+  // Catálogo de modelos (lista por provedor nos agentes).
+  listModels: (signal?: AbortSignal) => request<{ items: Model[] }>("/models", { signal }),
   // Catálogo de agentes.
   listAgents: (signal?: AbortSignal) => request<{ items: Agent[] }>("/agents", { signal }),
   createAgent: (input: AgentInput) => post<Agent>("/agents", input),
@@ -1027,7 +1259,7 @@ export const api = {
 
   // Login em duas etapas.
   login: (username: string, password: string) =>
-    post<{ status: LoginStatus }>("/auth/login", { username, password }),
+    post<{ status: LoginStatus; session?: Session }>("/auth/login", { username, password }),
   loginTotp: (code: string) => post<Session>("/auth/totp", { code }),
   loginRecover: (recovery_code: string) => post<Session>("/auth/recover", { recovery_code }),
   totpSetup: () => post<Enrollment>("/auth/totp/setup"),
@@ -1050,10 +1282,75 @@ export const api = {
   // Cofre de conexões (o segredo só é enviado, nunca recebido).
   listConnections: (signal?: AbortSignal) =>
     request<{ items: Connection[] }>("/connections", { signal }),
+  listOAuthProviders: (signal?: AbortSignal) =>
+    request<{ items: OAuthProvider[] }>("/oauth/providers", { signal }),
+  startOAuth: (kind: OAuthProvider["kind"], name: string) =>
+    post<OAuthStarted>(`/oauth/${kind}/start`, { name }),
+  oauthFlow: (id: string, signal?: AbortSignal) =>
+    request<OAuthStatus>(`/oauth/flows/${encodeURIComponent(id)}`, { signal }),
+  startCLILogin: (provider: CLIProvider, name: string) =>
+    post<CLILogin>("/cli-logins", { provider, name }),
+  cliLogin: (id: string, signal?: AbortSignal) =>
+    request<CLILogin>(`/cli-logins/${encodeURIComponent(id)}`, { signal }),
+  submitCLILoginCode: (id: string, code: string) =>
+    post<CLILogin>(`/cli-logins/${encodeURIComponent(id)}/code`, { code }),
+  cancelCLILogin: (id: string) => post<CLILogin>(`/cli-logins/${encodeURIComponent(id)}/cancel`),
   createConnection: (input: NewConnection) => post<Connection>("/connections", input),
   testConnection: (id: string) => post<Connection>(`/connections/${encodeURIComponent(id)}/test`),
   rotateConnection: (id: string, secret: string, expected_version: number) =>
     post<Connection>(`/connections/${encodeURIComponent(id)}/rotate`, { secret, expected_version }),
+  // Execuções do workflow do projeto (a fábrica).
+  listRuns: (projectId: string, signal?: AbortSignal) =>
+    request<{ items: WorkflowRun[] }>(`/projects/${encodeURIComponent(projectId)}/runs`, {
+      signal,
+    }),
+  startRun: (
+    projectId: string,
+    input: { title: string; task: string; prd_done: boolean; correction: boolean },
+  ) => post<WorkflowRun>(`/projects/${encodeURIComponent(projectId)}/runs`, input),
+  runDiagnostics: (projectId: string, runId: string, signal?: AbortSignal) =>
+    request<{
+      report: string;
+      hints: { cause: string; fix: string }[];
+      failure: { node: string; reason: string };
+    }>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/diagnostics`, {
+      signal,
+    }),
+  startIssueRun: (projectId: string, issueKey: string) =>
+    post<WorkflowRun>(
+      `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueKey)}/run`,
+      {},
+    ),
+  getRun: (projectId: string, runId: string, signal?: AbortSignal) =>
+    request<WorkflowRun>(
+      `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}`,
+      { signal },
+    ),
+  startTestRun: (projectId: string, workflowId?: string) =>
+    post<WorkflowRun>(
+      `/projects/${encodeURIComponent(projectId)}/runs/test`,
+      workflowId ? { workflow_id: workflowId } : {},
+    ),
+  workflowVersion: (versionId: string, signal?: AbortSignal) =>
+    request<{ flat_graph: WorkflowGraph }>(`/workflow-versions/${encodeURIComponent(versionId)}`, {
+      signal,
+    }),
+  cancelRun: (projectId: string, runId: string) =>
+    post<WorkflowRun>(
+      `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/cancel`,
+      {},
+    ),
+  decideRun: (projectId: string, runId: string, node: string, choice: "approved" | "rejected") =>
+    post<WorkflowRun>(
+      `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/decide`,
+      { node, choice },
+    ),
+  publishWorkflow: (id: string, expectedVersion: number) =>
+    post<{ number: number; unchanged?: boolean }>(`/workflows/${encodeURIComponent(id)}/publish`, {
+      expected_version: expectedVersion,
+    }),
+  deleteConnection: (id: string) =>
+    request<void>(`/connections/${encodeURIComponent(id)}`, { method: "DELETE" }),
   revokeConnection: (id: string) =>
     post<Connection>(`/connections/${encodeURIComponent(id)}/revoke`),
 };

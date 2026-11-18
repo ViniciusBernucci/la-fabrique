@@ -1,13 +1,23 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { FormError, toApiError } from "../components/AuthParts";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../components/States";
-import { type ApiError, api, type Connection, type Project, type ProjectChange } from "../lib/api";
+import {
+  type ApiError,
+  api,
+  type Connection,
+  type Project,
+  type ProjectChange,
+  type ProjectResource,
+} from "../lib/api";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
 import { DeliveryPanel } from "./DeliveryPanel";
+import { FactoryRuns } from "./FactoryRuns";
 import { MemoryPanel } from "./MemoryPanel";
+import { ProjectManualButton } from "./ProjectManual";
+import { ProjectOpsPanel } from "./ProjectOpsPanel";
 import { StateBadge } from "./ProjectsPage";
 import { RunPanel } from "./RunPanel";
 
@@ -56,7 +66,31 @@ const changeLabel: Record<ProjectChange["action"], string> = {
   activated: "Projeto ativado",
   suspended: "Projeto suspenso",
   resumed: "Projeto retomado",
+  repository_checked: "Repositório verificado",
+  setup_approved: "Setup aprovado",
+  setup_revoked: "Aprovação do setup revogada",
+  setup_ran: "Setup executado",
+  cleanup_policy_changed: "Política de limpeza alterada",
+  cleanup_applied: "Limpeza aplicada",
 };
+
+const resourceLabel: Record<ProjectResource["kind"], string> = {
+  workflow: "Workflows",
+  agent: "Agentes",
+  skill: "Skills",
+  tool: "Ferramentas",
+  model: "Modelos",
+};
+
+/** "Skills (6): a, b…" por tipo; vazio = "Nenhum associado". */
+function resourceSummary(items: ProjectResource[]): string[] {
+  const by = new Map<string, string[]>();
+  for (const r of items) by.set(r.kind, [...(by.get(r.kind) ?? []), r.name || r.ref]);
+  return [...by.entries()].map(
+    ([kind, names]) =>
+      `${resourceLabel[kind as ProjectResource["kind"]]} (${names.length}): ${names.sort().join(", ")}`,
+  );
+}
 
 function connectionName(id: string | null, connections: Connection[]): string {
   if (!id) return "—";
@@ -76,8 +110,15 @@ function ProjectDetail({ project, reload }: { project: Project; reload: () => vo
     `changes:${project.id}:${project.version}`,
     expire,
   );
+  const resources = useResource(
+    (s) => api.projectResources(project.id, s),
+    `resources:${project.id}:${project.version}`,
+    expire,
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const navigate = useNavigate();
   const names = connections.state.status === "ready" ? connections.state.data.items : [];
 
   async function run(action: () => Promise<unknown>) {
@@ -93,8 +134,22 @@ function ProjectDetail({ project, reload }: { project: Project; reload: () => vo
     }
   }
 
+  async function remove() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.deleteProject(project.id);
+      navigate("/projects");
+    } catch (e) {
+      setConfirmingDelete(false);
+      setError(toApiError(e));
+      setBusy(false);
+    }
+  }
+
   const actions = (
     <div className="actions">
+      <ProjectManualButton />
       <StateBadge state={project.state} />
       {project.state === "draft" && (
         <Link className="button-link" to={`/projects/${project.id}/setup`}>
@@ -125,11 +180,52 @@ function ProjectDetail({ project, reload }: { project: Project; reload: () => vo
           </button>
         </>
       )}
+      {project.state !== "active" && (
+        <button
+          type="button"
+          className="danger-action"
+          disabled={busy}
+          onClick={() => setConfirmingDelete(true)}
+        >
+          Apagar projeto
+        </button>
+      )}
     </div>
   );
 
   return (
     <div className="page">
+      {confirmingDelete && (
+        <div className="dialog-backdrop">
+          <div
+            className="dialog panel"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-title"
+            aria-describedby="delete-desc"
+          >
+            <h2 id="delete-title">Apagar “{project.name}”?</h2>
+            <p id="delete-desc" className="muted">
+              Atenção: esta ação é permanente e não pode ser desfeita. A configuração do projeto
+              (repositório, origem, recursos e histórico de alterações) será removida. Projetos com
+              execuções registradas não podem ser apagados.
+            </p>
+            <div className="actions">
+              <button
+                type="button"
+                className="secondary-action"
+                disabled={busy}
+                onClick={() => setConfirmingDelete(false)}
+              >
+                Cancelar
+              </button>
+              <button type="button" className="danger-action" disabled={busy} onClick={remove}>
+                Apagar definitivamente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <nav className="breadcrumb" aria-label="Trilha">
         <Link to="/projects">Projetos</Link>
         <span aria-hidden="true">/</span>
@@ -142,9 +238,11 @@ function ProjectDetail({ project, reload }: { project: Project; reload: () => vo
         actions={actions}
       />
       <FormError error={error} />
+      {project.state !== "draft" && <FactoryRuns projectId={project.id} />}
       {project.state !== "draft" && <RunPanel projectId={project.id} />}
       {project.state !== "draft" && <DeliveryPanel projectId={project.id} />}
       {project.state !== "draft" && <MemoryPanel projectId={project.id} />}
+      {project.repository.path && <ProjectOpsPanel projectId={project.id} />}
       <section className="panel" aria-label="Resumo do projeto">
         <dl className="facts">
           <div>
@@ -202,7 +300,20 @@ function ProjectDetail({ project, reload }: { project: Project; reload: () => vo
           </div>
           <div>
             <dt>Agentes, workflows e recursos</dt>
-            <dd>Nenhum associado</dd>
+            <dd>
+              {resources.state.status === "loading" && "Carregando…"}
+              {resources.state.status === "error" && "Não foi possível carregar"}
+              {resources.state.status === "ready" &&
+                (resources.state.data.resources.length === 0 ? (
+                  "Nenhum associado"
+                ) : (
+                  <span className="resource-list">
+                    {resourceSummary(resources.state.data.resources).map((line) => (
+                      <span key={line}>{line}</span>
+                    ))}
+                  </span>
+                ))}
+            </dd>
           </div>
         </dl>
       </section>

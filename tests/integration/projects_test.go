@@ -1,6 +1,10 @@
 package integration
 
 import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -9,6 +13,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/integrations"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
+	"github.com/ViniciusBernucci/le-fabrique/internal/workspace"
 )
 
 type changesResp struct {
@@ -18,13 +23,35 @@ type changesResp struct {
 func newProjectEnv(t *testing.T) (*authEnv, *client, *fakeJira) {
 	t.Helper()
 	fj := newFakeJira(t)
+	gh := newFakeGitHubRepos(t)
 	e := newAuthEnv(t, nil, httpapi.WithTrackerFactory(func(cfg integrations.Config) (integrations.Tracker, error) {
 		cfg.BaseURL = fj.URL // todos os tipos falam com a plataforma falsa
 		return integrations.NewTracker(cfg)
-	}))
+	}), httpapi.WithWorkspaceSetup(func(s *workspace.Service) { s.GH = workspace.GitHub{BaseURL: gh.URL} }))
 	c := e.newClient()
 	c.login(nil)
 	return e, c, fj
+}
+
+// newFakeGitHubRepos responde à API do GitHub para a verificação do repositório (qualquer dono/nome, push liberado).
+func newFakeGitHubRepos(t *testing.T) *httptest.Server {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		switch {
+		case len(parts) == 3 && parts[0] == "repos":
+			fmt.Fprintf(w, `{"full_name":"%s/%s","default_branch":"main","archived":false,"permissions":{"push":true}}`, parts[1], parts[2])
+		case len(parts) == 5 && parts[0] == "repos" && parts[3] == "branches":
+			if parts[4] == "main" {
+				fmt.Fprint(w, `{"name":"main"}`)
+				return
+			}
+			w.WriteHeader(404)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
 }
 
 func createProject(t *testing.T, c *client, slug string) projects.Project {
@@ -76,7 +103,7 @@ func configure(t *testing.T, c *client, p projects.Project, gh, jira security.Co
 	var out projects.Project
 	c.expect(c.do("PATCH", "/api/projects/"+p.ID, map[string]any{
 		"expected_version": p.Version, "wizard_step": "review",
-		"repository": map[string]any{"owner": "org-exemplo", "name": "app", "base_branch": "main", "connection_id": gh.ID},
+		"repository": map[string]any{"owner": "org-exemplo", "name": p.Slug, "base_branch": "main", "connection_id": gh.ID},
 		"source":     jiraSource(jira.ID),
 	}, nil), 200).JSON(&out)
 	return out
@@ -90,6 +117,11 @@ func completeConfig(t *testing.T, c *client, p projects.Project, gh, jira securi
 	c.expect(c.post("/api/projects/"+p.ID+"/source/check", nil), 200).JSON(&check)
 	if !check.OK {
 		t.Fatalf("a origem deveria verificar: %+v", check.Steps)
+	}
+	var rc projects.RepoCheck
+	c.expect(c.post("/api/projects/"+p.ID+"/repository/check", nil), 200).JSON(&rc)
+	if !rc.OK {
+		t.Fatalf("o repositório deveria verificar: %+v", rc.Steps)
 	}
 	return out
 }
@@ -413,5 +445,41 @@ func TestProjectWritesRequireSessionAndCSRF(t *testing.T) {
 	c.expect(c.get("/api/projects/"+p.ID), 200).JSON(&got)
 	if got.Name != p.Name {
 		t.Fatalf("requisição forjada alterou o projeto: %+v", got)
+	}
+}
+
+// Apagar projeto: só rascunho ou suspenso, sem histórico de execução; ativo e com histórico são recusados,
+// exige sessão com reautenticação recente e CSRF.
+func TestDeleteProjectRules(t *testing.T) {
+	e, c, _ := newProjectEnv(t)
+
+	draft := createProject(t, c, "apagar-rascunho")
+	c.expect(c.delete("/api/projects/"+draft.ID), 204)
+	c.expect(c.get("/api/projects/"+draft.ID), 404)
+	c.expect(c.delete("/api/projects/"+draft.ID), 404)
+
+	// Projeto com histórico (feature): FK RESTRICT vira 409 project_has_history e o projeto permanece.
+	kept := createProject(t, c, "apagar-historico")
+	if _, err := e.db.Pool.Exec(context.Background(),
+		`INSERT INTO features (project_id, external_id, title) VALUES ($1, 'X-1', 'f')`, kept.ID); err != nil {
+		t.Fatal(err)
+	}
+	if resp := c.delete("/api/projects/" + kept.ID); resp.StatusCode != 409 || resp.ErrCode() != "project_has_history" {
+		t.Errorf("com histórico: %d %s", resp.StatusCode, resp.Body)
+	}
+	c.expect(c.get("/api/projects/"+kept.ID), 200)
+
+	// Projeto ativo não é apagado.
+	gh := conn(t, c, "github", "gh-del")
+	jira := conn(t, c, "jira", "jira-del")
+	cur := completeConfig(t, c, createProject(t, c, "apagar-ativo"), gh, jira)
+	c.expect(c.post("/api/projects/"+cur.ID+"/activate", map[string]any{"expected_version": cur.Version}), 200)
+	if resp := c.delete("/api/projects/" + cur.ID); resp.StatusCode != 409 || resp.ErrCode() != "invalid_state" {
+		t.Errorf("ativo: %d %s", resp.StatusCode, resp.Body)
+	}
+
+	// Sem sessão não apaga.
+	if resp := e.newClient().delete("/api/projects/" + cur.ID); resp.StatusCode != 401 {
+		t.Errorf("sem sessão: %d %s", resp.StatusCode, resp.Body)
 	}
 }

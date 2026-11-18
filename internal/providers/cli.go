@@ -16,6 +16,8 @@ const (
 	Codex  CLI = "codex"
 )
 
+func (c CLI) String() string { return string(c) }
+
 // Mode é o modo de acesso pedido ao cliente. Os modos que desligam a proteção
 // do próprio cliente (bypassPermissions, danger-full-access) NÃO existem aqui:
 // a fronteira é o sandbox, e a política decide o que cada agente pode.
@@ -54,8 +56,10 @@ type Request struct {
 	Mode         Mode
 	Model        string
 	Dir          string   // diretório de trabalho no sandbox (padrão /workspace)
-	AllowedTools []string // Claude: ferramentas extras no modo de escrita, ex.: "Bash(make test)"
-	Binary       string   // sobrescreve o executável (testes)
+	AllowedTools []string // Claude: ferramentas extras no modo de escrita, ex.: "Bash(make test)" ou "mcp__chrome-devtools"
+	// MCPConfig (só Claude) é o JSON {"mcpServers":{...}} dos servidores MCP do terminal; só eles valem (--strict-mcp-config).
+	MCPConfig string
+	Binary    string // sobrescreve o executável (testes)
 	// Persist mantém a sessão nativa do cliente (padrão: efêmera, como antes). ResumeSession retoma
 	// uma sessão nativa já existente (implica Persist). Só o Claude declara suporte à retomada.
 	Persist       bool
@@ -89,7 +93,7 @@ type Command struct {
 
 var (
 	modelPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$`)
-	toolPattern  = regexp.MustCompile(`^[A-Za-z]+(\([A-Za-z0-9 :*._/-]{1,80}\))?$`)
+	toolPattern  = regexp.MustCompile(`^([A-Za-z]+(\([A-Za-z0-9 :*._/-]{1,80}\))?|mcp__[A-Za-z0-9_-]{1,60}(__[A-Za-z0-9_*-]{1,60})?)$`)
 	dirPattern   = regexp.MustCompile(`^/[A-Za-z0-9_./-]{0,200}$`)
 )
 
@@ -196,10 +200,19 @@ func BuildCommand(req Request) (Command, error) {
 			cmd.Args = append(cmd.Args, "--session-id", req.NewSessionID)
 		}
 		cmd.Args = append(cmd.Args, "--permission-mode", perm, "--allowedTools", strings.Join(tools, ","))
+		if req.MCPConfig != "" {
+			if len(req.MCPConfig) > 8192 || !json.Valid([]byte(req.MCPConfig)) {
+				return bad("configuração MCP inválida")
+			}
+			cmd.Args = append(cmd.Args, "--mcp-config", req.MCPConfig, "--strict-mcp-config")
+		}
 		if req.Model != "" {
 			cmd.Args = append(cmd.Args, "--model", req.Model)
 		}
 	case Codex:
+		if req.MCPConfig != "" {
+			return bad("MCP no terminal só foi verificado para o Claude")
+		}
 		if len(req.AllowedTools) > 0 {
 			return bad("o Codex não tem lista de ferramentas")
 		}

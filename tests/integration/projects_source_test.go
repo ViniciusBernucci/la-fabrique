@@ -75,7 +75,10 @@ func newSourceFixture(t *testing.T, slug string) sourceFixture {
 	p := createProject(t, c, slug)
 	gh := conn(t, c, "github", "gh-"+slug)
 	jira := conn(t, c, "jira", "jira-"+slug)
-	return sourceFixture{c: c, fj: fj, p: configure(t, c, p, gh, jira), gh: gh, jira: jira}
+	p = configure(t, c, p, gh, jira)
+	// O repositório já está verificado: estes testes isolam a verificação da origem.
+	c.expect(c.post("/api/projects/"+p.ID+"/repository/check", nil), 200)
+	return sourceFixture{c: c, fj: fj, p: p, gh: gh, jira: jira}
 }
 
 func (f sourceFixture) check(t *testing.T) projects.SourceCheck {

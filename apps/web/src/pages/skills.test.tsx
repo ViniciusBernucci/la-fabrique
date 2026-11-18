@@ -73,6 +73,7 @@ const skill: Skill = {
   body: "x",
   manifest: { permissions: [], resources: [], commands: [], steps: [] },
   needs_approval: true,
+  is_default: false,
   version: 2,
   created_at: "2026-11-12T10:00:00Z",
   updated_at: "2026-11-12T10:00:00Z",
@@ -129,6 +130,19 @@ describe("catálogo de skills", () => {
     expect(screen.getByText("Exige aprovação")).toBeInTheDocument();
     expect(await screen.findByText(/Recusada/)).toBeInTheDocument();
     expect(screen.getByText(/comando proibido/)).toBeInTheDocument();
+  });
+
+  it("marca as skills padrão da fábrica com o selo Padrão e só elas", async () => {
+    const padrao = {
+      ...skill,
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "lf-tech-lead",
+      is_default: true,
+    };
+    stub(base({ "GET /skills": () => json({ items: [padrao, skill] }) }));
+    renderAt("/skills");
+    expect(await screen.findByText("lf-tech-lead")).toBeInTheDocument();
+    expect(screen.getAllByText("Padrão")).toHaveLength(1);
   });
 
   it("cadastra uma skill de script enviando os comandos linha a linha", async () => {

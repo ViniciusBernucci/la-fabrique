@@ -50,3 +50,37 @@
   --layout-sidebar-width: 226px;
   color-scheme: dark;
 }
+
+/* Tema claro: mesmos nomes de token, valores para fundo claro (contraste AA).
+   Ativado por data-theme="light" em <html> (ver lib/theme.ts). */
+:root[data-theme="light"] {
+  --hud-bg: #f4f5f8;
+  --hud-surface: #ffffff;
+  --hud-surface-2: #f8f9fb;
+  --hud-surface-solid: #ffffff;
+  --hud-chrome: #eceef3;
+  --hud-line: #d9dde6;
+  --hud-line-soft: #e6e9ef;
+  --hud-line-strong: #c3c9d6;
+  --hud-text: #1d2330;
+  --hud-text-strong: #0d111a;
+  --hud-text-muted: #4b5365;
+  --hud-text-dim: #646c7e;
+  --hud-cyan: #2f5fd0;
+  --hud-teal: #0f8a57;
+  --hud-blue: #2f5fd0;
+  --hud-violet: #6f56d6;
+  --hud-amber: #9a6500;
+  --hud-rose: #c93b3b;
+  --hud-idle: #6b7280;
+  --hud-focus-color: #2f5fd0;
+  --hud-ink: #ffffff;
+  --hud-danger-text: #a82828;
+  --hud-backdrop: rgba(20, 24, 34, 0.45);
+  --hud-hover: #eef0f5;
+  --hud-selected: #e4e9f5;
+  --hud-button-surface: #f1f3f8;
+  --hud-input-line: #c3c9d6;
+  --hud-input-focus: rgba(47, 95, 208, 0.2);
+  color-scheme: light;
+}

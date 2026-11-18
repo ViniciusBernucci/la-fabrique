@@ -3,6 +3,7 @@ package workflows
 import (
 	"fmt"
 	"sort"
+	"strings"
 )
 
 // Guardas obrigatórias do fluxo padrão (LF-AJ-05). Identificadas pelo ID do nó; o editor aceita
@@ -22,6 +23,47 @@ const (
 	correctionPortOut = "true"
 )
 
+// Agentes padrão do fluxo padrão (ADR-0068): o catálogo os cria (agents.InstallDefaults) e o desenho os usa.
+const (
+	AgentPRD             = "redator-prd"
+	AgentPlanner         = "tech-lead"
+	AgentImplFront       = "implementador-frontend"
+	AgentImplBack        = "implementador-backend"
+	AgentReviewFront     = "revisor-frontend"
+	AgentReviewBack      = "revisor-backend"
+	AgentVisualDiscovery = "analista-ambiente-visual"
+)
+
+// ChecksCommands são os comandos padrão do nó de checks integrados (convenção do projeto: make).
+const ChecksCommands = "make lint\nmake test"
+
+// StandardAgents diz qual agente padrão atende cada nó-guarda de agente.
+var StandardAgents = map[string]string{
+	GuardPlanning: AgentPlanner, GuardImplFront: AgentImplFront, GuardReviewFront: AgentReviewFront,
+	GuardImplBack: AgentImplBack, GuardReviewBack: AgentReviewBack,
+}
+
+// FillStandardDefaults preenche, num grafo já salvo, só o que está vazio nos nós-guarda: o agente de cada
+// nó de agente e os comandos do nó de checks. Nunca sobrescreve o que o administrador escolheu.
+// Devolve quantos campos preencheu.
+func FillStandardDefaults(g *Graph) int {
+	n := 0
+	for i := range g.Nodes {
+		nd := &g.Nodes[i]
+		if nd.Props == nil {
+			nd.Props = map[string]any{}
+		}
+		empty := func(k string) bool { v, _ := nd.Props[k].(string); return strings.TrimSpace(v) == "" }
+		if a, ok := StandardAgents[nd.ID]; ok && nd.Type == TAgent && empty("agent") {
+			nd.Props["agent"], n = a, n+1
+		}
+		if nd.ID == GuardIntegrated && nd.Type == TChecks && empty("commands") {
+			nd.Props["commands"], n = ChecksCommands, n+1
+		}
+	}
+	return n
+}
+
 type guardSpec struct {
 	ID   string
 	Type string
@@ -36,8 +78,9 @@ var RequiredGuards = []guardSpec{
 
 // StandardGraph é o rascunho estrutural entregue a todo projeto novo: gate do PRD, planejamento,
 // implementação e review por trilha, consolidação, checks integrados, Draft PR, espera por merge
-// e o caminho de correção (entra direto no planejamento focalizado). Agentes, skills, modelos,
-// contas e ferramentas ficam vazios: o administrador escolhe cada um antes de publicar.
+// e o caminho de correção (entra direto no planejamento focalizado). Cada nó de agente já aponta para o
+// agente padrão do catálogo e os checks trazem make lint/test; modelos, contas e ferramentas ficam
+// vazios (valem os do agente) e o administrador ajusta o que quiser antes de publicar.
 func StandardGraph() Graph {
 	n := func(id, typ string, x, y float64, props map[string]any) Node {
 		if props == nil {
@@ -49,24 +92,24 @@ func StandardGraph() Graph {
 		return Edge{ID: from + "-" + fp + "-" + to, From: from, FromPort: fp, To: to, ToPort: tp}
 	}
 	g := Graph{Nodes: []Node{
-		n("inicio", TStart, 40, 220, nil),
-		n(correctionEntry, TCondition, 200, 220, map[string]any{"expression": "fabrica.correcao == true"}),
-		n(GuardPRD, TCondition, 380, 340, map[string]any{"expression": "prd.concluido == true"}),
-		n("pronto_planejar", TConverge, 560, 220, map[string]any{"mode": "any"}),
-		n(GuardPlanning, TAgent, 740, 220, map[string]any{"prompt": "Planejar a feature (ou só o escopo afetado, em correção) e propor o plano técnico."}),
-		n("ramificar", TFork, 940, 220, nil),
-		n(GuardImplFront, TAgent, 1120, 120, map[string]any{"prompt": "Implementar as subtarefas FRONTEND."}),
-		n(GuardReviewFront, TAgent, 1320, 120, map[string]any{"prompt": "Revisar visualmente a interface em navegador isolado."}),
-		n(GuardImplBack, TAgent, 1120, 320, map[string]any{"prompt": "Implementar as subtarefas BACKEND."}),
-		n(GuardReviewBack, TAgent, 1320, 320, map[string]any{"prompt": "Revisar o Backend (obrigatório em alto risco)."}),
-		n("juntar_trilhas", TConverge, 1520, 220, map[string]any{"mode": "all"}),
-		n(GuardConsolidate, TGit, 1700, 220, map[string]any{"operation": "commit", "message": "Consolidar commits da feature"}),
-		n(GuardIntegrated, TChecks, 1880, 220, map[string]any{"profile": "base"}),
-		n(GuardDraftPR, TGit, 2060, 220, map[string]any{"operation": "draft_pr"}),
-		n(GuardMergeWait, TWait, 2240, 220, map[string]any{"minutes": float64(1440)}),
-		n("fim_ok", TEnd, 2420, 220, map[string]any{"outcome": "success"}),
-		n("fim_pendente", TEnd, 380, 460, map[string]any{"outcome": "failure"}),
-		n("fim_falha", TEnd, 1520, 460, map[string]any{"outcome": "failure"}),
+		n("inicio", TStart, 40, 280, nil),
+		n(correctionEntry, TCondition, 360, 280, map[string]any{"expression": "fabrica.correcao == true"}),
+		n(GuardPRD, TCondition, 680, 480, map[string]any{"expression": "prd.concluido == true"}),
+		n("pronto_planejar", TConverge, 1000, 280, map[string]any{"mode": "any"}),
+		n(GuardPlanning, TAgent, 1320, 280, map[string]any{"prompt": "Planejar a feature (ou só o escopo afetado, em correção) e propor o plano técnico."}),
+		n("ramificar", TFork, 1640, 280, nil),
+		n(GuardImplFront, TAgent, 1960, 80, map[string]any{"prompt": "Implementar as subtarefas FRONTEND."}),
+		n(GuardReviewFront, TAgent, 2280, 80, map[string]any{"prompt": "Revisar visualmente a interface em navegador isolado."}),
+		n(GuardImplBack, TAgent, 1960, 480, map[string]any{"prompt": "Implementar as subtarefas BACKEND."}),
+		n(GuardReviewBack, TAgent, 2280, 480, map[string]any{"prompt": "Revisar o Backend (obrigatório em alto risco)."}),
+		n("juntar_trilhas", TConverge, 2600, 280, map[string]any{"mode": "all"}),
+		n(GuardConsolidate, TGit, 2920, 280, map[string]any{"operation": "commit", "message": "Consolidar commits da feature"}),
+		n(GuardIntegrated, TChecks, 3240, 280, map[string]any{"profile": "base"}),
+		n(GuardDraftPR, TGit, 3560, 280, map[string]any{"operation": "draft_pr"}),
+		n(GuardMergeWait, TWait, 3880, 280, map[string]any{"minutes": float64(1440)}),
+		n("fim_ok", TEnd, 4200, 280, map[string]any{"outcome": "success"}),
+		n("fim_pendente", TEnd, 680, 680, map[string]any{"outcome": "failure"}),
+		n("fim_falha", TEnd, 2600, 680, map[string]any{"outcome": "failure"}),
 	}}
 	g.Edges = []Edge{
 		e("inicio", PortOut, correctionEntry, PortIn),
@@ -88,6 +131,7 @@ func StandardGraph() Graph {
 		e(GuardDraftPR, PortOut, GuardMergeWait, PortIn),
 		e(GuardMergeWait, PortOut, "fim_ok", PortIn),
 	}
+	FillStandardDefaults(&g)
 	for _, id := range []string{GuardPlanning, GuardImplFront, GuardReviewFront, GuardImplBack, GuardReviewBack, GuardConsolidate, GuardIntegrated, GuardDraftPR} {
 		g.Edges = append(g.Edges, e(id, PortError, "fim_falha", PortIn))
 	}

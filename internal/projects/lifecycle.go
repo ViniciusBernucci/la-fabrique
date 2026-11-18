@@ -3,11 +3,13 @@ package projects
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 )
@@ -24,6 +26,7 @@ const (
 	ChangeUpdated       = "updated"
 	ChangeSourceChanged = "source_changed"
 	ChangeSourceChecked = "source_checked"
+	ChangeRepoChecked   = "repository_checked"
 	ChangeActivated     = "activated"
 	ChangeSuspended     = "suspended"
 	ChangeResumed       = "resumed"
@@ -112,7 +115,7 @@ func sameStr(a, b *string) bool {
 }
 
 func sameRepo(a, b Repository) bool {
-	return a.Owner == b.Owner && a.Name == b.Name && a.BaseBranch == b.BaseBranch && sameStr(a.ConnectionID, b.ConnectionID)
+	return a.Mode == b.Mode && a.Path == b.Path && a.Owner == b.Owner && a.Name == b.Name && a.BaseBranch == b.BaseBranch && sameStr(a.ConnectionID, b.ConnectionID)
 }
 
 func sameSource(a, b Source) bool {
@@ -179,6 +182,36 @@ func Suspend(ctx context.Context, db DB, adminID, id string, expectedVersion int
 // Resume reativa um projeto suspenso, revalidando a configuração.
 func Resume(ctx context.Context, db DB, adminID, id string, expectedVersion int) (Project, error) {
 	return transition(ctx, db, adminID, id, expectedVersion, []string{StatePaused}, StateActive, ChangeResumed)
+}
+
+// ErrHasHistory: o projeto já tem execuções ou registros que a política de
+// retenção protege (FK RESTRICT); nesses casos ele deve ser suspenso, não apagado.
+var ErrHasHistory = errors.New("o projeto tem histórico de execução e não pode ser apagado")
+
+// Delete apaga um projeto em rascunho ou suspenso, com seus vínculos e trilha
+// (ON DELETE CASCADE). Projeto ativo e projeto com histórico de execução são
+// recusados. A trilha de auditoria da conta (security audit) registra a exclusão.
+func Delete(ctx context.Context, db DB, id string) (Project, error) {
+	var out Project
+	err := persistence.WithTx(ctx, db, func(tx pgx.Tx) error {
+		cur, err := getForUpdate(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if cur.State == StateActive {
+			return fmt.Errorf("%w: estado atual %q", ErrInvalidState, cur.State)
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM projects WHERE id = $1`, id); err != nil {
+			var pe *pgconn.PgError
+			if errors.As(err, &pe) && pe.Code == "23503" {
+				return ErrHasHistory
+			}
+			return persistence.MapError(err)
+		}
+		out = cur
+		return nil
+	})
+	return out, err
 }
 
 // Changes devolve a trilha do projeto, da mais recente para a mais antiga.

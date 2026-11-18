@@ -452,3 +452,43 @@ func TestTesterBehaviors(t *testing.T) {
 		t.Fatalf("rede: %+v", r)
 	}
 }
+
+// ADR-0064 — revogar libera o nome para uma conexão nova; só a revogada e sem uso pode ser apagada.
+func TestRevokedConnectionFreesNameAndCanBeDeleted(t *testing.T) {
+	_, c, _ := newVaultEnv(t)
+	old := createConn(t, c, "conta-github", sentinelA)
+
+	// Nome em uso por uma ATIVA continua recusado.
+	if r := c.post("/api/connections", map[string]string{"kind": "api", "name": "conta-github", "secret": sentinelB}); r.StatusCode != 409 {
+		t.Fatalf("nome de conexão ativa deveria ser recusado: %d %s", r.StatusCode, r.Body)
+	}
+	// Ativa não pode ser apagada.
+	if r := c.delete("/api/connections/" + old.ID); r.StatusCode != 409 || r.ErrCode() != "connection_active" {
+		t.Fatalf("apagar ativa: %d %s", r.StatusCode, r.Body)
+	}
+	// Revogada, o nome volta a ficar livre.
+	c.expect(c.post("/api/connections/"+old.ID+"/revoke", nil), 200)
+	fresh := createConn(t, c, "conta-github", sentinelB)
+	if fresh.ID == old.ID {
+		t.Fatal("deveria ser uma conexão nova")
+	}
+	// Apagar a revogada a remove da lista; a nova permanece.
+	c.expect(c.delete("/api/connections/"+old.ID), 204)
+	var list struct{ Items []security.Connection }
+	c.expect(c.get("/api/connections"), 200).JSON(&list)
+	for _, it := range list.Items {
+		if it.ID == old.ID {
+			t.Fatal("conexão apagada ainda aparece")
+		}
+	}
+	if r := c.delete("/api/connections/" + old.ID); r.StatusCode != 404 {
+		t.Fatalf("apagar de novo: %d", r.StatusCode)
+	}
+	// Em uso: uma conexão revogada ainda referenciada por um agente não pode ser apagada.
+	used := connWith(t, c, "cli", "em-uso", "claude")
+	c.expect(c.post("/api/agents", agentBody("agente-usa", &used.ID)), 201)
+	c.expect(c.post("/api/connections/"+used.ID+"/revoke", nil), 200)
+	if r := c.delete("/api/connections/" + used.ID); r.StatusCode != 409 || r.ErrCode() != "connection_in_use" {
+		t.Fatalf("apagar em uso: %d %s", r.StatusCode, r.Body)
+	}
+}

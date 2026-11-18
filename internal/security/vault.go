@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 )
 
@@ -18,6 +20,8 @@ var connectionKinds = map[string]bool{"github": true, "jira": true, "clickup": t
 var (
 	ErrConnectionRevoked = errors.New("conexão revogada")
 	ErrInvalidSecret     = errors.New("segredo inválido")
+	ErrConnectionActive  = errors.New("conexão ainda ativa")
+	ErrConnectionInUse   = errors.New("conexão em uso")
 )
 
 // Connection é a visão pública de uma conexão. NUNCA contém o segredo.
@@ -43,16 +47,27 @@ type Connection struct {
 type NewConnection struct {
 	Kind, Name, Target, Scopes string
 	Secret                     Secret
+	// ID, se informado (UUID), vira o id da conexão. Usado quando algo já foi nomeado por ele antes
+	// da criação (ex.: o volume da conta de assinatura de IA, ADR-0065). Vazio: o banco gera.
+	ID string
 }
 
 // Vault guarda segredos cifrados com chave externa ao banco. Serviços acessam o
 // valor só por Resolve, que consulta o estado a cada uso: uma revogação vale
 // para o próximo uso, sem cache.
 type Vault struct {
-	db       persistence.DBTX
-	sealer   *Sealer
-	redactor *Redactor
+	db        persistence.DBTX
+	sealer    *Sealer
+	redactor  *Redactor
+	refresher Refresher
 }
+
+// Refresher renova um segredo que expira (token OAuth). Devolve changed=true
+// quando há um segredo novo, que o cofre regrava antes de entregá-lo.
+type Refresher func(ctx context.Context, c Connection, secret Secret) (Secret, bool, error)
+
+// SetRefresher instala o gancho de renovação usado por Resolve.
+func (v *Vault) SetRefresher(r Refresher) { v.refresher = r }
 
 // NewVault cria o cofre; redactor recebe todo segredo que passar por aqui.
 func NewVault(db persistence.DBTX, sealer *Sealer, redactor *Redactor) *Vault {
@@ -90,9 +105,13 @@ func (v *Vault) Create(ctx context.Context, n NewConnection) (Connection, error)
 	if err := validateSecret(n.Secret); err != nil {
 		return Connection{}, err
 	}
-	var id string
-	if err := v.db.QueryRow(ctx, `SELECT gen_random_uuid()::text`).Scan(&id); err != nil {
-		return Connection{}, persistence.MapError(err)
+	id := n.ID
+	if id == "" {
+		if err := v.db.QueryRow(ctx, `SELECT gen_random_uuid()::text`).Scan(&id); err != nil {
+			return Connection{}, persistence.MapError(err)
+		}
+	} else if !refUUID.MatchString(id) {
+		return Connection{}, fmt.Errorf("%w: id de conexão inválido", persistence.ErrInvalidInput)
 	}
 	sealed, err := v.sealer.Seal([]byte(n.Secret.Reveal()), connAAD(id))
 	if err != nil {
@@ -165,6 +184,26 @@ func (v *Vault) diagnoseNoUpdate(ctx context.Context, id string) error {
 	return persistence.ErrVersionConflict
 }
 
+// Delete remove uma conexão JÁ revogada (o segredo já foi apagado na revogação). Recusa a ativa
+// (ErrConnectionActive) e a que ainda é referenciada por projeto, agente ou MCP (ErrConnectionInUse).
+func (v *Vault) Delete(ctx context.Context, id string) (Connection, error) {
+	cur, err := v.Get(ctx, id)
+	if err != nil {
+		return Connection{}, err
+	}
+	if cur.State != "revoked" {
+		return cur, ErrConnectionActive
+	}
+	if _, err := v.db.Exec(ctx, `DELETE FROM connections WHERE id = $1 AND state = 'revoked'`, id); err != nil {
+		var pe *pgconn.PgError
+		if errors.As(err, &pe) && pe.Code == "23503" {
+			return cur, ErrConnectionInUse
+		}
+		return cur, persistence.MapError(err)
+	}
+	return cur, nil
+}
+
 // Revoke apaga o segredo e marca a conexão como revogada. Irreversível: para
 // voltar a usar o destino, crie ou rotacione outra conexão.
 func (v *Vault) Revoke(ctx context.Context, id string) (Connection, error) {
@@ -201,8 +240,36 @@ func (v *Vault) Resolve(ctx context.Context, id string) (Secret, Connection, err
 		return Secret{}, c, fmt.Errorf("decifrar conexão %s: %w", id, err)
 	}
 	v.redactor.Register(string(plain))
-	return NewSecret(string(plain)), c, nil
+	secret := NewSecret(string(plain))
+	if v.refresher != nil {
+		fresh, changed, rerr := v.refresher(ctx, c, secret)
+		if rerr != nil {
+			return Secret{}, c, rerr
+		}
+		if changed {
+			if serr := v.storeRefreshed(ctx, id, fresh); serr != nil {
+				return Secret{}, c, serr
+			}
+			secret = fresh
+		}
+	}
+	return secret, c, nil
 }
+
+// storeRefreshed regrava o segredo renovado sem mexer em `version` (a edição
+// otimista da tela não deve falhar por causa de uma renovação automática).
+func (v *Vault) storeRefreshed(ctx context.Context, id string, secret Secret) error {
+	sealed, err := v.sealer.Seal([]byte(secret.Reveal()), connAAD(id))
+	if err != nil {
+		return err
+	}
+	v.redactor.Register(secret.Reveal())
+	_, err = v.db.Exec(ctx, `UPDATE connections SET secret_ciphertext = $2, key_id = $3, rotated_at = now()
+		WHERE id = $1 AND state = 'active'`, id, sealed, v.sealer.KeyID())
+	return persistence.MapError(err)
+}
+
+var refUUID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 var refPattern = regexp.MustCompile(`^connection:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$`)
 

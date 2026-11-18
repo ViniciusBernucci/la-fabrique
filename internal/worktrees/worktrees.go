@@ -19,6 +19,13 @@ import (
 var (
 	ErrInvalid      = fmt.Errorf("%w: tentativa inválida", persistence.ErrInvalidInput)
 	ErrWriterActive = errors.New("há um processo escritor ativo nesta worktree: nada é removido")
+	ErrLimit        = errors.New("limite de tentativas paralelas atingido: aguarde uma terminar")
+)
+
+// Limites padrão de tentativas ativas (ADR-0062, fase 2).
+const (
+	DefaultPerProject = 4
+	DefaultPerHost    = 8
 )
 
 // DB é o que o gerenciador precisa do PostgreSQL.
@@ -36,6 +43,7 @@ type Spec struct {
 	BaseSHA                        string
 	Paths                          []string // caminhos que a tarefa pode alterar (prefixo de diretório ou arquivo exato)
 	Resources                      []string // recursos compartilhados reservados
+	OperationID                    string   // opcional: repetir com o mesmo ID não duplica nada
 }
 
 // Attempt é a tentativa provisionada.
@@ -59,6 +67,8 @@ type Manager struct {
 	DB   DB
 	Repo string // clone principal (nunca é alterado pela tentativa)
 	Root string // diretório das worktrees
+	// Limites de tentativas ativas (0 = padrão; negativo = sem limite).
+	MaxPerProject, MaxPerHost int
 }
 
 var safe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
@@ -121,7 +131,9 @@ func scan(r interface{ Scan(...any) error }) (Attempt, error) {
 }
 
 // Provision cria (ou recupera) a worktree da tentativa na SHA de partida. Repetir devolve a mesma
-// tentativa; se o diretório sumiu (queda), é recriado a partir da branch preservada.
+// tentativa; se o diretório sumiu (queda), é recriado a partir da branch preservada. As mudanças de
+// refs do repositório são serializadas por uma trava (um escritor por projeto) e há limite de
+// tentativas ativas por projeto e por host.
 func (m *Manager) Provision(ctx context.Context, s Spec) (Attempt, error) {
 	if err := s.validate(); err != nil {
 		return Attempt{}, err
@@ -134,6 +146,34 @@ func (m *Manager) Provision(ctx context.Context, s Spec) (Attempt, error) {
 		return Attempt{}, err
 	}
 	branch := Branch(s.FeatureID, s.Track, s.Kind, s.Attempt)
+	if _, err := git(ctx, m.Repo, nil, "", "check-ref-format", "--branch", branch); err != nil {
+		return Attempt{}, fmt.Errorf("%w: nome de branch inválido", ErrInvalid)
+	}
+	var out Attempt
+	err = m.withLock(ctx, func() error {
+		a, err := m.provision(ctx, s, full, branch)
+		out = a
+		return err
+	})
+	return out, err
+}
+
+func (m *Manager) provision(ctx context.Context, s Spec, full, branch string) (Attempt, error) {
+	if s.OperationID != "" {
+		if err := m.checkOperation(ctx, s); err != nil {
+			return Attempt{}, err
+		}
+	}
+	var exists bool
+	if err := m.DB.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM worktree_attempts WHERE feature_id::text = $1 AND track = $2 AND kind = $3 AND attempt = $4)`,
+		s.FeatureID, s.Track, s.Kind, s.Attempt).Scan(&exists); err != nil {
+		return Attempt{}, persistence.MapError(err)
+	}
+	if !exists {
+		if err := m.checkLimits(ctx, s.ProjectID); err != nil {
+			return Attempt{}, err
+		}
+	}
 	dir := filepath.Join(m.Root, short(s.ProjectID), short(s.FeatureID), fmt.Sprintf("%s-%s-%d", strings.ToLower(s.Track), s.Kind, s.Attempt))
 	paths, _ := json.Marshal(nonNil(s.Paths))
 	res, _ := json.Marshal(nonNil(s.Resources))
@@ -148,20 +188,65 @@ func (m *Manager) Provision(ctx context.Context, s Spec) (Attempt, error) {
 	if a.State != "active" {
 		return a, fmt.Errorf("%w: a tentativa já foi encerrada", ErrInvalid)
 	}
-	if _, err := os.Stat(a.Path); err == nil {
-		return a, nil
+	if _, err := os.Stat(a.Path); err != nil {
+		if err := os.MkdirAll(filepath.Dir(a.Path), 0o750); err != nil {
+			return a, err
+		}
+		// Recria: a branch já existe se houve trabalho antes da queda; senão nasce da SHA de partida.
+		if _, err := git(ctx, m.Repo, nil, "", "rev-parse", "--verify", "refs/heads/"+a.Branch); err == nil {
+			_, _ = git(ctx, m.Repo, nil, "", "worktree", "prune")
+			if _, err = git(ctx, m.Repo, nil, "", "worktree", "add", a.Path, a.Branch); err != nil {
+				return a, err
+			}
+		} else if _, err = git(ctx, m.Repo, nil, "", "worktree", "add", "--no-track", "-b", a.Branch, a.Path, a.BaseSHA); err != nil {
+			return a, err
+		}
 	}
-	if err := os.MkdirAll(filepath.Dir(a.Path), 0o750); err != nil {
-		return a, err
+	if s.OperationID != "" {
+		if _, err := m.DB.Exec(ctx, `INSERT INTO worktree_operations (operation_id, project_id, op, attempt_id) VALUES ($1,$2,'provision',$3) ON CONFLICT DO NOTHING`,
+			s.OperationID, s.ProjectID, a.ID); err != nil {
+			return a, persistence.MapError(err)
+		}
 	}
-	// Recria: a branch já existe se houve trabalho antes da queda; senão nasce da SHA de partida.
-	if _, err := git(ctx, m.Repo, nil, "", "rev-parse", "--verify", "refs/heads/"+a.Branch); err == nil {
-		_, _ = git(ctx, m.Repo, nil, "", "worktree", "prune")
-		_, err = git(ctx, m.Repo, nil, "", "worktree", "add", a.Path, a.Branch)
-		return a, err
+	return a, nil
+}
+
+// checkOperation relê o ledger: o mesmo operationId só vale para a mesma tentativa.
+func (m *Manager) checkOperation(ctx context.Context, s Spec) error {
+	var feature, track, kind string
+	var attempt int
+	err := m.DB.QueryRow(ctx, `SELECT a.feature_id::text, a.track, a.kind, a.attempt FROM worktree_operations o
+		JOIN worktree_attempts a ON a.id = o.attempt_id WHERE o.operation_id = $1 AND o.project_id::text = $2 AND o.op = 'provision'`,
+		s.OperationID, s.ProjectID).Scan(&feature, &track, &kind, &attempt)
+	if err != nil {
+		return nil // ainda não registrada
 	}
-	_, err = git(ctx, m.Repo, nil, "", "worktree", "add", "-b", a.Branch, a.Path, a.BaseSHA)
-	return a, err
+	if feature != s.FeatureID || track != s.Track || kind != s.Kind || attempt != s.Attempt {
+		return fmt.Errorf("%w: operationId já usado em outra tentativa", ErrInvalid)
+	}
+	return nil
+}
+
+func (m *Manager) checkLimits(ctx context.Context, projectID string) error {
+	var perProject, perHost int
+	if err := m.DB.QueryRow(ctx, `SELECT count(*) FILTER (WHERE project_id::text = $1), count(*) FROM worktree_attempts WHERE state = 'active'`,
+		projectID).Scan(&perProject, &perHost); err != nil {
+		return persistence.MapError(err)
+	}
+	if lim := pick(m.MaxPerProject, DefaultPerProject); lim > 0 && perProject >= lim {
+		return fmt.Errorf("%w (%d por projeto)", ErrLimit, lim)
+	}
+	if lim := pick(m.MaxPerHost, DefaultPerHost); lim > 0 && perHost >= lim {
+		return fmt.Errorf("%w (%d no servidor)", ErrLimit, lim)
+	}
+	return nil
+}
+
+func pick(v, def int) int {
+	if v == 0 {
+		return def
+	}
+	return v
 }
 
 func nonNil(s []string) []string {
@@ -186,6 +271,12 @@ func (m *Manager) SetWriter(ctx context.Context, id string, active bool) error {
 // Checkpoint grava o estado atual da worktree (versionado e não versionado) numa ref própria, sem
 // tocar no índice nem na branch da tentativa. Se nada mudou desde o último, devolve o mesmo.
 func (m *Manager) Checkpoint(ctx context.Context, id string) (Checkpoint, error) {
+	var cp Checkpoint
+	err := m.withLock(ctx, func() (err error) { cp, err = m.checkpoint(ctx, id); return })
+	return cp, err
+}
+
+func (m *Manager) checkpoint(ctx context.Context, id string) (Checkpoint, error) {
 	a, err := m.Get(ctx, id)
 	if err != nil {
 		return Checkpoint{}, err
@@ -295,6 +386,10 @@ func within(file string, allowed []string) bool {
 // diretório e uma ref de arquivo apontando para a ponta da branch (que então é apagada). Recusa se há
 // escritor ativo. Não toca em nenhuma outra tentativa.
 func (m *Manager) Release(ctx context.Context, id string) error {
+	return m.withLock(ctx, func() error { return m.release(ctx, id) })
+}
+
+func (m *Manager) release(ctx context.Context, id string) error {
 	a, err := m.Get(ctx, id)
 	if err != nil {
 		return err
@@ -306,7 +401,7 @@ func (m *Manager) Release(ctx context.Context, id string) error {
 		return ErrWriterActive
 	}
 	if _, err := os.Stat(a.Path); err == nil {
-		if _, err := m.Checkpoint(ctx, id); err != nil {
+		if _, err := m.checkpoint(ctx, id); err != nil {
 			return fmt.Errorf("preservar antes de limpar: %w", err)
 		}
 		tip, err := git(ctx, a.Path, nil, "", "rev-parse", "HEAD")

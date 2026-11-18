@@ -163,6 +163,8 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 		writeError(w, r, http.StatusUnprocessableEntity, "source_incomplete", "Faltam plataforma, conexão compatível ou lista na origem.", "Complete a etapa Origem e salve antes de verificar.")
 	case errors.Is(err, projects.ErrActiveLocked):
 		writeError(w, r, http.StatusConflict, "project_active", "O projeto está ativo: repositório e origem não podem mudar agora.", "Suspenda o projeto, altere a configuração e ative novamente.")
+	case errors.Is(err, projects.ErrHasHistory):
+		writeError(w, r, http.StatusConflict, "project_has_history", "O projeto já tem execuções registradas e não pode ser apagado.", "Suspenda o projeto para interromper o trabalho; o histórico é preservado.")
 	case errors.Is(err, projects.ErrInvalidState):
 		writeError(w, r, http.StatusConflict, "invalid_state", "O estado atual do projeto não permite esta operação.", "Recarregue o projeto e confira o estado.")
 	case errors.As(err, &locked):
@@ -181,6 +183,10 @@ func (s *Server) writeDomainError(w http.ResponseWriter, r *http.Request, err er
 		writeError(w, r, http.StatusBadRequest, "invalid_request", "Os dados enviados são inválidos.", "Corrija os dados e tente novamente.")
 	case errors.Is(err, security.ErrConnectionRevoked):
 		writeError(w, r, http.StatusConflict, "connection_revoked", "A conexão está revogada.", "Crie uma nova conexão para voltar a usar este destino.")
+	case errors.Is(err, security.ErrConnectionActive):
+		writeError(w, r, http.StatusConflict, "connection_active", "A conexão ainda está ativa.", "Revogue a conexão antes de apagá-la.")
+	case errors.Is(err, security.ErrConnectionInUse):
+		writeError(w, r, http.StatusConflict, "connection_in_use", "Esta conexão ainda é usada por um projeto, agente ou servidor MCP.", "Troque a conexão nesses itens e tente apagar de novo.")
 	case errors.Is(err, persistence.ErrNotFound):
 		writeError(w, r, http.StatusNotFound, "not_found", "Recurso não encontrado.", "Verifique o identificador.")
 	case errors.Is(err, persistence.ErrVersionConflict):

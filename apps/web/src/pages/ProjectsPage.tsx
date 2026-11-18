@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { FormError, toApiError } from "../components/AuthParts";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../components/States";
-import { api, type Project } from "../lib/api";
+import { type ApiError, api, type Project } from "../lib/api";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
 
@@ -19,6 +21,24 @@ export function StateBadge({ state }: { state: Project["state"] }) {
 export function ProjectsPage() {
   const { expire } = useSession();
   const { state, reload } = useResource((signal) => api.listProjects(signal), "projects", expire);
+  const [target, setTarget] = useState<Project | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  async function remove(project: Project) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.deleteProject(project.id);
+      setTarget(null);
+      reload();
+    } catch (e) {
+      setTarget(null);
+      setError(toApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="page">
@@ -32,6 +52,42 @@ export function ProjectsPage() {
           </Link>
         }
       />
+      <FormError error={error} />
+      {target && (
+        <div className="dialog-backdrop">
+          <div
+            className="dialog panel"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-title"
+            aria-describedby="delete-desc"
+          >
+            <h2 id="delete-title">Apagar “{target.name}”?</h2>
+            <p id="delete-desc" className="muted">
+              Atenção: esta ação é permanente e não pode ser desfeita. A configuração do projeto
+              será removida. Só rascunhos ou projetos suspensos sem execuções podem ser apagados.
+            </p>
+            <div className="actions">
+              <button
+                type="button"
+                className="secondary-action"
+                disabled={busy}
+                onClick={() => setTarget(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="danger-action"
+                disabled={busy}
+                onClick={() => remove(target)}
+              >
+                Apagar definitivamente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <section className="panel" aria-label="Lista de projetos">
         {state.status === "loading" && <LoadingState label="Carregando projetos…" />}
         {state.status === "error" && <ErrorState error={state.error} onRetry={reload} />}
@@ -44,7 +100,7 @@ export function ProjectsPage() {
         {state.status === "ready" && state.data.items.length > 0 && (
           <ul className="item-list">
             {state.data.items.map((project) => (
-              <li key={project.id}>
+              <li key={project.id} className="item-row">
                 <Link className="item-link" to={`/projects/${project.id}`}>
                   <span>
                     <strong>{project.name}</strong>
@@ -52,6 +108,33 @@ export function ProjectsPage() {
                   </span>
                   <StateBadge state={project.state} />
                 </Link>
+                {project.state !== "active" && (
+                  <button
+                    type="button"
+                    className="icon-trash"
+                    aria-label={`Apagar projeto ${project.name}`}
+                    title="Apagar projeto"
+                    disabled={busy}
+                    onClick={() => setTarget(project)}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="16"
+                      height="16"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M3 6h18" />
+                      <path d="M8 6V4h8v2" />
+                      <path d="M6 6l1 14h10l1-14" />
+                      <path d="M10 11v6M14 11v6" />
+                    </svg>
+                  </button>
+                )}
               </li>
             ))}
           </ul>

@@ -41,6 +41,10 @@ var validSteps = map[string]bool{StepBasics: true, StepRepository: true, StepSou
 
 // Repository é o repositório GitHub atendido. Vazio = ainda não preenchido.
 type Repository struct {
+	// Mode: "github" (clonar do GitHub), "local" (pasta existente) ou "new" (criado do zero).
+	Mode string `json:"mode"`
+	// Path é a pasta do repositório, relativa à raiz de workspaces. Vazio = a fábrica clona sozinha.
+	Path         string  `json:"path"`
 	Owner        string  `json:"owner"`
 	Name         string  `json:"name"`
 	BaseBranch   string  `json:"base_branch"`
@@ -98,7 +102,7 @@ type NewProject struct {
 }
 
 const columns = `id, slug, name, description, state, priority, wizard_step,
-	repo_owner, repo_name, base_branch, repo_connection_id,
+	repo_owner, repo_name, base_branch, repo_connection_id, repo_mode, repo_path,
 	COALESCE(source_kind, ''), source_connection_id, source_container,
 	eligibility_marker, eligible_statuses, priority_map, source_access,
 	version, activated_at, created_at, updated_at`
@@ -107,7 +111,7 @@ func scan(row interface{ Scan(...any) error }) (Project, error) {
 	var p Project
 	var statuses, priorities []byte
 	err := row.Scan(&p.ID, &p.Slug, &p.Name, &p.Description, &p.State, &p.Priority, &p.WizardStep,
-		&p.Repository.Owner, &p.Repository.Name, &p.Repository.BaseBranch, &p.Repository.ConnectionID,
+		&p.Repository.Owner, &p.Repository.Name, &p.Repository.BaseBranch, &p.Repository.ConnectionID, &p.Repository.Mode, &p.Repository.Path,
 		&p.Source.Kind, &p.Source.ConnectionID, &p.Source.Container,
 		&p.Source.EligibilityMarker, &statuses, &priorities, &p.Source.Access,
 		&p.Version, &p.ActivatedAt, &p.CreatedAt, &p.UpdatedAt)
@@ -120,7 +124,7 @@ func scan(row interface{ Scan(...any) error }) (Project, error) {
 	return p, nil
 }
 
-// Create cria um projeto em rascunho, sem vínculos.
+// Create cria um projeto em rascunho, sem vínculos de repositório ou origem (só as skills padrão).
 func Create(ctx context.Context, db persistence.DBTX, in NewProject) (Project, error) {
 	in.Slug = strings.TrimSpace(in.Slug)
 	in.Name = strings.TrimSpace(in.Name)
@@ -142,8 +146,13 @@ func Create(ctx context.Context, db persistence.DBTX, in NewProject) (Project, e
 		return Project{}, &FieldError{Field: "priority", Message: "A prioridade deve estar entre 0 e 4."}
 	}
 	// Criar conclui a etapa "Dados": o assistente retoma em "Repositório".
+	// O projeto já nasce com as skills padrão da fábrica associadas (ADR-0066), no mesmo comando.
 	return scan(db.QueryRow(ctx,
-		`INSERT INTO projects (slug, name, description, priority, wizard_step) VALUES ($1, $2, $3, $4, 'repository') RETURNING `+columns,
+		`WITH p AS (
+			INSERT INTO projects (slug, name, description, priority, wizard_step) VALUES ($1, $2, $3, $4, 'repository') RETURNING *
+		), r AS (
+			INSERT INTO project_resources (project_id, kind, ref) SELECT p.id, 'skill', s.id::text FROM p, skills s WHERE s.is_default
+		) SELECT `+columns+` FROM p`,
 		in.Slug, in.Name, in.Description, priority))
 }
 
@@ -236,4 +245,27 @@ func List(ctx context.Context, db persistence.DBTX, params ListParams) (Page, er
 		page.NextCursor = encodeCursor(page.Items[limit-1])
 	}
 	return page, nil
+}
+
+// PathOwner é um projeto que já usa uma pasta de repositório.
+type PathOwner struct {
+	ID, Name, Path string
+}
+
+// OtherRepoPaths lista as pastas de repositório dos demais projetos (para comparar por caminho real).
+func OtherRepoPaths(ctx context.Context, db persistence.DBTX, selfID string) ([]PathOwner, error) {
+	rows, err := db.Query(ctx, `SELECT id::text, name, repo_path FROM projects WHERE id <> $1 AND repo_path <> ''`, selfID)
+	if err != nil {
+		return nil, persistence.MapError(err)
+	}
+	defer rows.Close()
+	var out []PathOwner
+	for rows.Next() {
+		var o PathOwner
+		if err := rows.Scan(&o.ID, &o.Name, &o.Path); err != nil {
+			return nil, persistence.MapError(err)
+		}
+		out = append(out, o)
+	}
+	return out, persistence.MapError(rows.Err())
 }

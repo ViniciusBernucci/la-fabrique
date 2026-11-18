@@ -1,0 +1,17 @@
+# Clientes de IA oficiais (Claude Code e Codex) para o login das contas de assinatura (ADR-0065).
+# Versões fixadas: as mesmas contra as quais as capacidades foram verificadas (ADR-0011).
+# O login acontece aqui dentro, num volume por conta (lf-acct-<id>); a fábrica nunca lê o token.
+FROM node:24-bookworm-slim
+ARG CLAUDE_CODE_VERSION=2.1.325
+ARG CODEX_VERSION=0.164.0
+# ca-certificates: os clientes falam HTTPS com o login da Anthropic e da OpenAI. git, make e tar: o terminal do
+# agente (ADR-0069) lê o histórico, a fábrica recolhe as alterações como patch git e os projetos usam make.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git make tar \
+ && rm -rf /var/lib/apt/lists/*
+RUN npm install -g --no-audit --no-fund \
+      @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
+      @openai/codex@${CODEX_VERSION} \
+ && npm cache clean --force \
+ && useradd -m -u 10002 -s /usr/sbin/nologin lfcli
+USER 10002:10002
+ENV HOME=/tmp

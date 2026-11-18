@@ -275,3 +275,27 @@ func clearThrottle(t *testing.T, e *authEnv) {
 		t.Fatal(err)
 	}
 }
+
+// AUTH_SKIP_TOTP (só dev, ADR-0059): a senha abre a sessão sem 2º fator; senha errada não.
+func TestSkipTOTPOpensSessionWithPasswordOnly(t *testing.T) {
+	e := newAuthEnv(t, func(c *config.API) { c.SkipTOTP = true })
+	c := e.newClient()
+
+	if r := c.post("/api/auth/login", map[string]string{"username": testUsername, "password": "senha-errada-123"}); r.StatusCode != 401 {
+		t.Fatalf("senha errada: %d %s", r.StatusCode, r.Body)
+	}
+	if r := c.get("/api/session"); r.StatusCode != 401 {
+		t.Fatalf("senha errada abriu sessão: %d", r.StatusCode)
+	}
+	var out struct {
+		Status  string
+		Session struct{ Username string }
+	}
+	c.expect(c.post("/api/auth/login", map[string]string{"username": testUsername, "password": testPassword}), 200).JSON(&out)
+	if out.Status != "authenticated" || out.Session.Username != testUsername {
+		t.Fatalf("resposta: %+v", out)
+	}
+	if r := c.get("/api/session"); r.StatusCode != 200 {
+		t.Fatalf("sessão não abriu: %d", r.StatusCode)
+	}
+}

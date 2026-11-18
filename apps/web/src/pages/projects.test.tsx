@@ -72,7 +72,14 @@ function project(over: Partial<Project> = {}): Project {
     state: "draft",
     priority: 2,
     wizard_step: "repository",
-    repository: { owner: "", name: "", base_branch: "", connection_id: null },
+    repository: {
+      mode: "github",
+      path: "",
+      owner: "",
+      name: "",
+      base_branch: "",
+      connection_id: null,
+    },
     source: {
       kind: "",
       connection_id: null,
@@ -181,7 +188,9 @@ describe("cadastro de projeto", () => {
     expect(screen.getByLabelText("Identificador")).toHaveValue("meu-app");
     await userEvent.click(screen.getByRole("button", { name: "Criar rascunho e continuar" }));
 
-    expect(await screen.findByRole("heading", { name: "Repositório GitHub" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Repositório do projeto" }),
+    ).toBeInTheDocument();
     const create = calls.find((c) => c.method === "POST" && c.url === "/projects");
     expect(create?.csrf).toBe("csrf-1");
     expect(create?.body).toMatchObject({ name: "Meu app", slug: "meu-app", priority: 2 });
@@ -203,13 +212,26 @@ describe("cadastro de projeto", () => {
       "GET /session": () => json(session),
       [`GET /projects/${ID}`]: () => json(project()),
       "GET /connections": () => json(connections),
-      [`PATCH /projects/${ID}`]: (c) =>
-        json(
-          project({ version: 3, wizard_step: "source", repository: c.body?.repository as never }),
-        ),
+      [`POST /projects/${ID}/repository/prepare`]: (c) =>
+        json({
+          project: project({
+            version: 3,
+            repository: {
+              mode: "github",
+              path: "",
+              owner: String(c.body?.owner),
+              name: String(c.body?.name),
+              base_branch: String(c.body?.base_branch),
+              connection_id: GH,
+            },
+          }),
+          notes: ["Repositório clonado em meu-app."],
+        }),
+      [`GET /github/repos?connection_id=${GH}`]: () => json({ items: [] }),
+      [`PATCH /projects/${ID}`]: () => json(project({ version: 4, wizard_step: "source" })),
     });
     renderAt(`/projects/${ID}/setup`);
-    await screen.findByRole("heading", { name: "Repositório GitHub" });
+    await screen.findByRole("heading", { name: "Repositório do projeto" });
 
     const select = screen.getByRole("combobox", { name: /Conexão GitHub/ });
     const options = within(select)
@@ -223,15 +245,77 @@ describe("cadastro de projeto", () => {
     await userEvent.type(screen.getByRole("textbox", { name: "Repositório" }), "app");
     await userEvent.type(screen.getByLabelText("Branch base"), "main");
     await userEvent.selectOptions(select, GH);
-    await userEvent.click(screen.getByRole("button", { name: "Salvar e continuar" }));
+    await userEvent.click(screen.getByRole("button", { name: "Clonar e continuar" }));
 
     expect(await screen.findByRole("heading", { name: "Origem de tarefas" })).toBeInTheDocument();
-    const patch = calls.find((c) => c.method === "PATCH");
-    expect(patch?.csrf).toBe("csrf-1");
-    expect(patch?.body).toEqual({
+    expect(screen.getByText("Repositório clonado em meu-app.")).toBeInTheDocument();
+    const prep = calls.find((c) => c.method === "POST" && c.url.endsWith("/repository/prepare"));
+    expect(prep?.csrf).toBe("csrf-1");
+    expect(prep?.body).toEqual({
       expected_version: 2,
-      wizard_step: "source",
-      repository: { owner: "org-exemplo", name: "app", base_branch: "main", connection_id: GH },
+      mode: "github",
+      connection_id: GH,
+      owner: "org-exemplo",
+      name: "app",
+      base_branch: "main",
+    });
+    const patch = calls.find((c) => c.method === "PATCH");
+    expect(patch?.body).toEqual({ expected_version: 3, wizard_step: "source" });
+  });
+
+  it("modo pasta existente navega pelas pastas e envia o caminho escolhido", async () => {
+    const listing = (path: string) => ({
+      enabled: true,
+      path,
+      parent: path ? "" : null,
+      is_repo: false,
+      entries: path ? [] : [{ name: "meu-repo", path: "meu-repo", is_repo: true, empty: false }],
+    });
+    const calls = stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(project()),
+      "GET /connections": () => json(connections),
+      "GET /workspace/browse?path=": () => json(listing("")),
+      [`POST /projects/${ID}/repository/prepare`]: () =>
+        json({ project: project({ version: 3 }), notes: ["ok"] }),
+      [`PATCH /projects/${ID}`]: () => json(project({ version: 4, wizard_step: "source" })),
+    });
+    renderAt(`/projects/${ID}/setup`);
+    await screen.findByRole("heading", { name: "Repositório do projeto" });
+    await userEvent.click(screen.getByRole("radio", { name: /Pasta existente/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "Usar" }));
+    expect(screen.getByText(/Selecionada:/)).toHaveTextContent("/meu-repo");
+    await userEvent.click(screen.getByRole("button", { name: "Usar e continuar" }));
+    await screen.findByRole("heading", { name: "Origem de tarefas" });
+    const prep = calls.find((c) => c.url.endsWith("/repository/prepare"));
+    expect(prep?.body).toMatchObject({ mode: "local", path: "meu-repo" });
+  });
+
+  it("modo criar novo envia create_remote com visibilidade e exige conexão", async () => {
+    const calls = stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(project()),
+      "GET /connections": () => json(connections),
+      [`POST /projects/${ID}/repository/prepare`]: () =>
+        json({ project: project({ version: 3 }), notes: ["criado"] }),
+      [`PATCH /projects/${ID}`]: () => json(project({ version: 4, wizard_step: "source" })),
+    });
+    renderAt(`/projects/${ID}/setup`);
+    await screen.findByRole("heading", { name: "Repositório do projeto" });
+    await userEvent.click(screen.getByRole("radio", { name: /Criar novo/ }));
+    const submit = screen.getByRole("button", { name: "Criar e continuar" });
+    expect(submit).toBeEnabled();
+    await userEvent.click(screen.getByRole("checkbox", { name: /Criar também/ }));
+    expect(screen.getByRole("button", { name: "Criar e continuar" })).toBeDisabled();
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: /Conexão GitHub/ }), GH);
+    await userEvent.click(screen.getByRole("button", { name: "Criar e continuar" }));
+    await screen.findByRole("heading", { name: "Origem de tarefas" });
+    const prep = calls.find((c) => c.url.endsWith("/repository/prepare"));
+    expect(prep?.body).toMatchObject({
+      mode: "new",
+      create_remote: true,
+      private: true,
+      connection_id: GH,
     });
   });
 
@@ -243,6 +327,21 @@ describe("cadastro de projeto", () => {
     });
     renderAt(`/projects/${ID}/setup`);
     expect(await screen.findByRole("heading", { name: "Origem de tarefas" })).toBeInTheDocument();
+  });
+
+  it("cada etapa do assistente mostra o seu passo a passo", async () => {
+    stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(project({ wizard_step: "source" })),
+      "GET /connections": () => json(connections),
+    });
+    renderAt(`/projects/${ID}/setup`);
+    expect(await screen.findByText("Como preencher: Origem de tarefas")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Repositório/ }));
+    expect(await screen.findByText("Como preencher: Repositório")).toBeInTheDocument();
+    expect(screen.queryByText("Como preencher: Origem de tarefas")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Dados/ }));
+    expect(await screen.findByText("Como preencher: Dados")).toBeInTheDocument();
   });
 
   it("trocar a plataforma da origem descarta a conexão e o identificador anteriores", async () => {
@@ -287,7 +386,58 @@ describe("cadastro de projeto", () => {
     expect(screen.getByRole("button", { name: "Ativar projeto" })).toBeDisabled();
 
     await userEvent.click(screen.getByRole("button", { name: "Ir para a etapa" }));
-    expect(await screen.findByRole("heading", { name: "Repositório GitHub" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Repositório do projeto" }),
+    ).toBeInTheDocument();
+  });
+
+  it("a revisão verifica o repositório e mostra cada passo com o motivo", async () => {
+    let verified = false;
+    const calls = stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(project({ wizard_step: "review" })),
+      "GET /connections": () => json(connections),
+      [`GET /projects/${ID}/validation`]: () =>
+        json({
+          ok: false,
+          not_verified: [],
+          checks: [
+            {
+              id: "repository.verified",
+              area: "repository",
+              label: "Verificação do repositório",
+              status: verified ? "ok" : "pending",
+              action: "O repositório ainda não foi verificado.",
+            },
+          ],
+        }),
+      [`POST /projects/${ID}/repository/check`]: () => {
+        verified = true;
+        return json({
+          ok: false,
+          checked_at: "2026-11-15T10:00:00Z",
+          steps: [
+            { id: "account", label: "Conta GitHub", status: "ok", detail: "Acessa org/app." },
+            {
+              id: "push",
+              label: "Permissão de push",
+              status: "failed",
+              detail: "A conta tem acesso somente leitura.",
+            },
+          ],
+        });
+      },
+    });
+    renderAt(`/projects/${ID}/setup`);
+    await userEvent.click(await screen.findByRole("button", { name: "Verificar repositório" }));
+    const list = await screen.findByRole("list", {
+      name: "Resultado da verificação do repositório",
+    });
+    expect(within(list).getByText("A conta tem acesso somente leitura.")).toBeInTheDocument();
+    expect(within(list).getByText("Acessa org/app.")).toBeInTheDocument();
+    const call = calls.find((c) => c.url.endsWith("/repository/check"));
+    expect(call?.method).toBe("POST");
+    expect(call?.csrf).toBe("csrf-1");
   });
 
   it("ativa quando válido e vai para o detalhe", async () => {
@@ -338,6 +488,7 @@ describe("detalhe do projeto", () => {
       [`GET /projects/${ID}`]: () => json(project()),
       "GET /connections": () => json(connections),
       [`GET /projects/${ID}/validation`]: () => json(pendingReport),
+      [`GET /projects/${ID}/resources`]: () => json({ resources: [] }),
       [`GET /projects/${ID}/changes`]: () =>
         json({
           items: [{ id: 1, action: "created", detail: {}, created_at: "2026-11-12T10:00:00Z" }],
@@ -349,8 +500,134 @@ describe("detalhe do projeto", () => {
       `/projects/${ID}/setup`,
     );
     expect(await screen.findByText("Informe o dono na etapa Repositório.")).toBeInTheDocument();
-    expect(screen.getByText("Nenhum associado")).toBeInTheDocument();
+    expect(await screen.findByText("Nenhum associado")).toBeInTheDocument();
     expect(await screen.findByText("Rascunho criado")).toBeInTheDocument();
+  });
+
+  it("aprova o setup pelo hash revisado e liga a limpeza com simulação", async () => {
+    const base = project({ state: "paused", version: 4 });
+    const withPath = { ...base, repository: { ...base.repository, path: "app" } };
+    const sha = "a".repeat(64);
+    let approved = false;
+    let policy = { enabled: false, archive_idle_days: 7, remove_archived_days: 30 };
+    const calls = stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(withPath),
+      "GET /connections": () => json(connections),
+      [`GET /projects/${ID}/validation`]: () => json(okReport),
+      [`GET /projects/${ID}/changes`]: () => json({ items: [] }),
+      [`GET /projects/${ID}/overview`]: () => err(404, "not_found", "x"),
+      [`GET /projects/${ID}/setup`]: () =>
+        json({
+          ref: "main",
+          commit: "c1",
+          found: true,
+          sha256: sha,
+          content: "npm ci --offline",
+          approved,
+          approval_id: approved ? "ap1" : undefined,
+        }),
+      [`POST /projects/${ID}/setup/approve`]: () => {
+        approved = true;
+        return json({});
+      },
+      [`GET /projects/${ID}/cleanup`]: () =>
+        json({
+          policy,
+          hash: "b".repeat(64),
+          generated_at: "2026-11-15T10:00:00Z",
+          items: policy.enabled
+            ? [
+                {
+                  attempt_id: "t1",
+                  branch: "lf-tmp/x/backend-impl-1",
+                  action: "archive",
+                  reason: "parada",
+                },
+              ]
+            : [],
+        }),
+      [`PUT /projects/${ID}/cleanup/policy`]: (c) => {
+        policy = c.body as typeof policy;
+        return json(policy);
+      },
+      [`POST /projects/${ID}/cleanup/apply`]: () => json({ archived: 1, removed: 0, failed: 0 }),
+    });
+    renderAt(`/projects/${ID}`);
+    expect(await screen.findByText("npm ci --offline")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Aprovar este script" }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.url.endsWith("/setup/approve"))?.body).toEqual({
+        ref: "main",
+        sha256: sha,
+      }),
+    );
+    expect(await screen.findByText("Aprovado para este conteúdo.")).toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Limpeza ligada" }));
+    expect(await screen.findByText(/lf-tmp\/x\/backend-impl-1/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Aplicar esta simulação/ }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.url.endsWith("/cleanup/apply"))?.body).toEqual({
+        hash: "b".repeat(64),
+      }),
+    );
+    expect(await screen.findByText(/Arquivadas: 1/)).toBeInTheDocument();
+  });
+
+  it("o botão do topo abre o manual do painel, navega pelo índice e fecha com Esc", async () => {
+    stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(project({ state: "active", version: 5 })),
+      "GET /connections": () => json(connections),
+      [`GET /projects/${ID}/validation`]: () => json(okReport),
+      [`GET /projects/${ID}/changes`]: () => json({ items: [] }),
+      [`GET /projects/${ID}/overview`]: () => err(404, "not_found", "x"),
+    });
+    renderAt(`/projects/${ID}`);
+    const open = await screen.findByRole("button", { name: "Como funciona este painel" });
+    expect(
+      screen.queryByRole("dialog", { name: /Como funciona o painel/ }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(open);
+    const dialog = await screen.findByRole("dialog", { name: "Como funciona o painel do projeto" });
+    // cada parte do painel tem a sua seção
+    for (const title of [
+      /Execução: o que está rodando agora/,
+      /Entregas: Pull Requests e merge/,
+      /Memória técnica/,
+      /Setup do repositório/,
+      /Limpeza das worktrees/,
+      /Receitas/,
+    ]) {
+      expect(within(dialog).getAllByText(title).length).toBeGreaterThan(0);
+    }
+    await userEvent.click(within(dialog).getByRole("button", { name: /Receitas/ }));
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Como funciona este painel" })).toHaveFocus();
+  });
+
+  it("mostra as skills padrão já associadas ao projeto, agrupadas por tipo", async () => {
+    stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(project()),
+      "GET /connections": () => json(connections),
+      [`GET /projects/${ID}/validation`]: () => json(pendingReport),
+      [`GET /projects/${ID}/changes`]: () => json({ items: [] }),
+      [`GET /projects/${ID}/resources`]: () =>
+        json({
+          resources: [
+            { kind: "skill", ref: "s1", name: "lf-tech-lead" },
+            { kind: "skill", ref: "s2", name: "escrever-prd-e-specs" },
+          ],
+        }),
+    });
+    renderAt(`/projects/${ID}`);
+    expect(
+      await screen.findByText("Skills (2): escrever-prd-e-specs, lf-tech-lead"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Nenhum associado")).not.toBeInTheDocument();
   });
 
   it("suspende um projeto ativo enviando a versão atual", async () => {
@@ -366,6 +643,68 @@ describe("detalhe do projeto", () => {
     await waitFor(() =>
       expect(calls.find((c) => c.url.endsWith("/suspend"))?.body).toEqual({ expected_version: 5 }),
     );
+  });
+
+  it("pede confirmação antes de apagar e só então chama a API", async () => {
+    const calls = stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(project({ state: "draft", version: 2 })),
+      "GET /connections": () => json(connections),
+      [`GET /projects/${ID}/validation`]: () => json(pendingReport),
+      [`GET /projects/${ID}/changes`]: () => json({ items: [] }),
+      [`DELETE /projects/${ID}`]: () => new Response(null, { status: 204 }),
+      "GET /projects?limit=100": () => json({ items: [], next_cursor: null }),
+    });
+    renderAt(`/projects/${ID}`);
+    await userEvent.click(await screen.findByRole("button", { name: "Apagar projeto" }));
+    const alert = await screen.findByRole("alertdialog");
+    expect(within(alert).getByText(/permanente e não pode ser desfeita/)).toBeInTheDocument();
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+
+    await userEvent.click(within(alert).getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+
+    await userEvent.click(screen.getByRole("button", { name: "Apagar projeto" }));
+    await userEvent.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", {
+        name: "Apagar definitivamente",
+      }),
+    );
+    await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
+    expect(await screen.findByText("Nenhum projeto cadastrado")).toBeInTheDocument();
+  });
+
+  it("apaga direto da lista, com confirmação, e recarrega", async () => {
+    let apagado = false;
+    const calls = stub({
+      "GET /session": () => json(session),
+      "GET /projects?limit=100": () =>
+        json({ items: apagado ? [] : [project({ state: "draft" })], next_cursor: null }),
+      [`DELETE /projects/${ID}`]: () => {
+        apagado = true;
+        return new Response(null, { status: 204 });
+      },
+    });
+    renderAt("/projects");
+    await userEvent.click(await screen.findByRole("button", { name: /^Apagar projeto / }));
+    const alert = await screen.findByRole("alertdialog");
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+    await userEvent.click(within(alert).getByRole("button", { name: "Apagar definitivamente" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
+    expect(await screen.findByText("Nenhum projeto cadastrado")).toBeInTheDocument();
+  });
+
+  it("não oferece apagar projeto ativo", async () => {
+    stub({
+      "GET /session": () => json(session),
+      [`GET /projects/${ID}`]: () => json(project({ state: "active", version: 5 })),
+      "GET /connections": () => json(connections),
+      [`GET /projects/${ID}/changes`]: () => json({ items: [] }),
+    });
+    renderAt(`/projects/${ID}`);
+    await screen.findByRole("button", { name: "Suspender" });
+    expect(screen.queryByRole("button", { name: "Apagar projeto" })).not.toBeInTheDocument();
   });
 });
 

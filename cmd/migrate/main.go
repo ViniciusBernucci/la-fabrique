@@ -36,6 +36,9 @@ func run(args []string) int {
 	if args[0] == "seed-dev" {
 		return seedDev(ctx, cfg, log)
 	}
+	if args[0] == "connect-github" {
+		return connectGitHub(ctx, log)
+	}
 	if args[0] == "create-admin" {
 		return createAdmin(ctx, cfg, log)
 	}

@@ -234,7 +234,11 @@ const baseConn: Connection = {
 };
 
 describe("conexões (cofre)", () => {
-  const base = { "GET /session": () => json(session), "GET /readyz": ready };
+  const base = {
+    "GET /session": () => json(session),
+    "GET /readyz": ready,
+    "GET /oauth/providers": () => json({ items: [] }),
+  };
 
   it("lista sem segredo; criar envia o valor uma vez, limpa o campo e usa o CSRF", async () => {
     let items: Connection[] = [];
@@ -250,6 +254,7 @@ describe("conexões (cofre)", () => {
     renderAt("/connections");
     expect(await screen.findByText("Nenhuma conexão cadastrada")).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Nome"), "GitHub principal");
+    await userEvent.selectOptions(screen.getByLabelText("Tipo"), "api");
     await userEvent.type(screen.getByLabelText("Segredo"), "ghp_valor-super-secreto");
     await userEvent.click(screen.getByRole("button", { name: "Guardar no cofre" }));
     expect(await screen.findByText("GitHub principal")).toBeInTheDocument();
@@ -261,58 +266,174 @@ describe("conexões (cofre)", () => {
     expect(screen.getByText(`connection:${baseConn.id}`)).toBeInTheDocument();
   });
 
-  it("ação sensível sem reautenticação pede senha + código e repete a ação", async () => {
-    let attempts = 0;
-    let reauthed = false;
+  it("revogar a conexão não pede reautenticação", async () => {
     let conn = baseConn;
     stub({
       ...base,
       "GET /connections": () => json({ items: [conn] }),
-      "POST /auth/reauth": (c) => {
-        expect(c.body).toEqual({ password: "minha-senha-123456", code: "654321" });
-        reauthed = true;
-        return json(session);
-      },
       [`POST /connections/${baseConn.id}/revoke`]: () => {
-        attempts++;
-        if (reauthed) conn = { ...baseConn, state: "revoked", revoked_at: "2026-11-12T10:00:00Z" };
-        return reauthed
-          ? json(conn)
-          : err(403, "reauth_required", "Esta ação exige confirmar sua identidade.");
+        conn = { ...baseConn, state: "revoked", revoked_at: "2026-11-12T10:00:00Z" };
+        return json(conn);
       },
     });
     renderAt("/connections");
     await userEvent.click(await screen.findByRole("button", { name: "Revogar" }));
     await userEvent.click(screen.getByRole("button", { name: "Confirmar revogação" }));
-
-    const dialog = await screen.findByRole("dialog", { name: "Confirme sua identidade" });
-    await userEvent.type(within(dialog).getByLabelText("Senha"), "minha-senha-123456");
-    await userEvent.type(within(dialog).getByLabelText(/Código do autenticador/), "654321");
-    await userEvent.click(within(dialog).getByRole("button", { name: "Confirmar" }));
-
     expect(await screen.findByText("Revogada")).toBeInTheDocument();
-    expect(attempts).toBe(2);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("cancelar a reautenticação mantém a conexão e mostra o erro", async () => {
-    stub({
+  it("conexão revogada pode ser apagada, com confirmação", async () => {
+    let items: Connection[] = [
+      { ...baseConn, state: "revoked", revoked_at: "2026-11-12T10:00:00Z" },
+    ];
+    const calls = stub({
       ...base,
-      "GET /connections": () => json({ items: [baseConn] }),
-      [`POST /connections/${baseConn.id}/revoke`]: () =>
-        err(403, "reauth_required", "Esta ação exige confirmar sua identidade."),
+      "GET /connections": () => json({ items }),
+      [`DELETE /connections/${baseConn.id}`]: () => {
+        items = [];
+        return new Response(null, { status: 204 });
+      },
     });
     renderAt("/connections");
-    await userEvent.click(await screen.findByRole("button", { name: "Revogar" }));
-    await userEvent.click(screen.getByRole("button", { name: "Confirmar revogação" }));
-    await userEvent.click(
-      within(await screen.findByRole("dialog")).getByRole("button", { name: "Cancelar" }),
+    await userEvent.click(await screen.findByRole("button", { name: "Apagar" }));
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar exclusão" }));
+    expect(await screen.findByText("Nenhuma conexão cadastrada")).toBeInTheDocument();
+  });
+
+  describe("assinaturas de IA (login oficial)", () => {
+    const LID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const view = (o: Record<string, unknown>) => ({
+      id: LID,
+      provider: "codex",
+      name: "Codex",
+      state: "pending",
+      needs_code: false,
+      expires_in: 900,
+      ...o,
+    });
+
+    it("Codex mostra o link e o código para autorizar, e cancelar limpa o desafio", async () => {
+      stub({
+        ...base,
+        "GET /connections": () => json({ items: [] }),
+        "POST /cli-logins": (c) => {
+          expect(c.csrf).toBe("csrf-1");
+          expect(c.body).toEqual({ provider: "codex", name: "Codex" });
+          return json(
+            view({
+              state: "awaiting_user",
+              verification_uri: "https://auth.openai.com/codex/device",
+              user_code: "ABCD-EFGHI",
+            }),
+            201,
+          );
+        },
+        [`POST /cli-logins/${LID}/cancel`]: () =>
+          json(view({ state: "cancelled", error: "Cancelado." })),
+      });
+      renderAt("/connections");
+      await userEvent.click(await screen.findByRole("button", { name: "Conectar com Codex" }));
+      expect(await screen.findByText("ABCD-EFGHI")).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: /auth\.openai\.com\/codex\/device/ }),
+      ).toHaveAttribute("href", "https://auth.openai.com/codex/device");
+      // só um login por vez: os botões ficam desabilitados enquanto há um aberto
+      expect(screen.getByRole("button", { name: "Conectar com Claude" })).toBeDisabled();
+      await userEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+      expect(await screen.findByText("Cancelado.")).toBeInTheDocument();
+      expect(screen.queryByText("ABCD-EFGHI")).not.toBeInTheDocument();
+    });
+
+    it("Claude pede para colar o código mostrado no site e o apaga da tela ao enviar", async () => {
+      stub({
+        ...base,
+        "GET /connections": () => json({ items: [] }),
+        "POST /cli-logins": () =>
+          json(
+            view({
+              provider: "claude",
+              name: "Claude",
+              state: "awaiting_user",
+              needs_code: true,
+              verification_uri: "https://claude.com/cai/oauth/authorize?code=true",
+            }),
+            201,
+          ),
+        [`POST /cli-logins/${LID}/code`]: (c) => {
+          expect(c.body).toEqual({ code: "codigo-colado-123" });
+          return json(view({ provider: "claude", state: "verifying", needs_code: true }));
+        },
+      });
+      renderAt("/connections");
+      await userEvent.click(await screen.findByRole("button", { name: "Conectar com Claude" }));
+      expect(await screen.findByRole("link", { name: "Abrir o login do Claude" })).toHaveAttribute(
+        "href",
+        "https://claude.com/cai/oauth/authorize?code=true",
+      );
+      const input = screen.getByLabelText("Código do Claude");
+      await userEvent.type(input, "codigo-colado-123");
+      await userEvent.click(screen.getByRole("button", { name: "Enviar código" }));
+      expect(await screen.findByText("Confirmando o login…")).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain("codigo-colado-123");
+    });
+
+    it("acompanha o andamento e, ao concluir, recarrega as conexões", async () => {
+      let reloads = 0;
+      const done = {
+        ...baseConn,
+        id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        kind: "cli" as const,
+        name: "Codex",
+        target: "codex",
+      };
+      stub({
+        ...base,
+        "GET /connections": () => {
+          reloads++;
+          return json({ items: reloads > 1 ? [done] : [] });
+        },
+        "POST /cli-logins": () => json(view({ state: "preparing" }), 201),
+        [`GET /cli-logins/${LID}`]: () => json(view({ state: "done", connection: done })),
+      });
+      renderAt("/connections");
+      await userEvent.click(await screen.findByRole("button", { name: "Conectar com Codex" }));
+      expect(await screen.findByText(/Preparando o ambiente de login/)).toBeInTheDocument();
+      expect(
+        await screen.findByText(/Conta conectada\. O login ficou só no volume/, undefined, {
+          timeout: 5000,
+        }),
+      ).toBeInTheDocument();
+      await waitFor(() => expect(reloads).toBeGreaterThan(1));
+      expect(await screen.findByText("Conectado")).toBeInTheDocument();
+    });
+
+    it("mostra o motivo quando o login falha", async () => {
+      stub({
+        ...base,
+        "GET /connections": () => json({ items: [] }),
+        "POST /cli-logins": () =>
+          err(409, "login_in_progress", "Já existe uma conexão deste provedor em andamento."),
+      });
+      renderAt("/connections");
+      await userEvent.click(await screen.findByRole("button", { name: "Conectar com Codex" }));
+      expect(await screen.findByText(/Já existe uma conexão deste provedor/)).toBeInTheDocument();
+    });
+  });
+
+  it("mostra o passo a passo do Jira só quando o tipo escolhido é Jira", async () => {
+    stub({ ...base, "GET /connections": () => json({ items: [] }) });
+    renderAt("/connections");
+    expect(await screen.findByText("Como conectar o Jira (passo a passo)")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /api-tokens/ })).toHaveAttribute(
+      "href",
+      "https://id.atlassian.com/manage-profile/security/api-tokens",
     );
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(
-      screen.getByText("Esta ação exige confirmar sua identidade.", { exact: false }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Ativa")).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("Tipo"), "api");
+    expect(screen.queryByText("Como conectar o Jira (passo a passo)")).not.toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("Tipo"), "jira");
+    expect(screen.getByText("Como conectar o Jira (passo a passo)")).toBeInTheDocument();
   });
 
   it("testar mostra o resultado; rotacionar envia a versão esperada", async () => {
@@ -453,5 +574,107 @@ describe("segurança da conta", () => {
     await userEvent.click(header as HTMLElement);
     expect(await screen.findByRole("heading", { name: "Entrar" })).toBeInTheDocument();
     expect(calls.some((c) => c.url === "/auth/logout" && c.csrf === "csrf-1")).toBe(true);
+  });
+});
+
+describe("conexão por OAuth", () => {
+  const base = {
+    "GET /session": () => json(session),
+    "GET /readyz": ready,
+    "GET /connections": () => json({ items: [] }),
+  };
+
+  it("GitHub mostra o código do dispositivo e conclui quando autorizado", async () => {
+    let polls = 0;
+    const calls = stub({
+      ...base,
+      "GET /oauth/providers": () =>
+        json({
+          items: [
+            { kind: "github", flow: "device", available: true },
+            {
+              kind: "jira",
+              flow: "redirect",
+              available: false,
+              hint: "Defina JIRA_OAUTH_CLIENT_ID",
+            },
+          ],
+        }),
+      "POST /oauth/github/start": () =>
+        json({
+          flow_id: "f1",
+          flow: "device",
+          user_code: "ABCD-1234",
+          verification_uri: "https://github.com/login/device",
+          interval: 1,
+          expires_in: 900,
+        }),
+      "GET /oauth/flows/f1": () => {
+        polls += 1;
+        return json(polls < 1 ? { status: "pending" } : { status: "done", connection: baseConn });
+      },
+    });
+    renderAt("/connections");
+    await userEvent.click(await screen.findByRole("button", { name: "Conectar com GitHub" }));
+    expect(await screen.findByText("ABCD-1234")).toBeInTheDocument();
+    expect(calls.find((c) => c.url === "/oauth/github/start")?.body).toEqual({ name: "GitHub" });
+    expect(
+      await screen.findByText(/Conta conectada/, undefined, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    // Provedor sem app OAuth configurado não aparece (Jira usa token de API).
+    expect(screen.queryByRole("button", { name: "Conectar com Jira" })).not.toBeInTheDocument();
+  });
+
+  it("não oferece colar token de GitHub", async () => {
+    stub({ ...base, "GET /oauth/providers": () => json({ items: [] }) });
+    renderAt("/connections");
+    const tipo = await screen.findByLabelText("Tipo");
+    const options = within(tipo)
+      .getAllByRole("option")
+      .map((o) => o.textContent);
+    expect(options).toEqual(["Jira", "ClickUp", "CLI", "API", "MCP"]);
+  });
+
+  it("Jira pede site, e-mail e token e envia email:token ao cofre", async () => {
+    const calls = stub({
+      ...base,
+      "GET /oauth/providers": () => json({ items: [] }),
+      "POST /connections": () => json({ ...baseConn, kind: "jira" }, 201),
+    });
+    renderAt("/connections");
+    await userEvent.type(await screen.findByLabelText("Nome"), "Jira da empresa");
+    await userEvent.type(screen.getByLabelText("Destino"), "https://acme.atlassian.net");
+    await userEvent.type(screen.getByLabelText("E-mail da Atlassian"), "eu@acme.com");
+    await userEvent.type(screen.getByLabelText("Segredo"), "tok123");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar no cofre" }));
+    await waitFor(() =>
+      expect(
+        calls.find((c) => c.method === "POST" && c.url === "/connections")?.body,
+      ).toMatchObject({
+        kind: "jira",
+        target: "https://acme.atlassian.net",
+        secret: "eu@acme.com:tok123",
+      }),
+    );
+  });
+
+  it("GitHub: sem conta mostra o passo a passo; com conta avisa escopos faltando e reverifica", async () => {
+    let items: Connection[] = [];
+    const calls = stub({
+      ...base,
+      "GET /connections": () => json({ items }),
+      "GET /oauth/providers": () => json({ items: [] }),
+      [`POST /connections/${baseConn.id}/test`]: () => json(baseConn),
+    });
+    renderAt("/connections");
+    expect(await screen.findByText("Não conectado")).toBeInTheDocument();
+    expect(screen.getByText(/make connect-github/)).toBeInTheDocument();
+
+    items = [{ ...baseConn, target: "octocat", scopes: "repo" }];
+    await userEvent.click(screen.getByRole("button", { name: "Verificar de novo" }));
+    expect(await screen.findByText("Conectado")).toBeInTheDocument();
+    expect(screen.getByText(/Faltam escopos: read:org, workflow/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Verificar de novo" }));
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith("/test"))).toBe(true));
   });
 });

@@ -26,10 +26,27 @@ const (
 	// sem alcançar outros sandboxes nem a rede do stack). Serve a serviços
 	// auxiliares do mesmo sandbox.
 	NetIsolated NetworkMode = "isolated"
+	// NetEgress: rede padrão do Docker, COM saída para a internet. Só para o terminal do agente de IA, que
+	// precisa falar com a Anthropic ou a OpenAI (ADR-0069). Não restringe o destino: um filtro de saída por
+	// domínio ainda não existe. Scripts e checks continuam em NetNone.
+	NetEgress NetworkMode = "egress"
+	// NetProxied: rede interna própria do sandbox (sem rota para a internet) com o proxy de saída da fábrica
+	// (Docker.EgressProxy) ligado a ela: o único caminho para fora é o proxy, que só deixa passar a lista de
+	// destinos permitidos. É o modo do terminal do agente quando o filtro de saída está ligado.
+	NetProxied NetworkMode = "proxied"
+)
+
+// EgressAlias é o nome do proxy de saída dentro da rede de cada sandbox; EgressPort, a porta dele.
+const (
+	EgressAlias = "egress"
+	EgressPort  = "3128"
 )
 
 // Profile descreve a stack e as quotas de um sandbox.
 type Profile struct {
+	// UID é o usuário do sandbox (padrão sandboxUID). O terminal do agente usa o das imagens de CLI (10002), dono
+	// do volume da conta criado no login.
+	UID         string
 	Name        string
 	Image       string
 	CPUs        float64
@@ -92,6 +109,8 @@ type Spec struct {
 // Docker é o supervisor de sandboxes sobre o CLI do Docker.
 type Docker struct {
 	Bin string // padrão "docker"
+	// EgressProxy é o nome do contêiner do proxy de saída (necessário para NetProxied).
+	EgressProxy string
 }
 
 func (d *Docker) bin() string {
@@ -123,6 +142,7 @@ type Sandbox struct {
 	Network   string // vazio quando NetNone
 	Profile   Profile
 	d         *Docker
+	proxy     string // contêiner do proxy de saída ligado à rede deste sandbox (NetProxied)
 
 	qmu        sync.Mutex
 	quarantine string // motivo; vazio = utilizável
@@ -170,7 +190,7 @@ func (d *Docker) Provision(ctx context.Context, spec Spec) (*Sandbox, error) {
 		p.Image == "" || p.CPUs <= 0 || p.MemoryMB < 16 || p.PidsLimit < 8 || p.WorkspaceMB < 8 || p.TmpMB < 1 {
 		return nil, ErrInvalidSpec
 	}
-	if p.Network != NetNone && p.Network != NetIsolated {
+	if p.Network != NetNone && p.Network != NetIsolated && p.Network != NetEgress && p.Network != NetProxied {
 		return nil, ErrInvalidSpec
 	}
 	for _, m := range spec.Mounts {
@@ -189,23 +209,36 @@ func (d *Docker) Provision(ctx context.Context, spec Spec) (*Sandbox, error) {
 	// Workspace: volume exclusivo, em tmpfs com teto de tamanho e dono sem privilégios.
 	volArgs := append([]string{"volume", "create", "--driver", "local",
 		"--opt", "type=tmpfs", "--opt", "device=tmpfs",
-		"--opt", fmt.Sprintf("o=size=%dm,uid=%s,gid=%s,mode=0700", p.WorkspaceMB, sandboxUID, sandboxUID)}, labels...)
+		"--opt", fmt.Sprintf("o=size=%dm,uid=%s,gid=%s,mode=0700", p.WorkspaceMB, p.uid(), p.uid())}, labels...)
 	volArgs = append(volArgs, s.Volume)
 	if _, e, err := d.run(ctx, nil, volArgs...); err != nil {
 		return fail(fmt.Errorf("criar workspace: %s", strings.TrimSpace(e)))
 	}
 
 	network := "none"
-	if p.Network == NetIsolated {
+	if p.Network == NetEgress {
+		network = "bridge"
+	}
+	if p.Network == NetProxied && d.EgressProxy == "" {
+		return fail(errors.New("rede com filtro de saída pedida, mas o proxy de saída não está configurado"))
+	}
+	if p.Network == NetIsolated || p.Network == NetProxied {
 		s.Network = "lf-net-" + id
 		if _, e, err := d.run(ctx, nil, append([]string{"network", "create", "--internal", "--driver", "bridge"}, append(labels, s.Network)...)...); err != nil {
 			return fail(fmt.Errorf("criar rede: %s", strings.TrimSpace(e)))
 		}
 		network = s.Network
+		if p.Network == NetProxied {
+			// liga o proxy de saída à rede interna do sandbox: é a única rota para fora
+			if _, e, err := d.run(ctx, nil, "network", "connect", "--alias", EgressAlias, s.Network, d.EgressProxy); err != nil {
+				return fail(fmt.Errorf("ligar o proxy de saída: %s", strings.TrimSpace(e)))
+			}
+			s.proxy = d.EgressProxy
+		}
 	}
 
 	args := []string{"create", "--name", s.Container,
-		"--user", sandboxUID + ":" + sandboxUID,
+		"--user", p.uid() + ":" + p.uid(),
 		"--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
 		"--init", "--pids-limit", strconv.Itoa(p.PidsLimit),
 		"--memory", fmt.Sprintf("%dm", p.MemoryMB), "--memory-swap", fmt.Sprintf("%dm", p.MemoryMB),
@@ -283,7 +316,7 @@ func (s *Sandbox) Exec(ctx context.Context, es ExecSpec) (ExecResult, error) {
 		ctx, cancel = context.WithTimeout(ctx, es.Timeout)
 		defer cancel()
 	}
-	args := []string{"exec", "-i", "--user", sandboxUID + ":" + sandboxUID}
+	args := []string{"exec", "-i", "--user", s.uid() + ":" + s.uid()}
 	if es.Dir != "" {
 		args = append(args, "--workdir", es.Dir)
 	}
@@ -336,6 +369,10 @@ func (s *Sandbox) Destroy(ctx context.Context) error {
 		if _, e, err := s.d.run(ctx, nil, a...); err != nil && !strings.Contains(e, "No such") {
 			errs = append(errs, strings.TrimSpace(e))
 		}
+	}
+	if s.proxy != "" && s.Network != "" {
+		// o proxy é compartilhado: sai da rede antes de ela ser removida
+		_, _, _ = s.d.run(ctx, nil, "network", "disconnect", "-f", s.Network, s.proxy)
 	}
 	if s.Network != "" {
 		if _, e, err := s.d.run(ctx, nil, "network", "rm", s.Network); err != nil && !strings.Contains(e, "not found") && !strings.Contains(e, "No such") {
@@ -418,3 +455,12 @@ func (d *Docker) Attach(container string) *Sandbox {
 	id := strings.TrimPrefix(container, "lf-sbx-")
 	return &Sandbox{ID: id, Container: container, Volume: "lf-ws-" + id, d: d}
 }
+
+func (p Profile) uid() string {
+	if p.UID != "" {
+		return p.UID
+	}
+	return sandboxUID
+}
+
+func (s *Sandbox) uid() string { return s.Profile.uid() }

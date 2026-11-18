@@ -141,3 +141,29 @@ func TestWorkerIssueSyncIsOptInAndNeedsTheVault(t *testing.T) {
 		t.Fatal("hora inválida")
 	}
 }
+
+func TestSkipTOTPOnlyInDevelopment(t *testing.T) {
+	base := map[string]string{"DATABASE_URL": goodDB, "VAULT_KEY": goodKey}
+	with := func(extra map[string]string) map[string]string {
+		m := map[string]string{}
+		for k, v := range base {
+			m[k] = v
+		}
+		for k, v := range extra {
+			m[k] = v
+		}
+		return m
+	}
+	if cfg, err := LoadAPI(env(with(nil))); err != nil || cfg.SkipTOTP {
+		t.Fatalf("padrão deve ser desligado: %+v %v", cfg, err)
+	}
+	if cfg, err := LoadAPI(env(with(map[string]string{"AUTH_SKIP_TOTP": "true"}))); err != nil || !cfg.SkipTOTP {
+		t.Fatalf("em development deve ligar: %+v %v", cfg, err)
+	}
+	for _, e := range []string{"production", "test"} {
+		extra := map[string]string{"AUTH_SKIP_TOTP": "true", "APP_ENV": e, "SESSION_COOKIE_SECURE": "true"}
+		if _, err := LoadAPI(env(with(extra))); err == nil || !strings.Contains(err.Error(), "AUTH_SKIP_TOTP") {
+			t.Fatalf("APP_ENV=%s deve recusar AUTH_SKIP_TOTP: %v", e, err)
+		}
+	}
+}

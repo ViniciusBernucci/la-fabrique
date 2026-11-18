@@ -124,3 +124,17 @@ func (s *Server) revokeConnection(w http.ResponseWriter, r *http.Request) {
 	s.auditConnection(r, "connection_revoked", c)
 	writeJSON(w, http.StatusOK, c)
 }
+
+func (s *Server) deleteConnection(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.connectionID(w, r)
+	if !ok {
+		return
+	}
+	c, err := s.vault.Delete(r.Context(), id)
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	s.auditConnection(r, "connection_deleted", c)
+	w.WriteHeader(http.StatusNoContent)
+}

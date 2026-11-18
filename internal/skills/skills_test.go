@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -209,6 +210,39 @@ func TestArchiveStripsSingleRootAndReadsBothFormats(t *testing.T) {
 		if err != nil || len(files) != 2 || files[0].Path != "SKILL.md" || files[1].Path != "docs/guia.md" {
 			t.Fatalf("%s: %+v %v", format, files, err)
 		}
+	}
+}
+
+// Zip feito pelo "Comprimir" do Finder: além da pasta da skill, traz __MACOSX/ com arquivos ._* e,
+// às vezes, .DS_Store. Isso não pode esconder o SKILL.md nem entrar no catálogo.
+func TestArchiveIgnoresMacOSMetadata(t *testing.T) {
+	es := []entry{
+		{name: "__MACOSX/._lf-tech-lead", body: "x"},
+		{name: "lf-tech-lead/SKILL.md", body: aiMD}, {name: "__MACOSX/lf-tech-lead/._SKILL.md", body: "x"},
+		{name: "lf-tech-lead/references/plano.md", body: "plano"}, {name: "__MACOSX/lf-tech-lead/references/._plano.md", body: "x"},
+		{name: "lf-tech-lead/.DS_Store", body: "x"}, {name: "lf-tech-lead/references/._avulso", body: "x"},
+		{name: "lf-tech-lead/references/macosx.md", body: "nome parecido, é conteúdo"},
+	}
+	for format, raw := range map[string][]byte{"tar.gz": targz(t, es...), "zip": zipOf(t, es...)} {
+		files, err := ReadArchive(bytes.NewReader(raw), format)
+		if err != nil {
+			t.Fatalf("%s: %v", format, err)
+		}
+		var got []string
+		for _, f := range files {
+			got = append(got, f.Path)
+		}
+		sort.Strings(got)
+		if strings.Join(got, ",") != "SKILL.md,references/macosx.md,references/plano.md" {
+			t.Fatalf("%s: só a skill deve ficar, sem a pasta raiz: %v", format, got)
+		}
+		if _, err := Ingest(files, pol()); err != nil {
+			t.Fatalf("%s: a skill deveria ser aceita: %v", format, err)
+		}
+	}
+	// pacote que só tem lixo continua sem manifesto
+	if files, err := ReadArchive(bytes.NewReader(zipOf(t, entry{name: "__MACOSX/._x", body: "x"})), "zip"); err != nil || len(files) != 0 {
+		t.Fatalf("só lixo: %v %v", files, err)
 	}
 }
 

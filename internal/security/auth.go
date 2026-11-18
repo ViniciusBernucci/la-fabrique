@@ -48,6 +48,9 @@ type AuthConfig struct {
 	IPMaxFailures      int
 	FailureWindow      time.Duration
 	LockDuration       time.Duration
+	// SkipTOTP abre a sessão logo após a senha, sem 2º fator. Só para desenvolvimento
+	// local; a configuração recusa ligar fora de APP_ENV=development (ADR-0059).
+	SkipTOTP bool
 }
 
 func (c AuthConfig) withDefaults() AuthConfig {
@@ -272,30 +275,38 @@ const (
 	StageEnroll = "totp_enrollment_required"
 )
 
-// StartLogin valida a senha e abre um desafio de curta duração. NÃO abre sessão:
-// a sessão só existe depois do segundo fator.
-func (a *Auth) StartLogin(ctx context.Context, username, password string, m Meta) (challengeToken, stage string, err error) {
+// checkPassword valida bloqueios e senha; registra falhas. Não abre sessão nem desafio.
+func (a *Auth) checkPassword(ctx context.Context, username, password string, m Meta) (id string, confirmed *time.Time, normalized string, err error) {
 	username = normalizeUsername(username)
 	if err := a.checkLock(ctx, acctKey(username), ipKey(m.IP)); err != nil {
 		a.Audit(ctx, "", "login_blocked", m, nil)
-		return "", "", err
+		return "", nil, "", err
 	}
-	var id, hash string
-	var confirmed *time.Time
+	var hash string
 	qerr := a.db.QueryRow(ctx, `SELECT id, password_hash, totp_confirmed_at FROM admins WHERE username = $1`, username).Scan(&id, &hash, &confirmed)
 	switch {
 	case errors.Is(qerr, pgx.ErrNoRows):
 		burnPasswordTime(password)
 		a.failBoth(ctx, username, m)
 		a.Audit(ctx, "", "login_failed", m, map[string]any{"reason": "credenciais"})
-		return "", "", ErrInvalidCredentials
+		return "", nil, "", ErrInvalidCredentials
 	case qerr != nil:
-		return "", "", persistence.MapError(qerr)
+		return "", nil, "", persistence.MapError(qerr)
 	}
 	if len(password) > maxPasswordBytes || !VerifyPassword(hash, password) {
 		a.failBoth(ctx, username, m)
 		a.Audit(ctx, id, "login_failed", m, map[string]any{"reason": "credenciais"})
-		return "", "", ErrInvalidCredentials
+		return "", nil, "", ErrInvalidCredentials
+	}
+	return id, confirmed, username, nil
+}
+
+// StartLogin valida a senha e abre um desafio de curta duração. NÃO abre sessão:
+// a sessão só existe depois do segundo fator.
+func (a *Auth) StartLogin(ctx context.Context, username, password string, m Meta) (challengeToken, stage string, err error) {
+	id, confirmed, _, err := a.checkPassword(ctx, username, password, m)
+	if err != nil {
+		return "", "", err
 	}
 	token, err := NewToken()
 	if err != nil {
@@ -312,6 +323,28 @@ func (a *Auth) StartLogin(ctx context.Context, username, password string, m Meta
 		return token, StageEnroll, nil
 	}
 	return token, StageTOTP, nil
+}
+
+// LoginPasswordOnly abre a sessão só com a senha, sem 2º fator. Existe apenas para
+// desenvolvimento local (AUTH_SKIP_TOTP); a configuração da API recusa ligar a flag
+// fora de APP_ENV=development (ADR-0059). Devolve ErrTOTPState se a flag estiver desligada.
+func (a *Auth) LoginPasswordOnly(ctx context.Context, username, password string, m Meta) (string, Session, error) {
+	if !a.cfg.SkipTOTP {
+		return "", Session{}, ErrTOTPState
+	}
+	id, _, username, err := a.checkPassword(ctx, username, password, m)
+	if err != nil {
+		return "", Session{}, err
+	}
+	token, sess, err := createSession(ctx, a.db, id, a.cfg.SessionTTL, m, MethodTOTP)
+	if err != nil {
+		return "", Session{}, err
+	}
+	sess.Username = username
+	a.markFreshReauth(&sess)
+	a.resetAccount(ctx, username)
+	a.Audit(ctx, id, "login_success", m, map[string]any{"method": "senha_sem_2fa_dev"})
+	return token, sess, nil
 }
 
 type challenge struct {

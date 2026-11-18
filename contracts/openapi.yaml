@@ -209,7 +209,7 @@ paths:
         "401": {$ref: "#/components/responses/Error"}
     post:
       tags: [conexoes]
-      summary: "[SENSÍVEL] Cria uma conexão (o segredo é cifrado com chave externa ao banco)"
+      summary: "Cria uma conexão (o segredo é cifrado com chave externa ao banco)"
       description: |
         `secret` é aceito aqui e **nunca** devolvido. Jira: `email:token` com
         `target` https://<site>.atlassian.net. Use escopos mínimos no destino.
@@ -230,6 +230,110 @@ paths:
         "200": {description: Conexão, content: {application/json: {schema: {$ref: "#/components/schemas/Connection"}}}}
         "401": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
+    delete:
+      tags: [conexoes]
+      summary: Apaga uma conexão já revogada (recusa a ativa e a que ainda é usada)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "204": {description: Conexão apagada}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /cli-logins:
+    post:
+      tags: [conexoes]
+      summary: Inicia o login oficial de uma conta de assinatura de IA (claude ou codex)
+      description: |
+        O worker roda o login OFICIAL do cliente num container, num volume por conta; a fábrica nunca lê o
+        token (ADR-0065). Um login aberto por provedor. Depois de iniciar, consulte `GET /cli-logins/{id}`.
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [provider, name], additionalProperties: false, properties: {provider: {type: string, enum: [claude, codex]}, name: {type: string, maxLength: 80}}}}}}
+      responses:
+        "201": {description: Login registrado, content: {application/json: {schema: {$ref: "#/components/schemas/CLILogin"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /cli-logins/{id}:
+    get:
+      tags: [conexoes]
+      summary: Andamento do login (link e código para autorizar, ou a conexão criada)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Login, content: {application/json: {schema: {$ref: "#/components/schemas/CLILogin"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /cli-logins/{id}/code:
+    post:
+      tags: [conexoes]
+      summary: Entrega ao cliente o código que a pessoa colou (Claude)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [code], additionalProperties: false, properties: {code: {type: string, maxLength: 512}}}}}}
+      responses:
+        "200": {description: Código recebido, content: {application/json: {schema: {$ref: "#/components/schemas/CLILogin"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /cli-logins/{id}/cancel:
+    post:
+      tags: [conexoes]
+      summary: Cancela um login aberto (idempotente)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Login cancelado, content: {application/json: {schema: {$ref: "#/components/schemas/CLILogin"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /oauth/providers:
+    get:
+      tags: [conexoes]
+      summary: Provedores de conexão por OAuth e se estão configurados
+      responses:
+        "200": {description: Provedores, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/OAuthProvider"}}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+  /oauth/{kind}/start:
+    post:
+      tags: [conexoes]
+      summary: "Inicia a conexão por OAuth (github: device flow; clickup/jira: redirecionamento)"
+      description: |
+        Nenhuma senha ou token passa pela tela: o token vai direto ao cofre. 409 `oauth_unavailable`
+        quando o app OAuth do provedor não está configurado no `.env`.
+      parameters:
+        - {name: kind, in: path, required: true, schema: {type: string, enum: [github, clickup, jira]}}
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [name], additionalProperties: false, properties: {name: {type: string, maxLength: 80}}}}}}
+      responses:
+        "200": {description: Fluxo iniciado, content: {application/json: {schema: {$ref: "#/components/schemas/OAuthStarted"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /oauth/flows/{id}:
+    get:
+      tags: [conexoes]
+      summary: Andamento do fluxo (no device flow consulta o GitHub respeitando o intervalo)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: Andamento, content: {application/json: {schema: {$ref: "#/components/schemas/OAuthStatus"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /oauth/callback:
+    get:
+      tags: [conexoes]
+      summary: Retorno do provedor (público; o `state` de uso único autoriza a troca)
+      description: Redireciona (303) para `/connections?oauth=ok|failed`.
+      parameters:
+        - {name: code, in: query, schema: {type: string}}
+        - {name: state, in: query, schema: {type: string}}
+      responses:
+        "303": {description: Redireciona para a tela de conexões}
   /connections/{id}/test:
     post:
       tags: [conexoes]
@@ -248,7 +352,7 @@ paths:
   /connections/{id}/rotate:
     post:
       tags: [conexoes]
-      summary: "[SENSÍVEL] Troca o segredo mantendo id e vínculos"
+      summary: "Troca o segredo mantendo id e vínculos"
       description: O valor anterior é descartado. `expected_version` evita sobrescrever alteração concorrente (409 `version_conflict`).
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -263,7 +367,7 @@ paths:
   /connections/{id}/revoke:
     post:
       tags: [conexoes]
-      summary: "[SENSÍVEL] Revoga a conexão e apaga o segredo (irreversível, idempotente)"
+      summary: "Revoga a conexão e apaga o segredo (irreversível, idempotente)"
       description: O efeito vale para o próximo uso, sem cache (`Vault.Resolve` consulta o banco).
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -325,6 +429,20 @@ paths:
         "403": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
         "409": {$ref: "#/components/responses/Error"}
+    delete:
+      tags: [projetos]
+      summary: Apaga um projeto em rascunho ou suspenso (sessão e CSRF; sem reautenticação)
+      description: >
+        Remove o projeto e seus vínculos e trilha. Projeto ativo devolve 409 `invalid_state`;
+        projeto com execuções registradas devolve 409 `project_has_history` (suspenda em vez de apagar).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "204": {description: Projeto apagado}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
   /projects/{id}/validation:
     get:
       tags: [projetos]
@@ -369,6 +487,314 @@ paths:
         "404": {$ref: "#/components/responses/Error"}
         "409": {$ref: "#/components/responses/Error"}
         "422": {$ref: "#/components/responses/Error"}
+  /projects/{id}/repository/prepare:
+    post:
+      tags: [projetos]
+      summary: Prepara o repositório do projeto (clonar do GitHub, usar pasta existente ou criar do zero) e grava na configuração
+      description: >
+        `github` clona o repositório na área de workspaces (ou só salva, se ela não estiver configurada);
+        `local` valida uma pasta que já é repositório git e deduz branch e remoto; `new` cria a pasta com
+        `git init` e commit inicial e, com `create_remote`, também o repositório no GitHub e o primeiro envio,
+        com as permissões da conta da conexão. Os caminhos são relativos à raiz `WORKSPACES_DIR` e nunca saem dela.
+        Só rascunho ou suspenso.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expected_version, mode]
+              properties:
+                expected_version: {type: integer, minimum: 1}
+                mode: {type: string, enum: [github, local, new]}
+                path: {type: string}
+                owner: {type: string}
+                name: {type: string}
+                base_branch: {type: string}
+                connection_id: {type: [string, "null"], format: uuid}
+                create_remote: {type: boolean}
+                private: {type: boolean}
+      responses:
+        "200":
+          description: Projeto atualizado e o que foi feito
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [project, notes]
+                properties:
+                  project: {$ref: "#/components/schemas/Project"}
+                  notes: {type: array, items: {type: string}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "502": {$ref: "#/components/responses/Error"}
+  /projects/{id}/repository/check:
+    post:
+      tags: [projetos]
+      summary: Verifica o repositório do projeto (pasta, git, origin, branch base, conta, permissão de push) sem escrever
+      description: >
+        Passos `ok`, `warn`, `failed` ou `skipped`, cada um com o motivo e a ação. O resultado fica gravado para a
+        configuração atual (dono, nome, branch, pasta, conexão e versão do segredo); a ativação o exige
+        (check `repository.verified`). Mudar qualquer um desses itens invalida a verificação. Dois projetos ativos
+        não podem usar o mesmo repositório (`repository.unique`); a mesma pasta não pode servir a dois projetos
+        (409 `workspace_taken` no prepare).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Resultado da verificação
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, steps, checked_at]
+                properties:
+                  ok: {type: boolean}
+                  checked_at: {type: string, format: date-time}
+                  steps:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, label, status, detail]
+                      properties:
+                        id: {type: string}
+                        label: {type: string}
+                        status: {type: string, enum: [ok, warn, failed, skipped]}
+                        detail: {type: string}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /projects/{id}/setup:
+    get:
+      tags: [projetos]
+      summary: Script de setup do repositório (.lafabrique/setup.sh) numa ref e se está aprovado
+      description: >
+        Lê o arquivo versionado na ref (padrão: branch base do projeto), devolve o conteúdo para revisão e o hash
+        SHA-256. O script só roda dentro do sandbox e só com aprovação vinculada a esse hash; mudar o conteúdo
+        muda o hash e exige nova aprovação.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: ref, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: Estado do setup
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ref, commit, found, sha256, content, approved]
+                properties:
+                  ref: {type: string}
+                  commit: {type: string}
+                  found: {type: boolean}
+                  sha256: {type: string}
+                  content: {type: string}
+                  approved: {type: boolean}
+                  approval_id: {type: string}
+                  approved_at: {type: string, format: date-time}
+                  last_run:
+                    type: object
+                    properties:
+                      id: {type: string}
+                      ref: {type: string}
+                      sha256: {type: string}
+                      status: {type: string, enum: [ok, failed, timeout]}
+                      exit_code: {type: integer}
+                      output_tail: {type: string}
+                      finished_at: {type: string, format: date-time}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /projects/{id}/setup/approve:
+    post:
+      tags: [projetos]
+      summary: Aprova o script de setup revisado (vinculado ao hash)
+      description: Se o conteúdo atual tiver outro hash, responde 409 `setup_changed` em vez de aprovar o que o usuário não viu.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ref, sha256]
+              properties:
+                ref: {type: string}
+                sha256: {type: string}
+      responses:
+        "200":
+          description: Estado do setup já aprovado
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /projects/{id}/setup/approvals/{approval}:
+    delete:
+      tags: [projetos]
+      summary: Revoga uma aprovação do setup
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: approval, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "204": {description: Revogada}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/cleanup:
+    get:
+      tags: [projetos]
+      summary: Política de limpeza das worktrees e simulação (nada é alterado)
+      description: >
+        Desligada por padrão. Arquivar preserva tudo (checkpoint e ref de arquivo) e tira só a pasta; remover apaga
+        as refs de arquivo (irreversível) e só vale para trabalho já incorporado na branch base e sem arquivos só
+        locais. Nunca toca tentativa com processo escritor vivo.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Política, itens e hash da simulação
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [policy, items, hash, generated_at]
+                properties:
+                  policy: {$ref: "#/components/schemas/CleanupPolicy"}
+                  hash: {type: string}
+                  generated_at: {type: string, format: date-time}
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [attempt_id, branch, action, reason]
+                      properties:
+                        attempt_id: {type: string}
+                        branch: {type: string}
+                        action: {type: string, enum: [archive, remove, skip]}
+                        reason: {type: string}
+        "401": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /projects/{id}/cleanup/policy:
+    put:
+      tags: [projetos]
+      summary: Define a política de limpeza
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CleanupPolicy"}
+      responses:
+        "200":
+          description: Política gravada
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CleanupPolicy"}
+        "401": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /projects/{id}/cleanup/apply:
+    post:
+      tags: [projetos]
+      summary: Aplica a limpeza que o usuário simulou (hash)
+      description: Refaz a simulação; se o hash for outro, 409 `cleanup_plan_changed`. Com a política desligada, 409 `cleanup_off`.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hash]
+              properties:
+                hash: {type: string}
+      responses:
+        "200":
+          description: Resultado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [archived, removed, failed]
+                properties:
+                  archived: {type: integer}
+                  removed: {type: integer}
+                  failed: {type: integer}
+        "401": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /workspace/browse:
+    get:
+      tags: [projetos]
+      summary: Lista as subpastas da área de workspaces (caminhos relativos)
+      parameters:
+        - {name: path, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: Subpastas; `enabled=false` quando WORKSPACES_DIR não está configurada
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enabled, path, parent, is_repo, entries]
+                properties:
+                  enabled: {type: boolean}
+                  path: {type: string}
+                  parent: {type: [string, "null"]}
+                  is_repo: {type: boolean}
+                  entries:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, path, is_repo, empty]
+                      properties:
+                        name: {type: string}
+                        path: {type: string}
+                        is_repo: {type: boolean}
+                        empty: {type: boolean}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /github/repos:
+    get:
+      tags: [projetos]
+      summary: Lista os repositórios que a conta da conexão GitHub enxerga (para escolher o que clonar)
+      parameters:
+        - {name: connection_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Repositórios (até 300, arquivados omitidos)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [full_name, owner, name, private, default_branch, can_push, description]
+                      properties:
+                        full_name: {type: string}
+                        owner: {type: string}
+                        name: {type: string}
+                        private: {type: boolean}
+                        default_branch: {type: string}
+                        can_push: {type: boolean}
+                        description: {type: string}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "502": {$ref: "#/components/responses/Error"}
   /projects/{id}/activate:
     post:
       tags: [projetos]
@@ -536,6 +962,131 @@ paths:
         "200": {description: Resumo, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectOverview"}}}}
         "401": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
+
+  /projects/{id}/runs:
+    get:
+      tags: [execucoes]
+      summary: Execuções do workflow do projeto, as mais novas primeiro
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Execuções, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: "#/components/schemas/WorkflowRun"}}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [execucoes]
+      summary: Inicia a execução do workflow PUBLICADO do projeto (o worker a conduz)
+      description: >
+        Cria a execução presa à versão publicada. Rascunho não executa (409 `not_published`). `prd_done` e
+        `correction` viram as variáveis `prd.concluido` e `fabrica.correcao` do fluxo padrão.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [title], additionalProperties: false, properties: {title: {type: string, maxLength: 200}, task: {type: string, maxLength: 20000}, correction: {type: boolean}, prd_done: {type: boolean}}}}}
+      responses:
+        "201": {description: Execução criada, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowRun"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /projects/{id}/runs/test:
+    post:
+      tags: [execucoes]
+      summary: Testa o fluxo com a feature fictícia padronizada (backend + frontend), em qualquer projeto e fluxo
+      description: >
+        Publica o rascunho atual do workflow (idempotente para o mesmo conteúdo) e dispara a execução de teste. Sem
+        `workflow_id`, usa o fluxo do projeto. No modo teste os checks conferem os arquivos da feature fictícia,
+        push e Draft PR são só simulados (nada vai ao GitHub) e, sem repositório preparado, o teste usa um
+        repositório descartável. Subfluxos não têm execução própria (409 `not_a_feature_flow`).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, additionalProperties: false, properties: {workflow_id: {type: string, format: uuid}}}}}
+      responses:
+        "201": {description: Execução de teste criada, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowRun"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {description: O fluxo tem pendências (envelope de erro mais a lista `problems`)}
+  /projects/{id}/issues/{key}/run:
+    post:
+      tags: [execucoes]
+      summary: Executa a fábrica para uma Issue da origem (Jira/ClickUp)
+      description: >
+        Lê os requisitos da Issue na origem e roda o workflow PUBLICADO do projeto. A Issue precisa estar em
+        `PRD-DOC-CONCLUIDO` (feature) ou `CORRECAO_PR` (correção liberada); senão 409 `issue_not_released`. Conforme o
+        fluxo avança, a Sentinela pede as transições de status com a evidência real e a Draft PR aberta passa a ser
+        acompanhada pelo ciclo da PR.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: key, in: path, required: true, schema: {type: string, maxLength: 100}}
+      responses:
+        "201": {description: Execução criada, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowRun"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "502": {$ref: "#/components/responses/Error"}
+  /projects/{id}/runs/{runId}:
+    get:
+      tags: [execucoes]
+      summary: Uma execução, com o trajeto percorrido e as decisões pendentes
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: runId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Execução, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowRun"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/runs/{runId}/diagnostics:
+    get:
+      tags: [execucoes]
+      summary: Relatório de diagnóstico da execução (Markdown), onde e por que falhou e o que fazer
+      description: >
+        Reúne veredito, local e motivo da falha, causas prováveis com a correção sugerida, o pré-voo do ambiente
+        (Docker, imagens, contas, repositório), a linha do tempo com durações e o detalhe técnico por nó. Sem segredos.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: runId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Relatório, content: {application/json: {schema: {type: object, required: [report, hints, failure], properties: {report: {type: string}, hints: {type: array, items: {type: object, required: [cause, fix], properties: {cause: {type: string}, fix: {type: string}}}}, failure: {type: object, required: [node, reason], properties: {node: {type: string}, reason: {type: string}}}}}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /projects/{id}/runs/{runId}/cancel:
+    post:
+      tags: [execucoes]
+      summary: Cancela uma execução aberta (o nó em andamento é interrompido)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: runId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Execução cancelada, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowRun"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /projects/{id}/runs/{runId}/decide:
+    post:
+      tags: [execucoes]
+      summary: Responde a um nó "Decisão humana" pendente
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: runId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [node, choice], additionalProperties: false, properties: {node: {type: string}, choice: {type: string, enum: [approved, rejected]}}}}}
+      responses:
+        "200": {description: Execução devolvida à fila, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowRun"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
 
   /projects/{id}/executions/{executionId}/events:
     get:
@@ -1786,6 +2337,33 @@ components:
       description: Falha. `correlation_id` repete o cabeçalho X-Request-ID.
       content: {application/json: {schema: {$ref: "#/components/schemas/ErrorBody"}}}
   schemas:
+    WorkflowRun:
+      type: object
+      required: [execution_id, project_id, workflow_version_id, title, task, workspace, kind, issue_key, status, outcome, failure, pending, trace, created_at, updated_at]
+      properties:
+        execution_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        workflow_version_id: {type: string, format: uuid}
+        title: {type: string}
+        task: {type: string}
+        workspace: {type: string}
+        kind: {type: string, enum: [manual, test]}
+        issue_key: {type: string, description: "Issue da origem que originou a execução (vazio = pedido manual)"}
+        status: {type: string, enum: [queued, running, waiting, awaiting_decision, completed, failed, cancelled]}
+        outcome: {type: string, description: "success ou failure, quando concluída"}
+        failure: {type: string}
+        pending: {type: array, items: {type: string}, description: "IDs dos nós Decisão humana pendentes"}
+        trace: {type: array, items: {type: object, required: [node, type], properties: {node: {type: string}, type: {type: string}, port: {type: string}, note: {type: string}}}}
+        wake_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    CleanupPolicy:
+      type: object
+      required: [enabled, archive_idle_days, remove_archived_days]
+      properties:
+        enabled: {type: boolean}
+        archive_idle_days: {type: integer, minimum: 1, maximum: 365}
+        remove_archived_days: {type: integer, minimum: 1, maximum: 3650}
     Status:
       type: object
       required: [status]
@@ -1843,7 +2421,9 @@ components:
       type: object
       required: [status]
       properties:
-        status: {type: string, enum: [totp_required, totp_enrollment_required]}
+        status: {type: string, enum: [totp_required, totp_enrollment_required, authenticated]}
+        # `session` só vem com status=authenticated (AUTH_SKIP_TOTP, apenas em dev; ADR-0059).
+        session: {$ref: '#/components/schemas/Session'}
     Enrollment:
       type: object
       required: [secret, otpauth_uri]
@@ -1915,6 +2495,42 @@ components:
       properties:
         secret: {type: string, format: password, maxLength: 8192}
         expected_version: {type: integer, minimum: 1}
+    CLILogin:
+      type: object
+      required: [id, provider, name, state, needs_code, expires_in]
+      properties:
+        id: {type: string, format: uuid}
+        provider: {type: string, enum: [claude, codex]}
+        name: {type: string}
+        state: {type: string, enum: [pending, preparing, awaiting_user, verifying, done, failed, cancelled]}
+        verification_uri: {type: string, description: "Link para autorizar; só em awaiting_user."}
+        user_code: {type: string, description: "Código a digitar no site (Codex); só em awaiting_user."}
+        needs_code: {type: boolean, description: "Claude: a pessoa cola de volta o código que o site mostrou."}
+        error: {type: string}
+        expires_in: {type: integer}
+        connection: {$ref: "#/components/schemas/Connection"}
+    OAuthProvider:
+      type: object
+      required: [kind, flow, available]
+      properties: {kind: {type: string}, flow: {type: string, enum: [device, redirect]}, available: {type: boolean}, hint: {type: string}}
+    OAuthStarted:
+      type: object
+      required: [flow_id, flow, expires_in]
+      properties:
+        flow_id: {type: string}
+        flow: {type: string, enum: [device, redirect]}
+        user_code: {type: string}
+        verification_uri: {type: string}
+        interval: {type: integer}
+        authorize_url: {type: string}
+        expires_in: {type: integer}
+    OAuthStatus:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [pending, done, failed]}
+        error: {type: string}
+        connection: {$ref: "#/components/schemas/Connection"}
     Connection:
       type: object
       required: [id, kind, name, target, scopes, state, secret_version, last_test_status, last_test_detail, version, created_at, updated_at]
@@ -1948,8 +2564,10 @@ components:
       enum: [basics, repository, source, review]
     Repository:
       type: object
-      required: [owner, name, base_branch, connection_id]
+      required: [mode, path, owner, name, base_branch, connection_id]
       properties:
+        mode: {type: string, enum: [github, local, new], description: "Como o repositório chega à fábrica: clonado do GitHub, pasta existente ou criado do zero (ADR-0061)"}
+        path: {type: string, description: "Pasta do repositório, relativa à raiz de workspaces; vazio = o worker clona sozinho"}
         owner: {type: string, description: "Usuário ou organização GitHub; vazio = não preenchido"}
         name: {type: string}
         base_branch: {type: string}
@@ -2725,12 +3343,13 @@ components:
         size: {type: integer}
     Skill:
       type: object
-      required: [id, name, description, executor, source_kind, source_ref, revision, content_hash, body, manifest, needs_approval, version, created_at, updated_at]
+      required: [id, name, description, executor, source_kind, source_ref, revision, content_hash, body, manifest, needs_approval, is_default, version, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         name: {type: string}
         description: {type: string}
         executor: {type: string, enum: [ai, script, deterministic, hybrid]}
+        is_default: {type: boolean, description: "Skill padrão da fábrica (ADR-0066): instalada ao subir a API e associada a todos os projetos."}
         source_kind: {type: string, enum: [manual, file, package, git]}
         source_ref: {type: string}
         revision: {type: string}

@@ -207,4 +207,69 @@ describe("página Issues", () => {
       await screen.findByText(/mapa de status do projeto ainda não foi configurado/),
     ).toBeTruthy();
   });
+
+  it("só oferece executar Issues liberadas e inicia a execução pela fábrica", async () => {
+    const released = view({
+      issues: [
+        {
+          id: "i1",
+          source: "jira",
+          remote_id: "1",
+          key: "ABC-1",
+          title: "Em PRD",
+          raw_status: "To Do",
+          status_code: "PRD-DOC",
+          revision: "v1",
+          kind: "feature",
+        },
+        {
+          id: "i2",
+          source: "jira",
+          remote_id: "2",
+          key: "ABC-2",
+          title: "Pronta",
+          raw_status: "Ready",
+          status_code: "PRD-DOC-CONCLUIDO",
+          revision: "v1",
+          kind: "feature",
+        },
+      ],
+    });
+    let posted = "";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+        const url = String(input).replace(/^\/api/, "");
+        const key = `${(init.method ?? "GET").toUpperCase()} ${url}`;
+        if (key === "GET /session") return json(session);
+        if (key === "GET /projects?limit=100")
+          return json({ items: [{ id: "p1", name: "Projeto Um" }], next_cursor: null });
+        if (key === "GET /projects/p1/issues") return json(released);
+        if (key === "POST /projects/p1/issues/ABC-2/run") {
+          posted = key;
+          return json(
+            { execution_id: "e1", issue_key: "ABC-2", title: "x", status: "queued" },
+            201,
+          );
+        }
+        return json(
+          {
+            error: {
+              code: "not_found",
+              message: "Rota inexistente.",
+              action: "x",
+              correlation_id: "c",
+            },
+          },
+          404,
+        );
+      }),
+    );
+    renderIssues();
+    await screen.findByText(/ABC-2 · Pronta/);
+    expect(screen.queryByRole("button", { name: "Executar ABC-1 na fábrica" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Executar ABC-2 na fábrica" }));
+    expect(await screen.findByText(/Execução de ABC-2 iniciada/)).toBeTruthy();
+    expect(posted).toBe("POST /projects/p1/issues/ABC-2/run");
+  });
 });
