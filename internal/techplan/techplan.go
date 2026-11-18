@@ -28,7 +28,8 @@ type Subtask struct {
 
 // TrackOfPath classifica um caminho: interface web é FRONTEND; o resto (API, banco, infra) BACKEND.
 func TrackOfPath(p string) flow.Track {
-	if strings.HasPrefix(p, "apps/web/") || strings.HasSuffix(p, ".tsx") || strings.HasSuffix(p, ".css") {
+	if strings.HasPrefix(p, "apps/web/") || strings.HasPrefix(p, "frontend/") || strings.Contains(p, "/frontend/") ||
+		strings.HasSuffix(p, ".tsx") || strings.HasSuffix(p, ".css") || strings.HasSuffix(p, ".html") {
 		return flow.Frontend
 	}
 	return flow.Backend

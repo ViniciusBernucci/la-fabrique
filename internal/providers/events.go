@@ -47,11 +47,18 @@ func ParseLine(cli CLI, line string) []Event {
 	return []Event{{Kind: EvRaw, Text: clip(line)}}
 }
 
-func clip(s string) string {
-	if len(s) > 2000 {
-		return s[:2000] + "…"
+func clip(s string) string { return clipN(s, 2000) }
+
+// clipN corta o texto em n bytes (sem partir um caractere UTF-8 ao meio).
+func clipN(s string, n int) string {
+	if len(s) <= n {
+		return s
 	}
-	return s
+	cut := n
+	for cut > 0 && s[cut]&0xC0 == 0x80 {
+		cut--
+	}
+	return s[:cut] + "…"
 }
 
 func str(m map[string]any, k string) string { s, _ := m[k].(string); return s }
@@ -84,7 +91,7 @@ func parseClaude(m map[string]any, raw string) []Event {
 		if failed, _ := m["is_error"].(bool); failed {
 			return append(out, Event{Kind: EvError, Text: clip(str(m, "result"))})
 		}
-		return append(out, Event{Kind: EvDone, Text: clip(str(m, "result"))})
+		return append(out, Event{Kind: EvDone, Text: clipN(str(m, "result"), 20000)})
 	case "user":
 		return nil // resultados de ferramentas: não são eventos da fábrica
 	}

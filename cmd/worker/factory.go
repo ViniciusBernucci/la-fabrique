@@ -41,7 +41,7 @@ func registerFactory(w *worker.Worker, pool *pgxpool.Pool, cfg config.Worker) {
 	vault.SetRefresher(oauth.NewRefresher(oauth.FromEnv(os.LookupEnv)))
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil)).With("service", "worker", "job", "fabrica")
 	ex := &factory.Executor{DB: pool, Cfg: factory.Config{
-		Workspaces: cfg.WorkspacesDir, CLIImage: cfg.FactoryImage, ToolImage: cfg.FactoryToolImage, Docker: &execution.Docker{}, Vault: vault, AllowPush: cfg.FactoryPush,
+		Workspaces: cfg.WorkspacesDir, CLIImage: cfg.FactoryImage, ToolImage: cfg.FactoryToolImage, ChecksNetwork: cfg.FactoryChecksNetwork, Docker: &execution.Docker{}, Vault: vault, AllowPush: cfg.FactoryPush,
 		Log: log, Redact: rd.Redact,
 	}}
 	owner := fmt.Sprintf("worker-%d", os.Getpid())

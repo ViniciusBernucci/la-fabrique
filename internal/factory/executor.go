@@ -34,6 +34,10 @@ type Config struct {
 	// ToolImage, se informada, troca a imagem dos perfis de scripts e checks (base, go, node): as imagens
 	// base são mínimas (sem make nem git) e o projeto precisa da própria toolchain para rodar make lint/test.
 	ToolImage string
+	// ChecksNetwork: "egress" dá internet aos scripts e checks (baixar dependências); vazio ou "none" os isola.
+	ChecksNetwork string
+	// TestModel é o modelo (Claude) dos agentes no botão Testar o fluxo quando o agente não fixa um (padrão claude-haiku-5-5).
+	TestModel string
 	Docker    *execution.Docker
 	Vault     *security.Vault // push e Draft PR (token do GitHub)
 	// AllowPush libera enviar a branch da execução ao GitHub e abrir a Draft PR (FACTORY_PUSH=true). Desligado,
@@ -75,9 +79,9 @@ func (e *Executor) Run(ctx context.Context, n workflows.Node, vars map[string]an
 	var err error
 	switch n.Type {
 	case workflows.TAgent:
-		res, err = e.agent(ctx, info, n)
+		res, err = e.agent(ctx, info, n, vars)
 	case workflows.TDocs:
-		res, err = e.docs(ctx, info, n)
+		res, err = e.docs(ctx, info, n, vars)
 	case workflows.TSkill:
 		res, err = e.skill(ctx, info, n, vars)
 	case workflows.TScript:
@@ -260,6 +264,9 @@ func (e *Executor) profile(name string) (execution.Profile, bool) {
 	if ok && e.Cfg.ToolImage != "" {
 		p.Image = e.Cfg.ToolImage
 	}
+	if ok && e.Cfg.ChecksNetwork == "egress" {
+		p.Network = execution.NetEgress
+	}
 	return p, ok
 }
 
@@ -414,23 +421,30 @@ func skillDirFor(cli providers.CLI) string {
 	return ".claude/skills"
 }
 
-func (e *Executor) agent(ctx context.Context, info runner.Info, n workflows.Node) (workflows.ExecResult, error) {
+func (e *Executor) agent(ctx context.Context, info runner.Info, n workflows.Node, vars map[string]any) (workflows.ExecResult, error) {
 	eff, err := agents.EffectiveForNode(ctx, e.DB, n)
 	if err != nil {
 		return fail(info, n, "configuração do agente: %v", err), nil
 	}
-	return e.runAgent(ctx, info, n, eff)
+	return e.runAgent(ctx, info, n, eff, vars)
 }
 
 // docs usa um agente genérico (sem skill) com o pedido de documentação do nó.
-func (e *Executor) docs(ctx context.Context, info runner.Info, n workflows.Node) (workflows.ExecResult, error) {
+func (e *Executor) docs(ctx context.Context, info runner.Info, n workflows.Node, vars map[string]any) (workflows.ExecResult, error) {
 	eff := agents.Effective{AgentName: "documentacao", Provider: providers.Claude.String(),
 		Instructions: "Você atualiza a documentação do projeto com precisão, sem inventar o que não está no código.",
 		Prompt:       fmt.Sprintf("Atualize %s.\n%s", propStr(n, "target"), propStr(n, "instruction")), TimeoutMinutes: 30}
-	return e.runAgent(ctx, info, n, eff)
+	return e.runAgent(ctx, info, n, eff, vars)
 }
 
-func (e *Executor) runAgent(ctx context.Context, info runner.Info, n workflows.Node, eff agents.Effective) (workflows.ExecResult, error) {
+func (e *Executor) runAgent(ctx context.Context, info runner.Info, n workflows.Node, eff agents.Effective, vars map[string]any) (workflows.ExecResult, error) {
+	if info.Run.Kind == runner.KindTest && eff.Provider == "claude" && eff.Model == "" {
+		// teste do fluxo não gasta a cota com o modelo mais caro da conta
+		eff.Model = e.Cfg.TestModel
+		if eff.Model == "" {
+			eff.Model = "claude-haiku-5-5"
+		}
+	}
 	acct, err := e.resolveAccount(ctx, eff)
 	if err != nil {
 		e.diag(info, n.ID, "account.error", map[string]any{"provider": eff.Provider, "erro": err.Error()})
@@ -442,7 +456,14 @@ func (e *Executor) runAgent(ctx context.Context, info runner.Info, n workflows.N
 		return fail(info, n, "%v", err), nil
 	}
 	sdir := skillDirFor(acct.CLI)
-	prompt := Prompt(eff, proj.Name, info.Run.Title, info.Run.Task, sdir, info.Run.Kind == runner.KindTest)
+	planner := isPlanner(eff)
+	extra := ""
+	if planner {
+		extra = plannerFormat
+	} else {
+		extra = e.planContext(ctx, info, n, eff, vars)
+	}
+	prompt := Prompt(eff, proj.Name, info.Run.Title, info.Run.Task, sdir, info.Run.Kind == runner.KindTest, extra)
 	info.Emit(runner.EventNode, map[string]any{"node": n.ID, "kind": "agent", "agent": eff.AgentName, "provider": eff.Provider,
 		"model": eff.Model, "account": acct.Name, "skills": eff.Skills, "timeout_minutes": eff.TimeoutMinutes})
 	info.Emit(runner.EventNode, map[string]any{"node": n.ID, "kind": "prompt", "text": tail(prompt, 12000)})
@@ -463,20 +484,21 @@ func (e *Executor) runAgent(ctx context.Context, info runner.Info, n workflows.N
 	defer cancel()
 
 	out := map[string]any{"ok": false}
+	var planFail error
 	var res providers.Result
 	err = e.withSandbox(runCtx, info, n.ID, "agent", []execution.Mount{{Volume: acct.VolumeName(), Target: providers.AccountMount}}, repo, func(sb *execution.Sandbox) error {
 		if len(skillTarBytes) > 0 {
 			if err := sb.Seed(runCtx, bytes.NewReader(skillTarBytes)); err != nil {
 				return fmt.Errorf("gravar as skills do agente: %w", err)
 			}
-			// as skills são da fábrica: ficam fora do patch
-			ex := ""
-			for _, s := range eff.Skills {
-				ex += sdir + "/" + s + "/\n"
-			}
-			if r, err := sb.Exec(runCtx, execution.ExecSpec{Cmd: []string{"sh", "-c", "mkdir -p .git/info && printf '%s' \"$1\" >> .git/info/exclude", "x", ex}}); err != nil || r.ExitCode != 0 {
-				return errors.New("preparar a exclusão das skills do patch")
-			}
+		}
+		// as skills e o canal da fábrica (.fabrica/) são da fábrica: ficam fora do patch
+		ex := factoryDir + "/\n"
+		for _, s := range eff.Skills {
+			ex += sdir + "/" + s + "/\n"
+		}
+		if r, err := sb.Exec(runCtx, execution.ExecSpec{Cmd: []string{"sh", "-c", "mkdir -p .git/info && printf '%s' \"$1\" >> .git/info/exclude", "x", ex}}); err != nil || r.ExitCode != 0 {
+			return errors.New("preparar a exclusão das skills e do canal da fábrica do patch")
 		}
 		req := providers.Request{Account: acct, Prompt: prompt, Mode: providers.ModeWorkspaceWrite, Model: eff.Model, Binary: e.Cfg.Binary[eff.Provider]}
 		cliDone := e.timed(info, n.ID, "cli.run", nil)
@@ -495,6 +517,16 @@ func (e *Executor) runAgent(ctx context.Context, info runner.Info, n workflows.N
 		if err != nil {
 			return fmt.Errorf("terminal do agente: %w", err)
 		}
+		if planner && !res.Failed {
+			// o plano estruturado do Tech Lead vira subtarefas da fábrica (ou a etapa falha dizendo por quê)
+			if plan, perr := e.harvestPlan(context.WithoutCancel(runCtx), info, n, sb); perr != nil {
+				planFail = perr
+			} else {
+				for k, v := range plan {
+					out[k] = v
+				}
+			}
+		}
 		changed, perr := e.exportPatch(context.WithoutCancel(runCtx), info, n.ID, sb, repo)
 		if perr != nil {
 			return perr
@@ -510,6 +542,9 @@ func (e *Executor) runAgent(ctx context.Context, info runner.Info, n workflows.N
 			return workflows.ExecResult{}, ctx.Err()
 		}
 		return fail(info, n, "%v", err), nil
+	}
+	if planFail != nil {
+		return fail(info, n, "%v", planFail), nil
 	}
 	out["resumo"], out["sessao"] = tail(res.Final, 4000), res.Session
 	out["tokens_entrada"], out["tokens_saida"] = res.InputTokens, res.OutputTokens

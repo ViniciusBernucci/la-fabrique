@@ -15,7 +15,7 @@ import (
 
 // Prompt é o comando que a fábrica entrega ao CLI do agente: quem ele é, qual skill usar, o que a fábrica
 // quer e as regras. A pessoa não escreve isto: sai do cadastro do agente, do nó e da tarefa da execução.
-func Prompt(eff agents.Effective, project, title, task, skillDir string, test bool) string {
+func Prompt(eff agents.Effective, project, title, task, skillDir string, test bool, extra string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Você é o agente %q da La fabrique, trabalhando no projeto %q. Responda em português.\n\n", eff.AgentName, project)
 	if len(eff.Skills) > 0 {
@@ -33,6 +33,10 @@ func Prompt(eff agents.Effective, project, title, task, skillDir string, test bo
 		fmt.Fprintf(&b, "%s\n", strings.TrimSpace(task))
 	}
 	b.WriteString("\n")
+	if strings.TrimSpace(extra) != "" {
+		b.WriteString(strings.TrimSpace(extra))
+		b.WriteString("\n\n")
+	}
 	if strings.TrimSpace(eff.Prompt) != "" {
 		fmt.Fprintf(&b, "## O que fazer nesta etapa\n%s\n\n", strings.TrimSpace(eff.Prompt))
 	}

@@ -22,6 +22,17 @@ import (
 // CLI de mentira do teste do fluxo: cada trilha cria só o arquivo que o comando da fábrica pede.
 const flowTestFakeCLI = `#!/bin/sh
 p=$(cat)
+case "$p" in *"FORMATO DE SAÍDA OBRIGATÓRIO DO PLANO"*)
+  mkdir -p .fabrica
+  cat > .fabrica/plano.json <<'JSON'
+{"summary":"Selo de saúde com uma trilha backend e uma frontend","tasks":[
+ {"key":"backend-saude","title":"Endpoint de saúde","description":"Descrever GET /saude","track":"BACKEND","risk":"low","order":1,"depends_on":[],
+  "paths":["fabrica-teste/backend/saude.md"],"criteria":[{"text":"o arquivo do endpoint existe","check":"file","path":"fabrica-teste/backend/saude.md"}]},
+ {"key":"frontend-selo","title":"Selo de saúde","description":"Página com o selo","track":"FRONTEND","risk":"low","order":2,"depends_on":["backend-saude"],
+  "paths":["fabrica-teste/frontend/selo-saude.html"],"criteria":[{"text":"a página do selo existe","check":"file","path":"fabrica-teste/frontend/selo-saude.html"}]}]}
+JSON
+  ;;
+esac
 case "$p" in *"subtarefas BACKEND"*)
   mkdir -p fabrica-teste/backend
   printf '# Endpoint de saúde\nGET /saude\n{"status":"ok"}\n' > fabrica-teste/backend/saude.md
@@ -167,6 +178,34 @@ func TestFlowTestRunsTheStandardFlowInAProjectWithoutRepository(t *testing.T) {
 		if changedBy[node] != want {
 			t.Errorf("patch.export de %s: changed=%q, esperado %q (todos: %v)", node, changedBy[node], want, changedBy)
 		}
+	}
+	// plano estruturado: aceito, materializado e entregue por trilha
+	var planVer, subtasks int
+	_ = db.QueryRow(ctx, `SELECT COALESCE(max(version),0) FROM plans WHERE feature_id = (SELECT feature_id FROM executions WHERE id = $1) AND status = 'current'`, run.ExecutionID).Scan(&planVer)
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM subtasks WHERE feature_id = (SELECT feature_id FROM executions WHERE id = $1)`, run.ExecutionID).Scan(&subtasks)
+	if planVer != 1 || subtasks != 2 {
+		t.Errorf("o plano deveria estar aceito (v1) com 2 subtarefas: versão=%d subtarefas=%d", planVer, subtasks)
+	}
+	promptOf := func(node string) string {
+		var txt string
+		_ = db.QueryRow(ctx, `SELECT payload->>'text' FROM execution_events WHERE execution_id = $1 AND type = 'node_event' AND payload->>'node' = $2 AND payload->>'kind' = 'prompt'`, run.ExecutionID, node).Scan(&txt)
+		return txt
+	}
+	if p := promptOf("guard_planning"); !strings.Contains(p, "FORMATO DE SAÍDA OBRIGATÓRIO DO PLANO") {
+		t.Error("o Tech Lead deveria receber o formato do plano")
+	}
+	back, front := promptOf("guard_impl_back"), promptOf("guard_impl_front")
+	if !strings.Contains(back, "Subtarefa `backend-saude`") || strings.Contains(back, "Subtarefa `frontend-selo`") {
+		t.Errorf("o implementador backend deveria receber só a subtarefa BACKEND:\n%s", back)
+	}
+	if !strings.Contains(front, "Subtarefa `frontend-selo`") || strings.Contains(front, "Subtarefa `backend-saude`") {
+		t.Errorf("o implementador frontend deveria receber só a subtarefa FRONTEND:\n%s", front)
+	}
+	if !strings.Contains(promptOf("guard_review_back"), "O que as etapas anteriores relataram") {
+		t.Error("o revisor deveria receber o que as etapas anteriores relataram")
+	}
+	if files, _ := os.ReadFile(filepath.Join(work, ".fabrica", "plano.json")); len(files) != 0 {
+		t.Error("o canal da fábrica não deveria ir para a cópia de trabalho")
 	}
 	var simulated, prompts, configs int
 	_ = db.QueryRow(ctx, `SELECT count(*) FILTER (WHERE payload->>'text' LIKE '%SIMULADO%'),

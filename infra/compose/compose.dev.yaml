@@ -42,7 +42,9 @@ services:
       FACTORY_RUN: "true"
       FACTORY_PUSH: ${FACTORY_PUSH:-false}
       FACTORY_IMAGE: le-fabrique/cli:dev
-      FACTORY_TOOL_IMAGE: ${FACTORY_TOOL_IMAGE:-}
+      # Checks e scripts com a toolchain deste repositório (make tools-image). Rede dos checks: none (padrão) ou egress.
+      FACTORY_TOOL_IMAGE: ${FACTORY_TOOL_IMAGE:-le-fabrique/tools:dev}
+      FACTORY_CHECKS_NETWORK: ${FACTORY_CHECKS_NETWORK:-none}
       CLI_LOGIN_CONTEXT: /src/infra/images
     volumes:
       - .:/src

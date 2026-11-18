@@ -39,7 +39,7 @@ func (e *Executor) skill(ctx context.Context, info runner.Info, n workflows.Node
 		env := skills.Env{Sandbox: sb, Guard: &policy.Guard{Policy: policy.DefaultPolicy(policy.Options{})},
 			AI: func(ctx context.Context, instructions, input string) (string, error) {
 				eff := agents.Effective{AgentName: sk.Name, Provider: "claude", Instructions: instructions, Prompt: input, TimeoutMinutes: 30}
-				res, err := e.runAgent(ctx, info, n, eff)
+				res, err := e.runAgent(ctx, info, n, eff, vars)
 				if err != nil {
 					return "", err
 				}

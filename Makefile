@@ -8,7 +8,7 @@ export
 DB_ADMIN_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:$(POSTGRES_PORT)/postgres?sslmode=disable
 DB_APP_URL   ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=disable
 
-.PHONY: help bootstrap up down logs ps up-prod down-prod ps-prod logs-prod migrate migrate-status seed create-admin connect-github cli-image \
+.PHONY: help bootstrap up down logs ps up-prod down-prod ps-prod logs-prod migrate migrate-status seed create-admin connect-github cli-image tools-image \
         fmt lint test test-integration ensaios e2e test-web build typecheck check-secrets db-backup db-restore restore-drill matriz sync-skills
 
 help: ## Lista os comandos
@@ -49,6 +49,8 @@ seed: ## Carrega projetos fictícios de dev (somente APP_ENV=development)
 create-admin: ## Cria a conta única do administrador (pergunta usuário e senha; o 2FA é cadastrado no 1º login)
 	@read -p "Usuário: " u; read -s -p "Senha (mín. 12 caracteres): " p; echo; \
 	  ADMIN_USERNAME="$$u" ADMIN_PASSWORD="$$p" DATABASE_URL='$(DB_APP_URL)' go run ./cmd/migrate create-admin
+tools-image: ## Constrói a imagem da toolchain deste repositório (Go, Node, make, git) para os checks da fábrica (FACTORY_TOOL_IMAGE)
+	docker build -t le-fabrique/tools:dev -f infra/images/Dockerfile.tools infra/images
 cli-image: ## Constrói a imagem dos clientes de IA (Claude Code e Codex) usada no login das contas pelo painel
 	docker build -t le-fabrique/cli:dev -f infra/images/Dockerfile.cli infra/images
 connect-github: ## Importa as contas do GitHub CLI (gh) da máquina para o cofre; abre `gh auth login` se não houver conta. Rode de novo para atualizar

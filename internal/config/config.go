@@ -94,8 +94,10 @@ type Worker struct {
 	FactoryImage string
 	// FactoryToolImage troca a imagem dos perfis de scripts e checks (FACTORY_TOOL_IMAGE).
 	FactoryToolImage string
-	WorkspacesDir    string
-	CLILoginContext  string
+	// FactoryChecksNetwork é a rede dos scripts e checks: "none" (padrão) ou "egress" (precisam baixar dependências).
+	FactoryChecksNetwork string
+	WorkspacesDir        string
+	CLILoginContext      string
 	// Admission liga o laço de admissão da Sentinela (SENTINEL_ADMISSION=true). Sem executor ligado ele roda em
 	// observação (dry-run): decide e audita, não reserva nem altera estado.
 	Admission         bool
@@ -320,6 +322,10 @@ func LoadWorker(lookup Lookup) (Worker, error) {
 		cfg.FactoryPush = l.boolean("FACTORY_PUSH", false)
 		cfg.FactoryImage = l.str("FACTORY_IMAGE", "le-fabrique/cli:dev")
 		cfg.FactoryToolImage = l.str("FACTORY_TOOL_IMAGE", "")
+		cfg.FactoryChecksNetwork = l.str("FACTORY_CHECKS_NETWORK", "none")
+		if cfg.FactoryChecksNetwork != "none" && cfg.FactoryChecksNetwork != "egress" {
+			l.fail("FACTORY_CHECKS_NETWORK deve ser none ou egress")
+		}
 		cfg.WorkspacesDir = l.str("WORKSPACES_DIR", "")
 		if cfg.WorkspacesDir == "" {
 			l.fail("WORKSPACES_DIR é obrigatório com FACTORY_RUN=true (a pasta onde ficam os repositórios dos projetos)")
