@@ -33,7 +33,7 @@ func TestTraceabilityCloses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tickets) != 67 || len(cases) != 18 {
+	if len(tickets) != 68 || len(cases) != 18 {
 		t.Fatalf("%d tickets, %d casos", len(tickets), len(cases))
 	}
 }

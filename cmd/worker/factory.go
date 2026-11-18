@@ -15,6 +15,8 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/execution"
 	"github.com/ViniciusBernucci/le-fabrique/internal/factory"
 	"github.com/ViniciusBernucci/le-fabrique/internal/oauth"
+	"github.com/ViniciusBernucci/le-fabrique/internal/opslog"
+	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 	"github.com/ViniciusBernucci/le-fabrique/internal/runner"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
 	"github.com/ViniciusBernucci/le-fabrique/internal/sentinel"
@@ -46,8 +48,7 @@ func registerFactory(w *worker.Worker, pool *pgxpool.Pool, cfg config.Worker) {
 	if cfg.FactoryEgressFilter {
 		epCtx, cancelEP := context.WithTimeout(context.Background(), 60*time.Second)
 		if err := docker.EnsureEgressProxy(epCtx, execution.EgressConfig{Image: cfg.FactoryEgressImage, Allow: egress.ParseList(cfg.FactoryEgressAllow)}); err != nil {
-			// falha fechada: sem o proxy o terminal do agente não abre
-			log.Error("proxy de saída indisponível: os agentes não vão abrir terminal até ele subir (make egress-image)", "error", err.Error())
+			reportEgressProxyUnavailable(epCtx, pool, log, err)
 		}
 		cancelEP()
 	}
@@ -74,4 +75,15 @@ func registerFactory(w *worker.Worker, pool *pgxpool.Pool, cfg config.Worker) {
 		return fmt.Sprintf("execução %s: %s", done.ExecutionID, done.Status), nil
 	}})
 	log.Info("fábrica ligada", "push", cfg.FactoryPush, "imagem", cfg.FactoryImage)
+}
+
+// reportEgressProxyUnavailable loga e grava (T16-05) o erro de boot do proxy de saída — acontece
+// uma vez, fora do laço periódico do worker, depois que o pool já está conectado. Recebe
+// persistence.DBTX (não *pgxpool.Pool) para ser testável sem banco de verdade.
+func reportEgressProxyUnavailable(ctx context.Context, db persistence.DBTX, log *slog.Logger, cause error) {
+	const msg = "proxy de saída indisponível: os agentes não vão abrir terminal até ele subir (make egress-image)"
+	log.Error(msg, "error", cause.Error()) // falha fechada: sem o proxy o terminal do agente não abre
+	if err := opslog.Emit(ctx, db, opslog.LevelError, opslog.SourceFabrica, msg, map[string]any{"error": cause.Error()}); err != nil {
+		log.Warn("evento operacional não gravado", "error", err.Error())
+	}
 }

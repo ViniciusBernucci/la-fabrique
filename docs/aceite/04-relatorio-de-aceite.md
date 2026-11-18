@@ -4,7 +4,7 @@
 
 **Situação do aceite integral:** NÃO FECHADO.
 
-**Tickets:** 19 feito(s), 48 parcial(is), 0 pendente(s), de 67. Todo ticket `[x]` ou `[~]` cita a verificação real feita e o que ficou NOT_RUN na própria nota.
+**Tickets:** 19 feito(s), 49 parcial(is), 0 pendente(s), de 68. Todo ticket `[x]` ou `[~]` cita a verificação real feita e o que ficou NOT_RUN na própria nota.
 
 O aceite exige o **projeto real** (D95): evidência de software (testes, ensaios e entregas) **não** a substitui. Nenhum dos 18 casos P01–P18 tem evidência no projeto real registrada ([matriz](02-matriz-de-evidencias.md)).
 
@@ -35,7 +35,7 @@ O aceite exige o **projeto real** (D95): evidência de software (testes, ensaios
 | **E13** · Autorizações e efeitos | 4 | 1 | 0 | com pendências |
 | **E14** · Qualidade e revisão | 0 | 4 | 0 | com pendências |
 | **E15** · GitHub, documentação e memória | 0 | 5 | 0 | com pendências |
-| **E16** · Operação, uso e retenção | 0 | 4 | 0 | com pendências |
+| **E16** · Operação, uso e retenção | 0 | 5 | 0 | com pendências |
 | **E17** · Piloto e aceite | 0 | 4 | 0 | com pendências |
 
 ## Pendências por ticket (o que impede o aceite integral)
@@ -86,6 +86,7 @@ O aceite exige o **projeto real** (D95): evidência de software (testes, ensaios
 | **T16-02** · Consolidar Central e auditoria operacional | parcial | Aprovar, recusar ou revogar pelo painel produz evento e estado verificáveis sem notificação externa. | navegador real NOT_RUN; parada segura na revogação com uso em andamento depende do executor (sem ele, `halt_failed`); ordem da sequência é por horário, não causal; sem filtro por projeto/paginação; recusa exige que o pedido declare a alternativa. |
 | **T16-03** · Exibir consumo, orçamento e provedores | parcial | Valor não observado aparece explicitamente. Teto global e opcional por agente refletem o bloqueio de novas chamadas. | somente leitura (sem editar teto nem período), sem verificação em navegador real, provedores reais NOT_RUN. |
 | **T16-04** · Automatizar retenção com integridade | parcial | Relógio de teste remove apenas itens elegíveis. Checkpoint bloqueado ou vinculado a incidente continua íntegro e restaurável. | nada agenda a retenção (sem laço no worker), sem rotas/tela; o resumo guarda contagens, não o conteúdo; carência conta pela última atualização da execução. |
+| **T16-05** · Consolidar logs operacionais da fábrica | parcial | Falha de um job de fundo aparece como evento de erro com a origem certa; sucesso com nota aparece como evento informativo. Reconexão do stream recupera pelo cur… | tela "Operação" no painel web ainda não implementada (frente `web` do planejamento, pendente); sem `make lint` real neste ambiente (ver nota na entrega). |
 | **T17-01** · Preparar projeto real e matriz de evidências | parcial | Contrato preenchido e revisável, com ambiente, projeto, usuários, conexões e critérios rastreáveis. | o contrato NÃO está completo — projeto e feature reais, VPS, origem, GitHub, contas e política (F01–F12) dependem do responsável e de credenciais. |
 | **T17-02** · Executar cadastro do zero e feature ponta a ponta | parcial | A PR, commits, checks, subtarefas, memória e dependência são verificáveis no ambiente real e ligados à revisão. | sem limite declarado na nota |
 | **T17-03** · Executar ensaios de falha, segurança e integração | parcial | Cada cenário tem esperado, observado, evidência e revisão. Falha obrigatória volta ao ticket e é retestada. | sem limite declarado na nota |

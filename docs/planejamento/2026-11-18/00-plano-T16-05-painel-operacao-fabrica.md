@@ -236,7 +236,7 @@ Acrescentar os dois paths acima (tag `operacao-ao-vivo`, mesmo padrão de
   - `internal/sentinel/routines.go` (`RunOne`)
   - `cmd/worker/factory.go` (linha do `log.Error` do proxy de egress)
   - `internal/retention/retention.go` (`Run`) + `internal/retention/retention_test.go`
-  - `internal/httpapi/operations.go` (novo: handlers `operationsEvents`/`operationsStream`,
+  - `internal/httpapi/operational_events.go` (novo: handlers `operationsEvents`/`operationsStream`,
     reaproveitando `cursorOf`/padrão de `live.go`) + `internal/httpapi/server.go` (registrar rotas)
   - `tests/integration/operations_test.go` (novo, modelo: `tests/integration/live_test.go`)
   - `contracts/openapi.yaml`

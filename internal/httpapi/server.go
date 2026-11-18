@@ -208,6 +208,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/authorizations", s.protected(s.listAuthorizations))
 	mux.HandleFunc("POST /api/authorizations/{id}/revoke", s.sensitive(s.revokeAuthorization))
 	mux.HandleFunc("GET /api/executions/{id}/sequence", s.protected(s.executionSequence))
+	mux.HandleFunc("GET /api/operations/events", s.protected(s.operationsEvents))
+	mux.HandleFunc("GET /api/operations/stream", s.protected(s.operationsStream))
 	mux.HandleFunc("GET /api/projects/{id}/delivery-settings", s.protected(s.getDeliverySettings))
 	mux.HandleFunc("PUT /api/projects/{id}/delivery-settings", s.protected(s.putDeliverySettings))
 	mux.HandleFunc("GET /api/projects/{id}/deliveries", s.protected(s.listDeliveries))

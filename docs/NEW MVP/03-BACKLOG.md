@@ -603,6 +603,14 @@ Cada ticket fecha com revisão identificada, critérios conferidos, evidência d
 - **Trabalho** · Aplicar 30 dias para logs detalhados, carência para concluídos e preservação de resumo e checkpoints protegidos. Auditar limpeza.
 - **Aceite do ticket** · Relógio de teste remove apenas itens elegíveis. Checkpoint bloqueado ou vinculado a incidente continua íntegro e restaurável.
 
+### T16-05
+
+**Consolidar logs operacionais da fábrica**
+
+- **Dependências** · [T16-01](#t16-01), [T16-04](#t16-04).
+- **Trabalho** · Gravar os eventos de fundo do worker (sentinela, admissão, retenção, sincronização, cli-login) e os erros de configuração do boot pós-conexão numa tabela própria. Expor histórico pesquisável (cursor, nível, origem, busca) e stream ao vivo (SSE, reconexão por cursor), fora do escopo por projeto já coberto por T16-01. Aplicar a mesma retenção de 30 dias do T16-04.
+- **Aceite do ticket** · Falha de um job de fundo aparece como evento de erro com a origem certa; sucesso com nota aparece como evento informativo. Reconexão do stream recupera pelo cursor sem lacuna nem duplicata. Segredo conhecido sai redigido. Relógio de teste remove eventos com mais de 30 dias, preservando a decisão de auditoria por origem.
+
 ## Feature E17 — Piloto e aceite
 
 [Especificação do épico](02-EPICOS.md#e17)

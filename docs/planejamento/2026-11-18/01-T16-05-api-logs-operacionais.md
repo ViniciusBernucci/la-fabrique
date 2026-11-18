@@ -72,7 +72,7 @@
       existente de `Run` (veja o arquivo de teste do pacote) com linhas antigas e recentes em
       `operational_events` e confira a contagem e a `Decision`.
 
-   e. **Endpoints**, novo arquivo `internal/httpapi/operations.go` (siga o estilo de
+   e. **Endpoints**, novo arquivo `internal/httpapi/operational_events.go` (siga o estilo de
       `internal/httpapi/live.go`, reaproveite `cursorOf` de lá):
       - `GET /api/operations/events`: valida `after` (cursor), `level`/`source` (enum — `400
         invalid_request` se inválido), `q` (≤100 chars), `limit` (1–500, default 200). Query em

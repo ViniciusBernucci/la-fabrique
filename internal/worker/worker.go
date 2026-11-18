@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"sync/atomic"
 	"time"
+
+	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 )
 
 // Pinger verifica a disponibilidade do banco.
@@ -20,6 +22,7 @@ type Pinger interface {
 // Worker mantém o estado de saúde e emite heartbeats.
 type Worker struct {
 	db       Pinger
+	ops      persistence.DBTX // mesma conexão de db, quando ela também serve consultas (T16-05)
 	log      *slog.Logger
 	interval time.Duration
 	healthy  atomic.Bool
@@ -27,9 +30,14 @@ type Worker struct {
 	jobs     []*jobState
 }
 
-// New cria o worker.
+// New cria o worker. Quando db também implementa persistence.DBTX (o caso real, com o pool do
+// Postgres), os jobs passam a gravar seus eventos operacionais (T16-05); em testes com um Pinger
+// simples, a gravação fica desligada sem afetar o resto do comportamento.
 func New(db Pinger, log *slog.Logger, interval time.Duration) *Worker {
 	w := &Worker{db: db, log: log, interval: interval}
+	if ops, ok := db.(persistence.DBTX); ok {
+		w.ops = ops
+	}
 	w.healthy.Store(true)
 	return w
 }

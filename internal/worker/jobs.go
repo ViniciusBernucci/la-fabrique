@@ -6,12 +6,30 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ViniciusBernucci/le-fabrique/internal/opslog"
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 	"github.com/ViniciusBernucci/le-fabrique/internal/queue"
 	"github.com/ViniciusBernucci/le-fabrique/internal/recovery"
 	"github.com/ViniciusBernucci/le-fabrique/internal/retention"
 	"github.com/ViniciusBernucci/le-fabrique/internal/sentinel"
 )
+
+// opslogSource mapeia o nome do job (T16-05) para a origem do evento operacional. Nome não
+// listado aqui cai no padrão "sentinela" (ver 00-plano-T16-05, seção "Regras de negócio").
+func opslogSource(jobName string) string {
+	switch jobName {
+	case "retencao", "retencao-simulada":
+		return opslog.SourceRetencao
+	case "login-contas-ia":
+		return opslog.SourceCLILogin
+	case "fabrica":
+		return opslog.SourceFabrica
+	case "sentinela-eventos": // reavaliação da admissão por evento (cmd/worker/admission.go)
+		return opslog.SourceAdmissao
+	default: // "sentinela-rotinas", "liberar-decisoes", "recuperar-tentativas", etc.
+		return opslog.SourceSentinela
+	}
+}
 
 // Job é uma tarefa periódica do worker. Run devolve um resumo curto do que fez ("" = nada) ou erro.
 type Job struct {
@@ -76,12 +94,25 @@ func (w *Worker) exec(ctx context.Context, j *jobState) (err string) {
 	if runErr != nil {
 		j.status.LastError = runErr.Error()
 		w.log.Warn("tarefa do worker falhou", "job", j.Name, "error", runErr.Error())
+		w.emitOps(ctx, opslog.LevelError, opslogSource(j.Name), runErr.Error(), map[string]any{"job": j.Name})
 		return runErr.Error()
 	}
 	if note != "" {
 		w.log.Info("tarefa do worker", "job", j.Name, "resumo", note)
+		w.emitOps(ctx, opslog.LevelInfo, opslogSource(j.Name), note, map[string]any{"job": j.Name})
 	}
 	return ""
+}
+
+// emitOps grava o evento operacional (T16-05). Sem conexão disponível (ex.: testes com um Pinger
+// simples) ou falha na gravação, só avisa no log: nunca afeta o resultado do job que chamou.
+func (w *Worker) emitOps(ctx context.Context, level, source, message string, payload map[string]any) {
+	if w.ops == nil {
+		return
+	}
+	if err := opslog.Emit(ctx, w.ops, level, source, message, payload); err != nil {
+		w.log.Warn("evento operacional não gravado", "job", payload["job"], "error", err.Error())
+	}
 }
 
 func (w *Worker) runJobs(ctx context.Context) {

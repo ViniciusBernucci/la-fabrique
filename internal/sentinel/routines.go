@@ -4,13 +4,30 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/ViniciusBernucci/le-fabrique/internal/opslog"
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 )
+
+// opslogSource mapeia o nome da rotina (T16-05) para a origem do evento operacional. "admissao" é
+// a rotina admission.RoutineName ("admission.evaluate") — internal/sentinel não importa
+// internal/admission (ciclo: admission já importa sentinel), por isso o nome aparece aqui como
+// string literal em vez da constante. Nome não listado cai no padrão "sentinela".
+func opslogSource(routine string) string {
+	switch routine {
+	case RoutineIssueSync, RoutineCorrections, RoutinePRs, RoutineProjection:
+		return opslog.SourceSincronizacao
+	case "admission.evaluate":
+		return opslog.SourceAdmissao
+	default: // RoutineMaintenance e rotinas futuras não listadas
+		return opslog.SourceSentinela
+	}
+}
 
 // Rotinas internas independentes.
 const (
@@ -57,6 +74,7 @@ type State struct {
 type Scheduler struct {
 	DB       interface{ persistence.DBTX }
 	Now      func() time.Time
+	Log      *slog.Logger // opcional; usado só para avisar de falha ao gravar evento operacional (T16-05)
 	routines map[string]Routine
 }
 
@@ -181,6 +199,7 @@ func (s *Scheduler) RunOne(ctx context.Context, name, scope string, force bool) 
 		if err != nil {
 			return Result{}, err
 		}
+		s.emitOps(ctx, opslog.LevelError, opslogSource(name), runErr.Error(), map[string]any{"routine": name, "scope": scope})
 		return Result{Routine: name, Scope: scope, Ran: true, Err: runErr}, nil
 	}
 	_, err = s.DB.Exec(ctx, `UPDATE sentinel_routine_state SET cursor=$3, last_run_at=$4, last_success_at=$4, last_error='',
@@ -188,7 +207,15 @@ func (s *Scheduler) RunOne(ctx context.Context, name, scope string, force bool) 
 	if err != nil {
 		return Result{}, err
 	}
+	s.emitOps(ctx, opslog.LevelInfo, opslogSource(name), fmt.Sprintf("rotina %q concluída", name), map[string]any{"routine": name, "scope": scope})
 	return Result{Routine: name, Scope: scope, Ran: true}, nil
+}
+
+// emitOps grava o evento operacional (T16-05). Falha na gravação não afeta o Result da rotina.
+func (s *Scheduler) emitOps(ctx context.Context, level, source, message string, payload map[string]any) {
+	if err := opslog.Emit(ctx, s.DB, level, source, message, payload); err != nil && s.Log != nil {
+		s.Log.Warn("evento operacional não gravado", "routine", payload["routine"], "error", err.Error())
+	}
 }
 
 // Tick executa todas as rotinas vencidas nos escopos dados. Uma falha não impede as demais.

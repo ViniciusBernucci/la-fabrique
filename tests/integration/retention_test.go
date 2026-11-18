@@ -12,6 +12,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/checkpoints"
 	"github.com/ViniciusBernucci/le-fabrique/internal/contextpack"
 	"github.com/ViniciusBernucci/le-fabrique/internal/decisions"
+	"github.com/ViniciusBernucci/le-fabrique/internal/opslog"
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 	"github.com/ViniciusBernucci/le-fabrique/internal/resume"
 	"github.com/ViniciusBernucci/le-fabrique/internal/retention"
@@ -314,5 +315,52 @@ func TestRetentionValidatesThePolicyAndTheProtection(t *testing.T) {
 	other := newRetEnv(t)
 	if err := other.r.Protect(ctx, other.p.proj, cp, "motivo", "", ""); !errors.Is(err, persistence.ErrNotFound) {
 		t.Fatalf("o checkpoint é do projeto: %v", err)
+	}
+}
+
+// T16-05, CA-09 — eventos operacionais seguem a mesma política de 30 dias, com Decision por origem.
+func TestOperationalEventsAreRemovedAfter30DaysWithADecisionPerSource(t *testing.T) {
+	e := newRetEnv(t)
+	ctx := context.Background()
+	old := func(level, source, msg string, ageDays int) {
+		if err := opslog.Emit(ctx, e.e.db.Pool, level, source, msg, nil); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := e.e.db.Pool.Exec(ctx, `UPDATE operational_events SET created_at = $2 WHERE message = $1`, msg, e.daysAgo(ageDays)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old(opslog.LevelError, opslog.SourceRetencao, "velho-retencao-1", 40)
+	old(opslog.LevelError, opslog.SourceRetencao, "velho-retencao-2", 40)
+	old(opslog.LevelInfo, opslog.SourceSentinela, "velho-sentinela", 35)
+	old(opslog.LevelInfo, opslog.SourceFabrica, "recente-fabrica", 5)
+	count := func() (n int) {
+		_ = e.e.db.Pool.QueryRow(ctx, `SELECT count(*) FROM operational_events`).Scan(&n)
+		return
+	}
+	if count() != 4 {
+		t.Fatalf("setup: %d", count())
+	}
+	dry, err := e.r.Run(ctx, retention.Policy{}, true)
+	if err != nil || dry.OperationalEventsDeleted != 3 || count() != 4 {
+		t.Fatalf("simulação não remove nada: %+v %v", dry, err)
+	}
+	rep, err := e.r.Run(ctx, retention.Policy{}, false)
+	if err != nil || rep.OperationalEventsDeleted != 3 || count() != 1 {
+		t.Fatalf("%+v %v (restam %d)", rep, err, count())
+	}
+	by := map[string]string{}
+	for _, d := range rep.Decisions {
+		if d.Kind == "operational_events" {
+			by[d.Ref] = d.Action
+		}
+	}
+	if by[opslog.SourceRetencao] != "deleted" || by[opslog.SourceSentinela] != "deleted" {
+		t.Fatalf("decisões por origem: %+v", rep.Decisions)
+	}
+	var runs int
+	_ = e.e.db.Pool.QueryRow(ctx, `SELECT count(*) FROM retention_runs WHERE id = $1 AND operational_events_deleted = 3`, rep.RunID).Scan(&runs)
+	if runs != 1 {
+		t.Fatalf("auditoria da execução: %d", runs)
 	}
 }

@@ -70,15 +70,16 @@ func (r *Retention) now() time.Time {
 
 // Report é o resultado de uma execução da retenção.
 type Report struct {
-	RunID                string     `json:"run_id"`
-	DryRun               bool       `json:"dry_run"`
-	Now                  time.Time  `json:"now"`
-	LogsDeleted          int        `json:"logs_deleted"`
-	ExecutionsSummarized int        `json:"executions_summarized"`
-	CheckpointsDeleted   int        `json:"checkpoints_deleted"`
-	CheckpointsKept      int        `json:"checkpoints_kept"`
-	ObjectsDeleted       int        `json:"objects_deleted"`
-	Decisions            []Decision `json:"decisions"`
+	RunID                    string     `json:"run_id"`
+	DryRun                   bool       `json:"dry_run"`
+	Now                      time.Time  `json:"now"`
+	LogsDeleted              int        `json:"logs_deleted"`
+	ExecutionsSummarized     int        `json:"executions_summarized"`
+	CheckpointsDeleted       int        `json:"checkpoints_deleted"`
+	CheckpointsKept          int        `json:"checkpoints_kept"`
+	ObjectsDeleted           int        `json:"objects_deleted"`
+	OperationalEventsDeleted int        `json:"operational_events_deleted"`
+	Decisions                []Decision `json:"decisions"`
 }
 
 // Decision é a decisão sobre um item.
@@ -252,6 +253,37 @@ func (r *Retention) Run(ctx context.Context, pol Policy, dryRun bool) (Report, e
 			rep.CheckpointsDeleted++
 		}
 	}
+
+	// 3. Eventos operacionais (T16-05) com mais de LogDays: mesma política dos logs de execução,
+	// sem resumo por item — a Decision abaixo (por origem) já é o resumo de auditoria permanente.
+	opRows, err := r.DB.Query(ctx, `SELECT source, count(*) FROM operational_events WHERE created_at < $1 GROUP BY source ORDER BY source`, logCut)
+	if err != nil {
+		return rep, persistence.MapError(err)
+	}
+	type opGroup struct {
+		source string
+		n      int
+	}
+	var opGroups []opGroup
+	for opRows.Next() {
+		var g opGroup
+		if err := opRows.Scan(&g.source, &g.n); err != nil {
+			opRows.Close()
+			return rep, persistence.MapError(err)
+		}
+		opGroups = append(opGroups, g)
+	}
+	opRows.Close()
+	for _, g := range opGroups {
+		note("operational_events", g.source, deleteWord, fmt.Sprintf("%d evento(s) com mais de %d dias", g.n, pol.LogDays))
+		rep.OperationalEventsDeleted += g.n
+	}
+	if !dryRun && len(opGroups) > 0 {
+		if _, err := r.DB.Exec(ctx, `DELETE FROM operational_events WHERE created_at < $1`, logCut); err != nil {
+			return rep, persistence.MapError(err)
+		}
+	}
+
 	if !dryRun {
 		for project, ids := range cpDelete {
 			n, objs, err := r.Checkpoints.Delete(ctx, project, ids)
@@ -272,9 +304,9 @@ func (r *Retention) Run(ctx context.Context, pol Policy, dryRun bool) (Report, e
 	}
 	// Auditoria.
 	var audit string
-	err = r.DB.QueryRow(ctx, `INSERT INTO retention_runs (dry_run, now_ref, log_days, grace_days, logs_deleted, executions_summarized, checkpoints_deleted, checkpoints_kept, objects_deleted)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`, dryRun, now, pol.LogDays, pol.GraceDays, rep.LogsDeleted, rep.ExecutionsSummarized,
-		rep.CheckpointsDeleted, rep.CheckpointsKept, rep.ObjectsDeleted).Scan(&audit)
+	err = r.DB.QueryRow(ctx, `INSERT INTO retention_runs (dry_run, now_ref, log_days, grace_days, logs_deleted, executions_summarized, checkpoints_deleted, checkpoints_kept, objects_deleted, operational_events_deleted)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`, dryRun, now, pol.LogDays, pol.GraceDays, rep.LogsDeleted, rep.ExecutionsSummarized,
+		rep.CheckpointsDeleted, rep.CheckpointsKept, rep.ObjectsDeleted, rep.OperationalEventsDeleted).Scan(&audit)
 	if err != nil {
 		return rep, persistence.MapError(err)
 	}

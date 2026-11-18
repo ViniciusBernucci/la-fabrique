@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -46,7 +47,7 @@ func run() int {
 	defer pool.Close()
 
 	w := worker.New(pool, log, cfg.HeartbeatInterval)
-	registerJobs(w, pool, cfg)
+	registerJobs(w, pool, cfg, log)
 	srv := &http.Server{Addr: cfg.HealthAddr, Handler: w.HealthHandler(), ReadHeaderTimeout: 5 * time.Second}
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
@@ -69,7 +70,7 @@ func run() int {
 }
 
 // registerJobs liga ao worker o que não depende do executor de agentes.
-func registerJobs(w *worker.Worker, pool *pgxpool.Pool, cfg config.Worker) {
+func registerJobs(w *worker.Worker, pool *pgxpool.Pool, cfg config.Worker, log *slog.Logger) {
 	cps := &checkpoints.Store{DB: pool}
 	q := &queue.Queue{DB: pool, Checkpoints: cps, RequireRecovery: true, Gates: map[string]queue.Gate{queue.WaitDecision: queue.DecisionGate{DB: pool}}}
 	rec := &recovery.Recoverer{DB: pool, Queue: q, Checkpoints: cps, Redactor: security.NewRedactor(),
@@ -78,7 +79,7 @@ func registerJobs(w *worker.Worker, pool *pgxpool.Pool, cfg config.Worker) {
 	w.AddJob(worker.RecoverJob(rec, cfg.JobsInterval))
 	// Sentinela: rotinas com relógio/cursor próprios por projeto. As rotinas concretas (sync, correções,
 	// PRs, manutenção) são registradas pelos seus pacotes; sem registro o Tick não faz nada.
-	sch := &sentinel.Scheduler{DB: pool}
+	sch := &sentinel.Scheduler{DB: pool, Log: log}
 	if err := registerIssueSync(sch, pool, cfg); err != nil {
 		fmt.Fprintln(os.Stderr, "worker: "+err.Error())
 	}

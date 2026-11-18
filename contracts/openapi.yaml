@@ -1123,6 +1123,41 @@ paths:
         "401": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
 
+  /operations/events:
+    get:
+      tags: [operacao-ao-vivo]
+      summary: Histórico pesquisável dos eventos operacionais da fábrica (T16-05), após um cursor
+      description: >
+        Eventos de fundo do worker (sentinela, admissão, retenção, sincronização, cli-login) e erros de
+        configuração do boot do worker depois que o banco já está disponível. Não inclui eventos de
+        execução por projeto (ver /projects/{id}/executions/{executionId}/events).
+      parameters:
+        - {name: after, in: query, required: false, schema: {type: integer, minimum: 0}}
+        - {name: level, in: query, required: false, schema: {type: string, enum: [info, warn, error]}}
+        - {name: source, in: query, required: false, schema: {type: string, enum: [sentinela, admissao, retencao, sincronizacao, clilogin, fabrica]}}
+        - {name: q, in: query, required: false, schema: {type: string, maxLength: 100}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 500}}
+      responses:
+        "200": {description: Eventos operacionais, content: {application/json: {schema: {$ref: "#/components/schemas/OperationalEvents"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+
+  /operations/stream:
+    get:
+      tags: [operacao-ao-vivo]
+      summary: Eventos operacionais da fábrica ao vivo (SSE) com reconexão pelo cursor
+      description: >
+        Mesmo padrão de /projects/{id}/executions/{executionId}/stream: `id: <seq>`, `Last-Event-ID`
+        (ou `?after=`) na reconexão, heartbeat (`: ping`) e `event: reconnect` após 5 minutos. Sem
+        filtro de nível/origem no servidor (o histórico filtra; o stream envia tudo).
+      parameters:
+        - {name: after, in: query, required: false, schema: {type: integer, minimum: 0}}
+        - {name: Last-Event-ID, in: header, required: false, schema: {type: integer, minimum: 0}}
+      responses:
+        "200": {description: Fluxo text/event-stream, content: {text/event-stream: {schema: {type: string}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+
   /projects/{id}/profile/discover:
     post:
       tags: [recursos]
@@ -2653,6 +2688,22 @@ components:
       required: [items, next_cursor]
       properties:
         items: {type: array, items: {type: object, required: [seq, type, payload, created_at], properties: {seq: {type: integer}, type: {type: string}, payload: {}, created_at: {type: string, format: date-time}}}}
+        next_cursor: {type: integer}
+    OperationalEvent:
+      type: object
+      required: [seq, level, source, message, payload, created_at]
+      properties:
+        seq: {type: integer}
+        level: {type: string, enum: [info, warn, error]}
+        source: {type: string, enum: [sentinela, admissao, retencao, sincronizacao, clilogin, fabrica]}
+        message: {type: string}
+        payload: {}
+        created_at: {type: string, format: date-time}
+    OperationalEvents:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/OperationalEvent"}}
         next_cursor: {type: integer}
     PlanCriterion:
       type: object
