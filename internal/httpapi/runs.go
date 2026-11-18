@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/ViniciusBernucci/le-fabrique/internal/flow"
 	"github.com/ViniciusBernucci/le-fabrique/internal/persistence"
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
 	"github.com/ViniciusBernucci/le-fabrique/internal/releases"
@@ -240,4 +241,55 @@ func (s *Server) runDiagnostics(w http.ResponseWriter, r *http.Request) {
 	}
 	report := s.redactor.Redact(runner.Report(run, events))
 	writeJSON(w, http.StatusOK, map[string]any{"report": report, "hints": hints, "failure": map[string]string{"node": node, "reason": s.redactor.Redact(reason)}})
+}
+
+// startIssueRun inicia a fábrica para uma Issue da origem: lê os requisitos na origem (Jira/ClickUp), exige que a Issue
+// esteja liberada (PRD-DOC-CONCLUIDO ou CORRECAO_PR) e roda o fluxo PUBLICADO do projeto. A ponte com a Sentinela
+// passa a pedir as transições de status conforme o fluxo avança.
+func (s *Server) startIssueRun(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.projectID(w, r)
+	if !ok {
+		return
+	}
+	key := strings.TrimSpace(r.PathValue("key"))
+	if key == "" || len(key) > 100 {
+		writeError(w, r, http.StatusBadRequest, "invalid_request", "Chave da Issue inválida.", "Informe a chave da Issue (ex.: ABC-12).")
+		return
+	}
+	p, err := projects.Get(r.Context(), s.db, id)
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	var remoteID, title, status string
+	err = s.db.QueryRow(r.Context(), `SELECT remote_id, title, status_code FROM issue_registry WHERE project_id = $1 AND issue_key = $2`, id, key).Scan(&remoteID, &title, &status)
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "not_found", "A Issue "+key+" não está registrada neste projeto.", "Rode o sync das Issues e tente de novo.")
+		return
+	}
+	if status != flow.PRDDocConcluido && status != flow.CorrecaoPR {
+		writeError(w, r, http.StatusConflict, "issue_not_released", "A Issue está em "+status+": a fábrica só executa Issues em "+flow.PRDDocConcluido+" ou "+flow.CorrecaoPR+".",
+			"Complete o PRD e o contrato inicial (ou libere a correção na origem) antes de executar.")
+		return
+	}
+	tr, err := s.sourceTracker(r, p)
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	item, err := tr.GetItem(r.Context(), remoteID)
+	if err != nil {
+		writeError(w, r, http.StatusBadGateway, "origin_unavailable", "Não consegui ler a Issue na origem.", "Confira a conexão da origem e tente de novo.")
+		return
+	}
+	task := "Issue " + key + ": " + title + "\n\n" + strings.TrimSpace(item.Description)
+	run, err := runner.Start(r.Context(), s.db, runner.StartInput{
+		ProjectID: id, Title: key + " — " + title, Task: task, Workspace: p.Repository.Path, CreatedBy: s.adminID(r),
+		IssueKey: key, PRDDone: true, Correction: status == flow.CorrecaoPR,
+	})
+	if err != nil {
+		s.writeRunError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, run)
 }

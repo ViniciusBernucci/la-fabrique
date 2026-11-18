@@ -40,6 +40,11 @@ services:
       CLI_LOGIN: "true"
       # Fábrica: o worker conduz os workflows publicados (ADR-0069). FACTORY_PUSH liga enviar a branch e abrir a Draft PR.
       FACTORY_RUN: "true"
+      # Sentinela (opt-in; escrevem no Jira/GitHub reais): SENTINEL_ISSUE_SYNC importa as Issues e PROJETA o status das
+      # execuções no Jira (precisa de permissão de escrita na conexão); SENTINEL_PR_SYNC acompanha as PRs abertas
+      # (rodadas de revisão viram Issues de correção; o merge conclui). Ligue no .env quando quiser o ciclo completo.
+      SENTINEL_ISSUE_SYNC: ${SENTINEL_ISSUE_SYNC:-false}
+      SENTINEL_PR_SYNC: ${SENTINEL_PR_SYNC:-false}
       FACTORY_PUSH: ${FACTORY_PUSH:-false}
       FACTORY_IMAGE: le-fabrique/cli:dev
       # Checks e scripts com a toolchain deste repositório (make tools-image). Rede dos checks: none (padrão) ou egress.

@@ -16,6 +16,7 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/oauth"
 	"github.com/ViniciusBernucci/le-fabrique/internal/runner"
 	"github.com/ViniciusBernucci/le-fabrique/internal/security"
+	"github.com/ViniciusBernucci/le-fabrique/internal/sentinel"
 	"github.com/ViniciusBernucci/le-fabrique/internal/worker"
 )
 
@@ -44,6 +45,7 @@ func registerFactory(w *worker.Worker, pool *pgxpool.Pool, cfg config.Worker) {
 		Workspaces: cfg.WorkspacesDir, CLIImage: cfg.FactoryImage, ToolImage: cfg.FactoryToolImage, ChecksNetwork: cfg.FactoryChecksNetwork, Docker: &execution.Docker{}, Vault: vault, AllowPush: cfg.FactoryPush,
 		Log: log, Redact: rd.Redact,
 	}}
+	bridge := &runner.IssueBridge{DB: pool, Coord: &sentinel.Coordinator{DB: pool}}
 	owner := fmt.Sprintf("worker-%d", os.Getpid())
 	w.AddJob(worker.Job{Name: "fabrica", Every: 3 * time.Second, Run: func(ctx context.Context) (string, error) {
 		run, err := runner.Claim(ctx, pool, owner, 2*time.Minute)
@@ -51,7 +53,7 @@ func registerFactory(w *worker.Worker, pool *pgxpool.Pool, cfg config.Worker) {
 			return "", err
 		}
 		log.Info("execução reclamada", "execution", run.ExecutionID, "title", run.Title)
-		done, err := runner.Advance(ctx, pool, *run, runner.Options{Exec: ex, Lease: 2 * time.Minute, Before: ex.Preflight, Log: log})
+		done, err := runner.Advance(ctx, pool, *run, runner.Options{Exec: ex, Lease: 2 * time.Minute, Before: ex.Preflight, Log: log, Progress: bridge.Progress})
 		switch {
 		case errors.Is(err, runner.ErrCancelled):
 			return fmt.Sprintf("execução %s cancelada", run.ExecutionID), nil

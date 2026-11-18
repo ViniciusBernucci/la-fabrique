@@ -122,7 +122,11 @@ function RunItem({
       <div className="run-head">
         <span>
           <strong>{run.title}</strong>
-          <small className="muted"> · {new Date(run.created_at).toLocaleString("pt-BR")}</small>
+          <small className="muted">
+            {" "}
+            · {run.issue_key ? `Issue ${run.issue_key} · ` : ""}
+            {new Date(run.created_at).toLocaleString("pt-BR")}
+          </small>
         </span>
         <span className={badge}>
           {run.status === "completed" && run.outcome === "failure"

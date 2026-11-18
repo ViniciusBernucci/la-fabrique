@@ -1013,6 +1013,26 @@ paths:
         "404": {$ref: "#/components/responses/Error"}
         "409": {$ref: "#/components/responses/Error"}
         "422": {description: O fluxo tem pendências (envelope de erro mais a lista `problems`)}
+  /projects/{id}/issues/{key}/run:
+    post:
+      tags: [execucoes]
+      summary: Executa a fábrica para uma Issue da origem (Jira/ClickUp)
+      description: >
+        Lê os requisitos da Issue na origem e roda o workflow PUBLICADO do projeto. A Issue precisa estar em
+        `PRD-DOC-CONCLUIDO` (feature) ou `CORRECAO_PR` (correção liberada); senão 409 `issue_not_released`. Conforme o
+        fluxo avança, a Sentinela pede as transições de status com a evidência real e a Draft PR aberta passa a ser
+        acompanhada pelo ciclo da PR.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: key, in: path, required: true, schema: {type: string, maxLength: 100}}
+      responses:
+        "201": {description: Execução criada, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowRun"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "502": {$ref: "#/components/responses/Error"}
   /projects/{id}/runs/{runId}:
     get:
       tags: [execucoes]
@@ -2319,7 +2339,7 @@ components:
   schemas:
     WorkflowRun:
       type: object
-      required: [execution_id, project_id, workflow_version_id, title, task, workspace, kind, status, outcome, failure, pending, trace, created_at, updated_at]
+      required: [execution_id, project_id, workflow_version_id, title, task, workspace, kind, issue_key, status, outcome, failure, pending, trace, created_at, updated_at]
       properties:
         execution_id: {type: string, format: uuid}
         project_id: {type: string, format: uuid}
@@ -2328,6 +2348,7 @@ components:
         task: {type: string}
         workspace: {type: string}
         kind: {type: string, enum: [manual, test]}
+        issue_key: {type: string, description: "Issue da origem que originou a execução (vazio = pedido manual)"}
         status: {type: string, enum: [queued, running, waiting, awaiting_decision, completed, failed, cancelled]}
         outcome: {type: string, description: "success ou failure, quando concluída"}
         failure: {type: string}

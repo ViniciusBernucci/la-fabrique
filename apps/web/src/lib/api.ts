@@ -723,6 +723,7 @@ export interface WorkflowRun {
   task: string;
   workspace: string;
   kind: "manual" | "test";
+  issue_key: string;
   status: WorkflowRunStatus;
   outcome: string;
   failure: string;
@@ -1315,6 +1316,11 @@ export const api = {
     }>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/diagnostics`, {
       signal,
     }),
+  startIssueRun: (projectId: string, issueKey: string) =>
+    post<WorkflowRun>(
+      `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueKey)}/run`,
+      {},
+    ),
   getRun: (projectId: string, runId: string, signal?: AbortSignal) =>
     request<WorkflowRun>(
       `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}`,

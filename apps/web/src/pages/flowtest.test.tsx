@@ -44,6 +44,7 @@ function run(over: Partial<WorkflowRun> = {}): WorkflowRun {
     task: "",
     workspace: "",
     kind: "test",
+    issue_key: "",
     status: "running",
     outcome: "",
     failure: "",

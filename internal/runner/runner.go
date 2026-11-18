@@ -60,6 +60,7 @@ type StartInput struct {
 	Workspace  string // pasta do repositório, relativa à raiz de workspaces
 	CreatedBy  string
 	Kind       string // "manual" (padrão) ou "test"
+	IssueKey   string // Issue da origem que originou a execução ("" = pedido manual)
 	// Variáveis de partida do fluxo padrão.
 	Correction bool // fabrica.correcao
 	PRDDone    bool // prd.concluido
@@ -74,6 +75,7 @@ type Run struct {
 	Task        string                `json:"task"`
 	Workspace   string                `json:"workspace"`
 	Kind        string                `json:"kind"`
+	IssueKey    string                `json:"issue_key"`
 	Status      string                `json:"status"`
 	Outcome     string                `json:"outcome"`
 	Failure     string                `json:"failure"`
@@ -92,12 +94,12 @@ type FieldError struct{ Field, Message string }
 func (e *FieldError) Error() string { return e.Field + ": " + e.Message }
 func (e *FieldError) Unwrap() error { return persistence.ErrInvalidInput }
 
-const runColumns = `r.execution_id, r.project_id, r.workflow_version_id, r.title, r.task, r.workspace, r.kind, r.status, r.outcome, r.failure, r.state, r.wake_at, r.created_at, r.updated_at`
+const runColumns = `r.execution_id, r.project_id, r.workflow_version_id, r.title, r.task, r.workspace, r.kind, r.issue_key, r.status, r.outcome, r.failure, r.state, r.wake_at, r.created_at, r.updated_at`
 
 func scanRun(row interface{ Scan(...any) error }) (Run, error) {
 	var r Run
 	var raw []byte
-	if err := row.Scan(&r.ExecutionID, &r.ProjectID, &r.VersionID, &r.Title, &r.Task, &r.Workspace, &r.Kind, &r.Status, &r.Outcome, &r.Failure,
+	if err := row.Scan(&r.ExecutionID, &r.ProjectID, &r.VersionID, &r.Title, &r.Task, &r.Workspace, &r.Kind, &r.IssueKey, &r.Status, &r.Outcome, &r.Failure,
 		&raw, &r.WakeAt, &r.CreatedAt, &r.UpdatedAt); err != nil {
 		return r, persistence.MapError(err)
 	}
@@ -148,13 +150,30 @@ func Start(ctx context.Context, db DB, in StartInput) (Run, error) {
 	if in.Kind != KindManual && in.Kind != KindTest {
 		return Run{}, &FieldError{"kind", "Tipo de execução inválido."}
 	}
-	feat, err := persistence.CreateFeature(ctx, db, in.ProjectID, "manual-"+randomSuffix(), in.Title)
+	externalID := "manual-" + randomSuffix()
+	if in.IssueKey != "" {
+		externalID = in.IssueKey
+	}
+	feat, err := persistence.CreateFeature(ctx, db, in.ProjectID, externalID, in.Title)
+	createdFeature := true
+	if errors.Is(err, persistence.ErrDuplicate) && in.IssueKey != "" {
+		// nova tentativa da mesma Issue: reaproveita a feature (CreateExecution numera a próxima tentativa)
+		createdFeature = false
+		var f persistence.Feature
+		if qerr := db.QueryRow(ctx, `SELECT id::text, project_id::text, external_id, title FROM features WHERE project_id = $1 AND external_id = $2`,
+			in.ProjectID, in.IssueKey).Scan(&f.ID, &f.ProjectID, &f.ExternalID, &f.Title); qerr != nil {
+			return Run{}, persistence.MapError(qerr)
+		}
+		feat, err = f, nil
+	}
 	if err != nil {
 		return Run{}, err
 	}
 	ex, ver, err := releases.StartExecution(ctx, db, in.ProjectID, feat.ID, in.WorkflowID)
 	if err != nil {
-		_, _ = db.Exec(ctx, `DELETE FROM features WHERE id = $1`, feat.ID)
+		if createdFeature {
+			_, _ = db.Exec(ctx, `DELETE FROM features WHERE id = $1`, feat.ID)
+		}
 		return Run{}, err
 	}
 	st, err := workflows.NewRun(ver.FlatGraph, InitialVars(in))
@@ -165,10 +184,10 @@ func Start(ctx context.Context, db DB, in StartInput) (Run, error) {
 	var run Run
 	err = persistence.WithTx(ctx, db, func(tx pgx.Tx) error {
 		row := tx.QueryRow(ctx, `
-			INSERT INTO execution_runs (execution_id, project_id, workflow_version_id, title, task, workspace, state, created_by, kind)
-			VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
+			INSERT INTO execution_runs (execution_id, project_id, workflow_version_id, title, task, workspace, state, created_by, kind, issue_key)
+			VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10)
 			RETURNING `+strings.ReplaceAll(runColumns, "r.", ""),
-			ex.ID, in.ProjectID, ver.ID, in.Title, in.Task, in.Workspace, string(raw), in.CreatedBy, in.Kind)
+			ex.ID, in.ProjectID, ver.ID, in.Title, in.Task, in.Workspace, string(raw), in.CreatedBy, in.Kind, in.IssueKey)
 		var err error
 		if run, err = scanRun(row); err != nil {
 			return err
@@ -333,6 +352,8 @@ type Options struct {
 	WatchEvery time.Duration
 	// Before roda uma vez, antes do primeiro passo (o pré-voo do ambiente). Seus eventos de diagnóstico ficam na execução.
 	Before func(ctx context.Context, run Run)
+	// Progress roda depois de cada passo salvo, com o estado atualizado (a ponte com a Sentinela e a PR). Não pode falhar a execução.
+	Progress func(ctx context.Context, run Run, st workflows.RunState)
 	// Log recebe um registro por passo e por evento de diagnóstico (nunca segredos).
 	Log *slog.Logger
 }
@@ -390,6 +411,9 @@ func Advance(ctx context.Context, db DB, run Run, opt Options) (Run, error) {
 		if err := save(ctx, db, &run, *s, seen, opt.Lease, ms); err != nil {
 			return err
 		}
+		if opt.Progress != nil {
+			opt.Progress(ctx, run, *s)
+		}
 		for _, step := range s.Trace[seen:] {
 			lg.Info("passo do fluxo", "node", step.Node, "type", step.Type, "port", step.Port, "note", step.Note, "ms", ms)
 		}
@@ -408,6 +432,9 @@ func Advance(ctx context.Context, db DB, run Run, opt Options) (Run, error) {
 	}
 	if err := save(context.WithoutCancel(ctx), db, &run, st, seen, opt.Lease, time.Since(lastStep).Milliseconds()); err != nil {
 		return run, err
+	}
+	if opt.Progress != nil {
+		opt.Progress(context.WithoutCancel(ctx), run, st)
 	}
 	return Get(context.WithoutCancel(ctx), db, run.ProjectID, run.ExecutionID)
 }
