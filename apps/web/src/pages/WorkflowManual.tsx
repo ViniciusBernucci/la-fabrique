@@ -40,8 +40,9 @@ const sections: Section[] = [
           <strong>nunca executa</strong> nada: ele só guarda o desenho. Você pode errar, testar e
           refazer sem nenhum efeito sobre o projeto. Quando um fluxo é <em>publicado</em>, uma cópia
           congelada dele passa a valer para as execuções (alterar o rascunho depois não muda o que
-          já foi publicado). Esta tela edita o rascunho; a publicação e a execução real ainda estão
-          sendo ligadas ao painel.
+          já foi publicado). Esta tela edita o rascunho e o botão <em>Publicar</em> congela a
+          versão; a execução é iniciada em <em>Projeto → Executar a fábrica</em> (veja “Na
+          prática”).
         </p>
       </>
     ),
@@ -569,6 +570,166 @@ const sections: Section[] = [
     ),
   },
   {
+    id: "execucao",
+    title: "Na prática: o que acontece quando o fluxo roda",
+    body: (
+      <>
+        <p>
+          Para rodar, o workflow precisa estar <strong>publicado</strong> (botão <em>Publicar</em>{" "}
+          no editor, depois de salvar e sem pendências). Em <em>Projeto → Executar a fábrica</em>{" "}
+          você informa um título e o que a fábrica deve fazer; o <strong>worker</strong> (o processo
+          que trabalha em segundo plano) conduz o fluxo, um nó por vez, e você acompanha tudo num{" "}
+          <strong>terminal ao vivo</strong>.
+        </p>
+        <h4>Quando chega num nó de Agente</h4>
+        <ol>
+          <li>
+            A fábrica cria uma <strong>cópia de trabalho</strong> do repositório do projeto, numa
+            branch própria da execução (<code>lf/…</code>). O código original nunca é tocado.
+          </li>
+          <li>
+            Abre um <strong>terminal isolado</strong> (um contêiner descartável) com a cópia do
+            código e a <strong>conta de IA</strong> do agente. Se o agente não fixa uma conta, a
+            fábrica usa a única conta ativa daquele provedor (Claude ou Codex); se não houver
+            nenhuma, ou houver mais de uma, o nó falha dizendo o que fazer.
+          </li>
+          <li>
+            Grava, dentro do terminal, as <strong>skills do agente</strong> (com as pastas{" "}
+            <code>references/</code>) em <code>.claude/skills/</code> (Claude) ou{" "}
+            <code>.agents/skills/</code> (Codex).
+          </li>
+          <li>
+            Roda o <strong>CLI oficial</strong> (<code>claude</code> ou <code>codex</code>) com a
+            LLM escolhida e um <strong>comando montado pela fábrica</strong>: quem o agente é, qual
+            skill usar, as instruções dele, a tarefa da execução, o campo <em>Instrução</em> do nó e
+            as regras (não fazer commit, push nem merge). Você não escreve esse comando.
+          </li>
+          <li>
+            O que o CLI imprime aparece no terminal da tela. Ao terminar, a fábrica recolhe{" "}
+            <strong>só as alterações de arquivos</strong> (como um patch) e as aplica na cópia de
+            trabalho; as skills da fábrica não entram no patch. Depois o terminal é destruído.
+          </li>
+          <li>
+            Sucesso segue por <code>out</code>; falha (CLI recusou, passou do tempo, conta ausente)
+            segue por <code>error</code>.
+          </li>
+        </ol>
+        <p className="muted">
+          Atenção: o terminal do agente <strong>tem acesso à internet</strong> (o CLI precisa falar
+          com a Anthropic ou a OpenAI) e a fábrica ainda não restringe o destino. Scripts e checks,
+          ao contrário, rodam sem rede.
+        </p>
+        <h4>Os outros nós de trabalho</h4>
+        <ul>
+          <li>
+            <strong>Script e Testes e checks:</strong> rodam os comandos num terminal isolado{" "}
+            <em>sem rede</em>, sobre a cópia atual do código. Checks param no primeiro comando que
+            falhar. O Script mantém as alterações de arquivos que fizer; os Checks não. Imagens
+            mínimas não têm <code>make</code>: o administrador pode apontar uma imagem com a
+            toolchain do projeto (<code>FACTORY_TOOL_IMAGE</code>).
+          </li>
+          <li>
+            <strong>Git:</strong> <code>commit</code> grava as alterações na branch da execução (sem
+            alterações, não cria commit vazio). <code>push</code> e <code>draft_pr</code> enviam a
+            branch ao GitHub e abrem a Draft PR — são <strong>efeitos externos</strong> e só
+            funcionam com <code>FACTORY_PUSH=true</code> no worker; desligado, o nó falha dizendo
+            como ligar. A fábrica nunca envia para a branch base.
+          </li>
+          <li>
+            <strong>Skill:</strong> ainda não tem executor na fábrica (o nó falha explicando isso).
+          </li>
+        </ul>
+        <h4>Paradas e retomada</h4>
+        <ul>
+          <li>
+            <strong>Decisão humana:</strong> a execução fica <em>Esperando uma decisão sua</em>; os
+            botões Aprovar e Recusar aparecem na própria execução.
+          </li>
+          <li>
+            <strong>Espera durável:</strong> a execução dorme e o worker a retoma sozinho no prazo.
+          </li>
+          <li>
+            <strong>Cancelar:</strong> interrompe o nó em andamento (o terminal é encerrado).
+          </li>
+          <li>
+            <strong>Worker reiniciado no meio:</strong> a execução é retomada do último passo salvo;
+            um nó que estava rodando pode ser repetido.
+          </li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    id: "teste",
+    title: "O botão Testar o fluxo (painel de teste em tempo real)",
+    body: (
+      <>
+        <p>
+          O botão <strong>Testar o fluxo</strong> existe no editor de workflows e no painel{" "}
+          <em>Executar a fábrica</em> do projeto. Ele roda{" "}
+          <strong>qualquer fluxo de feature</strong>, em <strong>qualquer projeto</strong>, com uma{" "}
+          <strong>feature fictícia padronizada</strong>: um “selo de saúde” com uma trilha de{" "}
+          <em>backend</em> (descrever o endpoint <code>GET /saude</code>) e uma de <em>frontend</em>{" "}
+          (uma página com o selo “Sistema saudável”). Ao clicar, um painel abre mostrando o teste
+          acontecer.
+        </p>
+        <h4>O que o painel mostra</h4>
+        <Fields
+          rows={[
+            [
+              "Veredito",
+              "Em andamento, pausado (esperando uma decisão), cancelado, com falha ou concluído com sucesso, com o tempo e quantas etapas já passaram.",
+            ],
+            [
+              "Etapas",
+              "Todos os nós do fluxo, na ordem em que o fluxo os alcança, cada um pendente, rodando, concluído, pausado, falhou ou não percorrido.",
+            ],
+            [
+              "Terminais",
+              "Um terminal por nó que trabalha (agente, script, checks, git…): o que o CLI imprimiu e os comandos rodados, em tempo real.",
+            ],
+            [
+              "Orientações",
+              "Em cada terminal de agente: a configuração usada (agente, provedor, modelo, conta, skills) e o comando completo que a fábrica entregou ao agente, para você conferir exatamente o que ele recebeu.",
+            ],
+            [
+              "Onde falhou",
+              "Se algo falhar, uma caixa vermelha diz o nó, o tipo e o motivo (por exemplo, o comando de check que reprovou).",
+            ],
+            ["Linha do tempo", "Todos os eventos da execução, para auditoria."],
+          ]}
+        />
+        <h4>Como o teste se comporta (e por que é seguro)</h4>
+        <ul>
+          <li>
+            O fluxo é <strong>publicado</strong> automaticamente antes do teste (se o conteúdo não
+            mudou, é a mesma versão). Fluxos com pendências de validação não rodam: o painel explica
+            o que corrigir. Subfluxos não têm execução própria: teste um fluxo de feature que os
+            use.
+          </li>
+          <li>
+            Os nós de <strong>checks</strong> conferem os dois arquivos da feature fictícia (em vez
+            dos comandos do nó), então o teste funciona em qualquer stack. Os agentes recebem um
+            bloco “modo teste” que diz para fazerem só o papel da etapa aplicado à feature fictícia.
+          </li>
+          <li>
+            <strong>Push e Draft PR são simulados</strong>: nada é enviado ao GitHub. A{" "}
+            <strong>espera durável</strong> vira um instante. Nós de <strong>decisão humana</strong>{" "}
+            param de verdade e o painel mostra Aprovar e Recusar.
+          </li>
+          <li>
+            O teste usa uma <strong>cópia</strong> do repositório do projeto; se o projeto ainda não
+            tem repositório, usa um repositório descartável. O código original nunca é alterado.
+          </li>
+          <li>
+            Os agentes rodam de verdade (o CLI oficial com a conta conectada), então o teste{" "}
+            <strong>gasta cota da assinatura</strong>.
+          </li>
+        </ul>
+      </>
+    ),
+  },
+  {
     id: "expressoes",
     title: "Expressões: a linguagem das condições",
     body: (
@@ -741,9 +902,10 @@ const sections: Section[] = [
             [
               "Informadas ao iniciar a execução",
               <>
-                Quem inicia a execução (a fábrica) entrega os dados de partida. No fluxo padrão:{" "}
-                {c("fabrica.correcao")} (verdadeiro se é correção de PR) e {c("prd.concluido")}{" "}
-                (verdadeiro se o PRD da tarefa já está concluído).
+                Quem inicia a execução (o formulário <em>Executar a fábrica</em>) entrega os dados
+                de partida: {c("fabrica.correcao")} (verdadeiro se marcou “é a correção de uma Pull
+                Request”), {c("prd.concluido")} (verdadeiro se marcou “o PRD já está concluído”) e
+                os textos {c("fabrica.titulo")} e {c("fabrica.tarefa")}.
               </>,
             ],
             [
@@ -766,13 +928,38 @@ const sections: Section[] = [
             ],
           ]}
         />
+        <h4>O que cada nó de trabalho devolve</h4>
+        <Fields
+          rows={[
+            [
+              "Agente",
+              <>
+                {c("ok")} (verdadeiro/falso), {c("resumo")} (a resposta final do agente),{" "}
+                {c("alterou_arquivos")}, {c("sessao")}, {c("tokens_entrada")}, {c("tokens_saida")}{" "}
+                e, se falhou, {c("erro")}. Ex.: {c("guard_planning.alterou_arquivos == true")}.
+              </>,
+            ],
+            [
+              "Script e Testes e checks",
+              <>
+                {c("ok")}, {c("codigo")} (código de saída do comando que falhou), {c("saida")} (o
+                fim da saída dos comandos) e, se falhou, {c("erro")}.
+              </>,
+            ],
+            [
+              "Git",
+              <>
+                {c("ok")}, {c("branch")}, {c("commit")} (o SHA), {c("alteracoes")} (houve algo para
+                commitar) e, na Draft PR, {c("pr_url")} e {c("pr_numero")}.
+              </>,
+            ],
+            ["Skill", "As variáveis que a própria skill gravar."],
+          ]}
+        />
         <p className="muted">
-          Atenção: quais campos cada tipo de nó devolve depende de como ele foi construído. Hoje o
-          caso mais claro é o nó <strong>Skill</strong>, que devolve as variáveis que a própria
-          skill grava. Os executores reais de Agente, Script, Checks e Git ainda estão sendo ligados
-          à execução ponta a ponta; por isso, evite basear decisões em campos que você não viu serem
-          produzidos. Para decidir com segurança, use a <strong>saída de erro</strong> do nó (ela
-          sempre existe) em vez de ler um campo.
+          Em caso de falha o nó sai por <code>error</code> e as mesmas variáveis ficam disponíveis
+          (com <code>ok</code> falso e o motivo em <code>erro</code>). Em nós com o ID de caracteres
+          especiais, troque o traço por _ (ex.: <code>agent-1</code> vira <code>agent_1</code>).
         </p>
       </>
     ),

@@ -42,6 +42,7 @@ services:
       FACTORY_RUN: "true"
       FACTORY_PUSH: ${FACTORY_PUSH:-false}
       FACTORY_IMAGE: le-fabrique/cli:dev
+      FACTORY_TOOL_IMAGE: ${FACTORY_TOOL_IMAGE:-}
       CLI_LOGIN_CONTEXT: /src/infra/images
     volumes:
       - .:/src

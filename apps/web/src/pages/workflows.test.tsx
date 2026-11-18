@@ -389,6 +389,8 @@ describe("editor de workflows", { timeout: 20_000 }, () => {
     for (const title of [
       "O que é um workflow (comece por aqui)",
       "Os tipos de setas, cores e bolinhas",
+      "Na prática: o que acontece quando o fluxo roda",
+      "O botão Testar o fluxo (painel de teste em tempo real)",
       "Expressões: a linguagem das condições",
       "O fluxo padrão, nó por nó",
     ]) {

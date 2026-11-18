@@ -29,6 +29,7 @@ import {
 } from "../lib/api";
 import { useSession } from "../lib/session";
 import { useResource } from "../lib/useResource";
+import { FlowTestModal } from "./FlowTestModal";
 import { WorkflowManualButton } from "./WorkflowManual";
 import { EditorContext, FlowNodeCard, nodeIcon } from "./workflow/FlowNode";
 import {
@@ -347,6 +348,19 @@ function Editor({ initial, nodeTypes }: { initial: Workflow; nodeTypes: NodeType
           actions={
             <div className="actions">
               <WorkflowManualButton />
+              <TestLauncher
+                workflowId={initial.id}
+                disabled={dirty || issues.length > 0 || initial.kind !== "feature"}
+                hint={
+                  initial.kind !== "feature"
+                    ? "Subfluxos são testados dentro de um fluxo de feature"
+                    : dirty
+                      ? "Salve o rascunho antes de testar"
+                      : issues.length > 0
+                        ? "Resolva as pendências da validação antes de testar"
+                        : "Roda uma feature fictícia por este fluxo"
+                }
+              />
               <span className={dirty ? "badge badge--paused" : "badge badge--active"}>
                 {dirty ? "Alterações não salvas" : justSaved ? "Salvo" : `Versão ${version}`}
               </span>
@@ -635,6 +649,88 @@ function Editor({ initial, nodeTypes }: { initial: Workflow; nodeTypes: NodeType
         </section>
       </div>
     </EditorContext.Provider>
+  );
+}
+
+/** Testar o fluxo aberto no editor: escolhe o projeto (o teste usa o repositório dele, ou um descartável) e abre o painel. */
+function TestLauncher({
+  workflowId,
+  disabled,
+  hint,
+}: {
+  workflowId: string;
+  disabled: boolean;
+  hint: string;
+}) {
+  const [choosing, setChoosing] = useState(false);
+  const [projectId, setProjectId] = useState("");
+  const [started, setStarted] = useState<string | null>(null);
+  const list = useResource(
+    (s) => api.listProjects(s),
+    "projects:test",
+    () => {},
+  );
+  const items = list.state.status === "ready" ? list.state.data.items : [];
+  return (
+    <>
+      <button
+        type="button"
+        className="secondary-action"
+        disabled={disabled}
+        title={hint}
+        onClick={() => setChoosing(true)}
+      >
+        Testar o fluxo
+      </button>
+      {choosing && !started && (
+        <div className="dialog-backdrop">
+          <div
+            className="panel panel--pad"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="tl-title"
+          >
+            <h2 id="tl-title" className="form-title">
+              Testar o fluxo
+            </h2>
+            <p className="muted">
+              A fábrica roda uma feature fictícia (selo de saúde, backend + frontend) por este
+              fluxo. Escolha o projeto em cujo contexto o teste roda: nada é enviado ao GitHub e, se
+              o projeto não tiver repositório, o teste usa um descartável.
+            </p>
+            <label>
+              Projeto
+              <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+                <option value="">Selecione…</option>
+                {items.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="actions">
+              <button type="button" disabled={!projectId} onClick={() => setStarted(projectId)}>
+                Iniciar teste
+              </button>
+              <button type="button" className="secondary-action" onClick={() => setChoosing(false)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {started && (
+        <FlowTestModal
+          projectId={started}
+          workflowId={workflowId}
+          onClose={() => {
+            setStarted(null);
+            setChoosing(false);
+          }}
+        />
+      )}
+    </>
   );
 }
 

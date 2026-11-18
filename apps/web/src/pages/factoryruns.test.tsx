@@ -27,6 +27,7 @@ function run(over: Partial<WorkflowRun> = {}): WorkflowRun {
     title: "Tela de pedidos",
     task: "",
     workspace: "proj",
+    kind: "manual",
     status: "running",
     outcome: "",
     failure: "",

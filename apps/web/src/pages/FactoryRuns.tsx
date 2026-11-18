@@ -4,6 +4,7 @@ import { type ApiError, api, type ExecutionEvent, type WorkflowRun } from "../li
 import { useSession } from "../lib/session";
 import { useEventStream } from "../lib/useEventStream";
 import { useResource } from "../lib/useResource";
+import { FlowTestModal } from "./FlowTestModal";
 
 const statusLabel: Record<WorkflowRun["status"], string> = {
   queued: "Na fila",
@@ -193,6 +194,7 @@ export function FactoryRuns({ projectId }: { projectId: string }) {
   const [correction, setCorrection] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [testing, setTesting] = useState(false);
 
   const anyOpen = state.status === "ready" && state.data.items.some((r) => open(r.status));
   useEffect(() => {
@@ -219,7 +221,21 @@ export function FactoryRuns({ projectId }: { projectId: string }) {
 
   return (
     <section className="panel panel--pad" aria-label="Executar a fábrica">
-      <h2 className="form-title">Executar a fábrica</h2>
+      <div className="actions">
+        <h2 className="form-title">Executar a fábrica</h2>
+        <button type="button" className="secondary-action" onClick={() => setTesting(true)}>
+          Testar o fluxo
+        </button>
+      </div>
+      {testing && (
+        <FlowTestModal
+          projectId={projectId}
+          onClose={() => {
+            setTesting(false);
+            reload();
+          }}
+        />
+      )}
       <p className="muted">
         Inicia o <strong>workflow publicado</strong> deste projeto. O worker conduz o fluxo: cada
         agente roda como o CLI oficial (Claude ou Codex) num terminal isolado, com a skill e o

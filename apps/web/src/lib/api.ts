@@ -722,6 +722,7 @@ export interface WorkflowRun {
   title: string;
   task: string;
   workspace: string;
+  kind: "manual" | "test";
   status: WorkflowRunStatus;
   outcome: string;
   failure: string;
@@ -1306,6 +1307,20 @@ export const api = {
     projectId: string,
     input: { title: string; task: string; prd_done: boolean; correction: boolean },
   ) => post<WorkflowRun>(`/projects/${encodeURIComponent(projectId)}/runs`, input),
+  getRun: (projectId: string, runId: string, signal?: AbortSignal) =>
+    request<WorkflowRun>(
+      `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}`,
+      { signal },
+    ),
+  startTestRun: (projectId: string, workflowId?: string) =>
+    post<WorkflowRun>(
+      `/projects/${encodeURIComponent(projectId)}/runs/test`,
+      workflowId ? { workflow_id: workflowId } : {},
+    ),
+  workflowVersion: (versionId: string, signal?: AbortSignal) =>
+    request<{ flat_graph: WorkflowGraph }>(`/workflow-versions/${encodeURIComponent(versionId)}`, {
+      signal,
+    }),
   cancelRun: (projectId: string, runId: string) =>
     post<WorkflowRun>(
       `/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/cancel`,
