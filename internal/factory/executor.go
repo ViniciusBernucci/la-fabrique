@@ -26,8 +26,11 @@ import (
 type Config struct {
 	Workspaces string // raiz de workspaces (WORKSPACES_DIR)
 	CLIImage   string // imagem com claude e codex (make cli-image)
-	Docker     *execution.Docker
-	Vault      *security.Vault // push e Draft PR (token do GitHub)
+	// ToolImage, se informada, troca a imagem dos perfis de scripts e checks (base, go, node): as imagens
+	// base são mínimas (sem make nem git) e o projeto precisa da própria toolchain para rodar make lint/test.
+	ToolImage string
+	Docker    *execution.Docker
+	Vault     *security.Vault // push e Draft PR (token do GitHub)
 	// AllowPush libera enviar a branch da execução ao GitHub e abrir a Draft PR (FACTORY_PUSH=true). Desligado,
 	// os nós Git push/draft_pr saem pela porta de erro explicando como ligar: efeito externo é decisão da pessoa.
 	AllowPush bool
@@ -61,10 +64,18 @@ func (e *Executor) Run(ctx context.Context, n workflows.Node, vars map[string]an
 		res, err = e.agent(ctx, info, n)
 	case workflows.TDocs:
 		res, err = e.docs(ctx, info, n)
+	case workflows.TSkill:
+		res, err = e.skill(ctx, info, n, vars)
 	case workflows.TScript:
 		res, err = e.commands(ctx, info, n, splitLines(propStr(n, "command")), true)
 	case workflows.TChecks:
-		res, err = e.commands(ctx, info, n, splitLines(propStr(n, "commands")), false)
+		cmds := splitLines(propStr(n, "commands"))
+		if info.Run.Kind == runner.KindTest {
+			// no teste os checks conferem a feature fictícia, qualquer que seja o projeto
+			cmds = runner.TestChecks
+			info.Emit(runner.EventNode, map[string]any{"node": n.ID, "kind": "note", "text": "modo teste: os checks conferem os arquivos da feature fictícia (em vez dos comandos do nó)"})
+		}
+		res, err = e.commands(ctx, info, n, cmds, false)
 	case workflows.TGit:
 		res, err = e.git(ctx, info, n)
 	default:
@@ -144,15 +155,22 @@ func (e *Executor) ensureRepo(ctx context.Context, run runner.Run) (string, proj
 	if rel == "" {
 		rel = p.Repository.Path
 	}
-	if rel == "" {
-		return "", p, errors.New("o projeto não tem pasta de repositório: prepare o repositório em Setup")
+	var src string
+	if rel != "" {
+		if s, rerr := (workspace.Root{Dir: e.Cfg.Workspaces}).Resolve(rel); rerr == nil && workspace.IsRepo(s) {
+			src = s
+		} else if run.Kind != runner.KindTest {
+			if rerr != nil {
+				return "", p, fmt.Errorf("pasta do repositório inválida: %w", rerr)
+			}
+			return "", p, fmt.Errorf("a pasta %q não é um repositório git", rel)
+		}
 	}
-	src, err := workspace.Root{Dir: e.Cfg.Workspaces}.Resolve(rel)
-	if err != nil {
-		return "", p, fmt.Errorf("pasta do repositório inválida: %w", err)
-	}
-	if !workspace.IsRepo(src) {
-		return "", p, fmt.Errorf("a pasta %q não é um repositório git", rel)
+	if src == "" {
+		if run.Kind != runner.KindTest {
+			return "", p, errors.New("o projeto não tem pasta de repositório: prepare o repositório em Setup")
+		}
+		return e.throwawayRepo(ctx, run, dest)
 	}
 	if err := os.MkdirAll(filepath.Dir(dest), 0o750); err != nil {
 		return "", p, err
@@ -171,6 +189,29 @@ func (e *Executor) ensureRepo(ctx context.Context, run runner.Run) (string, proj
 	return dest, p, nil
 }
 
+// throwawayRepo cria, só para o teste do fluxo, um repositório vazio com um commit inicial: o projeto pode não ter
+// repositório preparado ainda e o teste precisa funcionar em qualquer projeto.
+func (e *Executor) throwawayRepo(ctx context.Context, run runner.Run, dest string) (string, projects.Project, error) {
+	p, err := projects.Get(ctx, e.DB, run.ProjectID)
+	if err != nil {
+		return "", p, err
+	}
+	if err := os.MkdirAll(dest, 0o750); err != nil {
+		return "", p, err
+	}
+	if err := os.WriteFile(filepath.Join(dest, "README.md"), []byte("# Repositório descartável do teste da fábrica\n"), 0o640); err != nil {
+		return "", p, err
+	}
+	for _, args := range [][]string{{"init", "--quiet", "-b", "main"}, {"add", "-A"}, {"commit", "--quiet", "-m", "Repositório descartável do teste"},
+		{"checkout", "--quiet", "-b", branchOf(run.ExecutionID)}} {
+		if _, err := e.git1(ctx, dest, nil, nil, args...); err != nil {
+			_ = os.RemoveAll(filepath.Dir(dest))
+			return "", p, err
+		}
+	}
+	return dest, p, nil
+}
+
 // ---- sandbox, patch ----
 
 func (e *Executor) profile(name string) (execution.Profile, bool) {
@@ -182,6 +223,9 @@ func (e *Executor) profile(name string) (execution.Profile, bool) {
 			TmpMB: 512, WorkspaceMB: 2048, Network: execution.NetEgress}, e.Cfg.CLIImage != ""
 	}
 	p, ok := execution.Profiles[name]
+	if ok && e.Cfg.ToolImage != "" {
+		p.Image = e.Cfg.ToolImage
+	}
 	return p, ok
 }
 
@@ -322,7 +366,10 @@ func (e *Executor) runAgent(ctx context.Context, info runner.Info, n workflows.N
 		return fail(info, n, "%v", err), nil
 	}
 	sdir := skillDirFor(acct.CLI)
-	prompt := Prompt(eff, proj.Name, info.Run.Title, info.Run.Task, sdir)
+	prompt := Prompt(eff, proj.Name, info.Run.Title, info.Run.Task, sdir, info.Run.Kind == runner.KindTest)
+	info.Emit(runner.EventNode, map[string]any{"node": n.ID, "kind": "agent", "agent": eff.AgentName, "provider": eff.Provider,
+		"model": eff.Model, "account": acct.Name, "skills": eff.Skills, "timeout_minutes": eff.TimeoutMinutes})
+	info.Emit(runner.EventNode, map[string]any{"node": n.ID, "kind": "prompt", "text": tail(prompt, 12000)})
 	var skillTarBytes []byte
 	if len(eff.Skills) > 0 {
 		if skillTarBytes, err = skillTar(ctx, e.DB, append([]string{}, eff.Skills...), sdir); err != nil {

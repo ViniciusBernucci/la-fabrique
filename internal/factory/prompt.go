@@ -15,7 +15,7 @@ import (
 
 // Prompt é o comando que a fábrica entrega ao CLI do agente: quem ele é, qual skill usar, o que a fábrica
 // quer e as regras. A pessoa não escreve isto: sai do cadastro do agente, do nó e da tarefa da execução.
-func Prompt(eff agents.Effective, project, title, task, skillDir string) string {
+func Prompt(eff agents.Effective, project, title, task, skillDir string, test bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Você é o agente %q da La fabrique, trabalhando no projeto %q. Responda em português.\n\n", eff.AgentName, project)
 	if len(eff.Skills) > 0 {
@@ -35,6 +35,17 @@ func Prompt(eff agents.Effective, project, title, task, skillDir string) string 
 	b.WriteString("\n")
 	if strings.TrimSpace(eff.Prompt) != "" {
 		fmt.Fprintf(&b, "## O que fazer nesta etapa\n%s\n\n", strings.TrimSpace(eff.Prompt))
+	}
+	if test {
+		b.WriteString(`## MODO TESTE DA FÁBRICA
+Esta execução é um TESTE com uma feature fictícia, para verificar o funcionamento do fluxo. Faça somente o que o papel desta etapa pede, aplicado a essa feature:
+- se sua etapa é de implementação, crie apenas os arquivos descritos para a sua trilha (backend ou frontend);
+- se é de planejamento, escreva o plano em texto na sua resposta (não crie arquivos);
+- se é de revisão, leia os arquivos existentes e responda com os achados (não altere nada, a menos que a etapa peça correção);
+- se é de outro tipo, descreva em poucas linhas o que faria.
+Não toque em nenhum outro arquivo do projeto.
+
+`)
 	}
 	b.WriteString(`## Regras
 - Trabalhe só dentro do repositório atual. Edite os arquivos necessários; a fábrica recolhe as alterações.

@@ -1,0 +1,196 @@
+package integration
+
+import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/ViniciusBernucci/le-fabrique/internal/agents"
+	"github.com/ViniciusBernucci/le-fabrique/internal/execution"
+	"github.com/ViniciusBernucci/le-fabrique/internal/factory"
+	"github.com/ViniciusBernucci/le-fabrique/internal/policy"
+	"github.com/ViniciusBernucci/le-fabrique/internal/runner"
+	"github.com/ViniciusBernucci/le-fabrique/internal/skills"
+	"github.com/ViniciusBernucci/le-fabrique/internal/stdflow"
+	"github.com/ViniciusBernucci/le-fabrique/internal/workflows"
+)
+
+// CLI de mentira do teste do fluxo: cada trilha cria só o arquivo que o comando da fábrica pede.
+const flowTestFakeCLI = `#!/bin/sh
+p=$(cat)
+case "$p" in *"subtarefas BACKEND"*)
+  mkdir -p fabrica-teste/backend
+  printf '# Endpoint de saúde\nGET /saude\n{"status":"ok"}\n' > fabrica-teste/backend/saude.md ;;
+esac
+case "$p" in *"subtarefas FRONTEND"*)
+  mkdir -p fabrica-teste/frontend
+  printf '<p class="selo">Sistema saudável</p><!-- /saude -->\n' > fabrica-teste/frontend/selo-saude.html ;;
+esac
+case "$p" in *"MODO TESTE DA FÁBRICA"*) echo "modo_teste_ok" >> .teste-modo ;; esac
+echo '{"type":"system","subtype":"init","session_id":"sess-teste"}'
+echo '{"type":"assistant","message":{"content":[{"type":"text","text":"feito"}]}}'
+echo '{"type":"result","is_error":false,"result":"etapa concluída","usage":{"input_tokens":3,"output_tokens":2}}'
+`
+
+// flowTestImage constrói (uma vez) a imagem de ensaio: a do worker (sh, git, tar) com o CLI de mentira.
+func flowTestImage(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "fakecli"), []byte(flowTestFakeCLI), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	df := "FROM le-fabrique/worker:dev\nUSER root\nCOPY fakecli /usr/local/bin/fakecli\nRUN chmod 0755 /usr/local/bin/fakecli\n"
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte(df), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("docker", "build", "-q", "-t", "lf-test-fakecli:latest", dir).CombinedOutput(); err != nil {
+		t.Skipf("não consegui montar a imagem de ensaio: %s", out)
+	}
+	return "lf-test-fakecli:latest"
+}
+
+func flowTestExecutor(t *testing.T, r *relEnv, image string) *factory.Executor {
+	prof := func(name string) execution.Profile {
+		return execution.Profile{Name: name, Image: image, CPUs: 1, MemoryMB: 512, PidsLimit: 256, TmpMB: 64, WorkspaceMB: 256, Network: execution.NetNone}
+	}
+	return &factory.Executor{DB: r.e.db.Pool, Cfg: factory.Config{
+		Workspaces: t.TempDir(), Docker: &execution.Docker{}, Binary: map[string]string{"claude": "/usr/local/bin/fakecli"},
+		Profiles: map[string]execution.Profile{"agent": prof("agent"), "base": prof("base"), "go": prof("go"), "node": prof("node")},
+	}}
+}
+
+func driveRun(t *testing.T, r *relEnv, fx *factory.Executor, run runner.Run) runner.Run {
+	t.Helper()
+	ctx := context.Background()
+	claimed, err := runner.Claim(ctx, r.e.db.Pool, "w", 5*time.Minute)
+	if err != nil || claimed == nil {
+		t.Fatalf("claim: %v %v", claimed, err)
+	}
+	done, err := runner.Advance(ctx, r.e.db.Pool, *claimed, runner.Options{Exec: fx, Lease: 5 * time.Minute})
+	if err != nil {
+		t.Fatalf("advance: %v", err)
+	}
+	return done
+}
+
+func dockerReady(t *testing.T) {
+	t.Helper()
+	if !(&execution.Docker{}).Available(context.Background()) {
+		t.Skip("Docker indisponível")
+	}
+	if out, _ := exec.Command("docker", "images", "-q", "le-fabrique/worker:dev").Output(); strings.TrimSpace(string(out)) == "" {
+		t.Skip("imagem le-fabrique/worker:dev ausente")
+	}
+}
+
+// ADR-0069 — o botão Testar o fluxo roda a feature fictícia (backend + frontend) pelo fluxo padrão REAL, num projeto
+// SEM repositório, e termina com sucesso: checks da feature, push e Draft PR só simulados.
+func TestFlowTestRunsTheStandardFlowInAProjectWithoutRepository(t *testing.T) {
+	dockerReady(t)
+	r := newRelEnv(t)
+	db := r.e.db.Pool
+	ctx := context.Background()
+	if _, err := skills.InstallDefaults(ctx, db, policy.DefaultPolicy(policy.Options{})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := agents.InstallDefaults(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	connWith(t, r.c, "cli", "Claude de ensaio", "claude") // a única conta ativa do provedor
+	acctVol := ""
+	_ = acctVol
+	if _, _, err := stdflow.Provision(ctx, db, r.proj, "Projeto sem repositório"); err != nil {
+		t.Fatal(err)
+	}
+	var run runner.Run
+	r.c.expect(r.c.post("/api/projects/"+r.proj+"/runs/test", map[string]any{}), 201).JSON(&run)
+	if run.Kind != "test" || run.Title != runner.TestFeatureTitle || !strings.Contains(run.Task, "FEATURE FICTÍCIA") {
+		t.Fatalf("execução de teste: %+v", run)
+	}
+	// a conta precisa do volume (o executor o monta no terminal)
+	var acct string
+	_ = db.QueryRow(ctx, `SELECT id::text FROM connections WHERE kind = 'cli' AND target = 'claude' AND state = 'active'`).Scan(&acct)
+	d := &execution.Docker{}
+	if err := d.EnsureVolume(ctx, "lf-acct-"+acct); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.RemoveVolume(ctx, "lf-acct-"+acct) }()
+
+	fx := flowTestExecutor(t, r, flowTestImage(t))
+	done := driveRun(t, r, fx, run)
+	if done.Status != "completed" || done.Outcome != "success" {
+		var evs []string
+		rows, _ := db.Query(ctx, `SELECT type || ' ' || payload::text FROM execution_events WHERE execution_id = $1 ORDER BY seq`, run.ExecutionID)
+		for rows.Next() {
+			var p string
+			_ = rows.Scan(&p)
+			evs = append(evs, p)
+		}
+		t.Fatalf("o teste do fluxo deveria concluir com sucesso: status=%s outcome=%s falha=%q\n%s", done.Status, done.Outcome, done.Failure, strings.Join(evs, "\n"))
+	}
+	// as duas trilhas criaram seus arquivos; o push e a PR foram simulados
+	work := filepath.Join(fx.Cfg.Workspaces, ".factory", run.ExecutionID, "repo")
+	for _, f := range []string{runner.TestBackendFile, runner.TestFrontendFile} {
+		if _, err := os.Stat(filepath.Join(work, f)); err != nil {
+			t.Errorf("a trilha deveria ter criado %s: %v", f, err)
+		}
+	}
+	var simulated, prompts, configs int
+	_ = db.QueryRow(ctx, `SELECT count(*) FILTER (WHERE payload->>'text' LIKE '%SIMULADO%'),
+		count(*) FILTER (WHERE payload->>'kind' = 'prompt' AND payload->>'text' LIKE '%MODO TESTE DA FÁBRICA%'),
+		count(*) FILTER (WHERE payload->>'kind' = 'agent')
+		FROM execution_events WHERE execution_id = $1 AND type = 'node_event'`, run.ExecutionID).Scan(&simulated, &prompts, &configs)
+	if simulated != 1 || prompts != 5 || configs != 5 {
+		t.Errorf("eventos: simulado=%d prompts=%d agentes=%d (esperado 1, 5, 5)", simulated, prompts, configs)
+	}
+}
+
+// ADR-0069 — num fluxo QUALQUER (um workflow próprio, fora do projeto) a falha aparece com o nó e o motivo.
+func TestFlowTestReportsWhereAnyFlowFails(t *testing.T) {
+	dockerReady(t)
+	r := newRelEnv(t)
+	db := r.e.db.Pool
+	ctx := context.Background()
+	connWith(t, r.c, "cli", "Claude de ensaio", "claude")
+	ab := agentBody("dev", nil)
+	ab["model"], ab["tools"], ab["skills"] = "", []string{"read_file"}, []string{}
+	r.c.expect(r.c.post("/api/agents", ab), 201)
+	g := linear(
+		wfNode("dev", "agent", 0, 0, map[string]any{"agent": "dev", "prompt": "Faça o que o papel pede."}),
+		wfNode("chk", "checks", 0, 0, map[string]any{"commands": "true", "profile": "base"}),
+	)
+	g.Nodes = append(g.Nodes, wfNode("f-chk", "end", 0, 0, map[string]any{"outcome": "failure"}), wfNode("f-dev", "end", 0, 0, map[string]any{"outcome": "failure"}))
+	g.Edges = append(g.Edges, wfEdge("x1", "chk", "error", "f-chk", "in"), wfEdge("x2", "dev", "error", "f-dev", "in"))
+	w := r.draft(t, "fluxo-qualquer", "feature", g)
+
+	var run runner.Run
+	r.c.expect(r.c.post("/api/projects/"+r.proj+"/runs/test", map[string]any{"workflow_id": w.ID}), 201).JSON(&run)
+
+	var acct string
+	_ = db.QueryRow(ctx, `SELECT id::text FROM connections WHERE kind = 'cli' AND target = 'claude' AND state = 'active'`).Scan(&acct)
+	d := &execution.Docker{}
+	if err := d.EnsureVolume(ctx, "lf-acct-"+acct); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.RemoveVolume(ctx, "lf-acct-"+acct) }()
+
+	fx := flowTestExecutor(t, r, flowTestImage(t))
+	done := driveRun(t, r, fx, run)
+	// o agente "dev" não é de backend nem de frontend: não cria arquivos; os checks do teste, então, reprovam
+	if done.Status != "completed" || done.Outcome != "failure" {
+		t.Fatalf("deveria terminar em falha: %+v", done)
+	}
+	var where, why string
+	_ = db.QueryRow(ctx, `SELECT payload->>'node', payload->>'text' FROM execution_events
+		WHERE execution_id = $1 AND type = 'node_event' AND payload->>'kind' = 'error' ORDER BY seq DESC LIMIT 1`, run.ExecutionID).Scan(&where, &why)
+	if where != "chk" || !strings.Contains(why, "falhou") {
+		t.Fatalf("a falha deveria apontar o nó chk e o comando: nó=%q motivo=%q", where, why)
+	}
+	// um subfluxo não tem execução própria
+	sub := r.draft(t, "sub", "subflow", workflows.Starter())
+	r.c.expect(r.c.post("/api/projects/"+r.proj+"/runs/test", map[string]any{"workflow_id": sub.ID}), 409)
+}

@@ -74,6 +74,9 @@ type Engine struct {
 	// OnStep, se informado, é chamado depois de cada passo com o estado já atualizado (para persistir
 	// o progresso de execuções longas). Um erro interrompe o avanço; o estado persiste como está.
 	OnStep func(ctx context.Context, st *RunState) error
+	// WaitFor, se informado, decide a duração real de uma espera durável (a do nó, em minutos, é o padrão).
+	// O teste do fluxo a usa para não dormir um dia inteiro.
+	WaitFor func(minutes int) time.Duration
 }
 
 var nonIdent = regexp.MustCompile(`[^A-Za-z0-9_]`)
@@ -330,7 +333,11 @@ func (e *Engine) step(ctx context.Context, ix index, st *RunState, tok Token) {
 			route("done", "")
 		}
 	case TWait:
-		st.WaitUntil[n.ID] = e.now().Add(time.Duration(propInt(n, "minutes")) * time.Minute)
+		wait := time.Duration(propInt(n, "minutes")) * time.Minute
+		if e.WaitFor != nil {
+			wait = e.WaitFor(propInt(n, "minutes"))
+		}
+		st.WaitUntil[n.ID] = e.now().Add(wait)
 		trace("", "aguardando")
 	case THuman:
 		st.Pending = append(st.Pending, n.ID)

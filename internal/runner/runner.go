@@ -27,6 +27,12 @@ type DB interface {
 // ErrCancelled interrompe o avanço de uma execução cancelada.
 var ErrCancelled = errors.New("execução cancelada")
 
+// Tipos de execução.
+const (
+	KindManual = "manual"
+	KindTest   = "test"
+)
+
 // Status de uma execução do fluxo (espelha o do motor, mais "queued" e "cancelled").
 const (
 	StatusQueued    = "queued"
@@ -51,6 +57,7 @@ type StartInput struct {
 	Task       string // o que a fábrica deve fazer, em texto
 	Workspace  string // pasta do repositório, relativa à raiz de workspaces
 	CreatedBy  string
+	Kind       string // "manual" (padrão) ou "test"
 	// Variáveis de partida do fluxo padrão.
 	Correction bool // fabrica.correcao
 	PRDDone    bool // prd.concluido
@@ -64,6 +71,7 @@ type Run struct {
 	Title       string                `json:"title"`
 	Task        string                `json:"task"`
 	Workspace   string                `json:"workspace"`
+	Kind        string                `json:"kind"`
 	Status      string                `json:"status"`
 	Outcome     string                `json:"outcome"`
 	Failure     string                `json:"failure"`
@@ -82,12 +90,12 @@ type FieldError struct{ Field, Message string }
 func (e *FieldError) Error() string { return e.Field + ": " + e.Message }
 func (e *FieldError) Unwrap() error { return persistence.ErrInvalidInput }
 
-const runColumns = `r.execution_id, r.project_id, r.workflow_version_id, r.title, r.task, r.workspace, r.status, r.outcome, r.failure, r.state, r.wake_at, r.created_at, r.updated_at`
+const runColumns = `r.execution_id, r.project_id, r.workflow_version_id, r.title, r.task, r.workspace, r.kind, r.status, r.outcome, r.failure, r.state, r.wake_at, r.created_at, r.updated_at`
 
 func scanRun(row interface{ Scan(...any) error }) (Run, error) {
 	var r Run
 	var raw []byte
-	if err := row.Scan(&r.ExecutionID, &r.ProjectID, &r.VersionID, &r.Title, &r.Task, &r.Workspace, &r.Status, &r.Outcome, &r.Failure,
+	if err := row.Scan(&r.ExecutionID, &r.ProjectID, &r.VersionID, &r.Title, &r.Task, &r.Workspace, &r.Kind, &r.Status, &r.Outcome, &r.Failure,
 		&raw, &r.WakeAt, &r.CreatedAt, &r.UpdatedAt); err != nil {
 		return r, persistence.MapError(err)
 	}
@@ -132,6 +140,12 @@ func Start(ctx context.Context, db DB, in StartInput) (Run, error) {
 		}
 		in.WorkflowID = id
 	}
+	if in.Kind == "" {
+		in.Kind = KindManual
+	}
+	if in.Kind != KindManual && in.Kind != KindTest {
+		return Run{}, &FieldError{"kind", "Tipo de execução inválido."}
+	}
 	feat, err := persistence.CreateFeature(ctx, db, in.ProjectID, "manual-"+randomSuffix(), in.Title)
 	if err != nil {
 		return Run{}, err
@@ -149,10 +163,10 @@ func Start(ctx context.Context, db DB, in StartInput) (Run, error) {
 	var run Run
 	err = persistence.WithTx(ctx, db, func(tx pgx.Tx) error {
 		row := tx.QueryRow(ctx, `
-			INSERT INTO execution_runs (execution_id, project_id, workflow_version_id, title, task, workspace, state, created_by)
-			VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
+			INSERT INTO execution_runs (execution_id, project_id, workflow_version_id, title, task, workspace, state, created_by, kind)
+			VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
 			RETURNING `+strings.ReplaceAll(runColumns, "r.", ""),
-			ex.ID, in.ProjectID, ver.ID, in.Title, in.Task, in.Workspace, string(raw), in.CreatedBy)
+			ex.ID, in.ProjectID, ver.ID, in.Title, in.Task, in.Workspace, string(raw), in.CreatedBy, in.Kind)
 		var err error
 		if run, err = scanRun(row); err != nil {
 			return err
@@ -350,6 +364,10 @@ func Advance(ctx context.Context, db DB, run Run, opt Options) (Run, error) {
 	}}
 	ctx = context.WithValue(ctx, ctxKey{}, info)
 	eng := &workflows.Engine{Exec: opt.Exec, Now: opt.Now}
+	if run.Kind == KindTest {
+		// o teste do fluxo não dorme: a espera programada (ex.: um dia pelo merge) vira um instante
+		eng.WaitFor = func(int) time.Duration { return 0 }
+	}
 	eng.OnStep = func(ctx context.Context, s *workflows.RunState) error {
 		if err := save(ctx, db, &run, *s, seen, opt.Lease); err != nil {
 			return err

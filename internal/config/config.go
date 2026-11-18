@@ -89,11 +89,13 @@ type Worker struct {
 	CLILoginImage string
 	// FactoryRun liga a execução dos workflows pelo worker (FACTORY_RUN=true, ADR-0069); FactoryPush libera
 	// enviar a branch e abrir a Draft PR (FACTORY_PUSH=true); FactoryImage é a imagem do terminal do agente.
-	FactoryRun      bool
-	FactoryPush     bool
-	FactoryImage    string
-	WorkspacesDir   string
-	CLILoginContext string
+	FactoryRun   bool
+	FactoryPush  bool
+	FactoryImage string
+	// FactoryToolImage troca a imagem dos perfis de scripts e checks (FACTORY_TOOL_IMAGE).
+	FactoryToolImage string
+	WorkspacesDir    string
+	CLILoginContext  string
 	// Admission liga o laço de admissão da Sentinela (SENTINEL_ADMISSION=true). Sem executor ligado ele roda em
 	// observação (dry-run): decide e audita, não reserva nem altera estado.
 	Admission         bool
@@ -317,6 +319,7 @@ func LoadWorker(lookup Lookup) (Worker, error) {
 	if cfg.FactoryRun {
 		cfg.FactoryPush = l.boolean("FACTORY_PUSH", false)
 		cfg.FactoryImage = l.str("FACTORY_IMAGE", "le-fabrique/cli:dev")
+		cfg.FactoryToolImage = l.str("FACTORY_TOOL_IMAGE", "")
 		cfg.WorkspacesDir = l.str("WORKSPACES_DIR", "")
 		if cfg.WorkspacesDir == "" {
 			l.fail("WORKSPACES_DIR é obrigatório com FACTORY_RUN=true (a pasta onde ficam os repositórios dos projetos)")

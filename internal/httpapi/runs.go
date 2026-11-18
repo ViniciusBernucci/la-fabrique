@@ -8,6 +8,8 @@ import (
 	"github.com/ViniciusBernucci/le-fabrique/internal/projects"
 	"github.com/ViniciusBernucci/le-fabrique/internal/releases"
 	"github.com/ViniciusBernucci/le-fabrique/internal/runner"
+	"github.com/ViniciusBernucci/le-fabrique/internal/stdflow"
+	"github.com/ViniciusBernucci/le-fabrique/internal/workflows"
 )
 
 // Execuções do workflow de um projeto (ADR-0069): quem inicia é a pessoa, quem conduz é o worker.
@@ -138,4 +140,65 @@ func (s *Server) decideRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, run)
+}
+
+// startTestRun é o botão "Testar o fluxo": publica o rascunho atual (idempotente: mesmo conteúdo, mesma versão) e
+// dispara a feature fictícia padronizada. Funciona com o fluxo do projeto ou com qualquer workflow de feature
+// (workflow_id), em qualquer projeto: o repositório descartável do teste cobre projetos sem repositório.
+func (s *Server) startTestRun(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.projectID(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		WorkflowID string `json:"workflow_id"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	p, err := projects.Get(r.Context(), s.db, id)
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	wfID := req.WorkflowID
+	if wfID == "" {
+		wf, _, perr := stdflow.Provision(r.Context(), s.db, id, p.Name)
+		if perr != nil {
+			s.writeDomainError(w, r, perr)
+			return
+		}
+		wfID = wf.ID
+	} else if !uuidPattern.MatchString(wfID) {
+		writeError(w, r, http.StatusBadRequest, "invalid_request", "Workflow inválido.", "Informe o ID de um workflow existente.")
+		return
+	}
+	draft, err := workflows.Get(r.Context(), s.db, wfID)
+	if err != nil {
+		s.writeDomainError(w, r, err)
+		return
+	}
+	if draft.Kind != workflows.KindFeature {
+		writeError(w, r, http.StatusConflict, "not_a_feature_flow", "Subfluxos não têm execução própria.",
+			"Teste um fluxo de feature que use este subfluxo: o teste percorre os subfluxos dele.")
+		return
+	}
+	if _, err := s.publisher().Publish(r.Context(), wfID, draft.Version, s.adminID(r)); err != nil {
+		var pe *releases.PublishError
+		if errors.As(err, &pe) {
+			writeProblems(w, r, http.StatusUnprocessableEntity, "publish_blocked", "O fluxo tem pendências e não pôde ser preparado para o teste: "+pe.Error(),
+				"Corrija os problemas listados no editor e teste de novo.", pe.Problems)
+			return
+		}
+		s.writeRunError(w, r, err)
+		return
+	}
+	in := runner.StartTestInput(id, p.Repository.Path, s.adminID(r))
+	in.WorkflowID = wfID
+	run, err := runner.Start(r.Context(), s.db, in)
+	if err != nil {
+		s.writeRunError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, run)
 }

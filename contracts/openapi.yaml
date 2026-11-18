@@ -991,6 +991,28 @@ paths:
         "403": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
         "409": {$ref: "#/components/responses/Error"}
+  /projects/{id}/runs/test:
+    post:
+      tags: [execucoes]
+      summary: Testa o fluxo com a feature fictícia padronizada (backend + frontend), em qualquer projeto e fluxo
+      description: >
+        Publica o rascunho atual do workflow (idempotente para o mesmo conteúdo) e dispara a execução de teste. Sem
+        `workflow_id`, usa o fluxo do projeto. No modo teste os checks conferem os arquivos da feature fictícia,
+        push e Draft PR são só simulados (nada vai ao GitHub) e, sem repositório preparado, o teste usa um
+        repositório descartável. Subfluxos não têm execução própria (409 `not_a_feature_flow`).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, additionalProperties: false, properties: {workflow_id: {type: string, format: uuid}}}}}
+      responses:
+        "201": {description: Execução de teste criada, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowRun"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "422": {description: O fluxo tem pendências (envelope de erro mais a lista `problems`)}
   /projects/{id}/runs/{runId}:
     get:
       tags: [execucoes]
@@ -2283,7 +2305,7 @@ components:
   schemas:
     WorkflowRun:
       type: object
-      required: [execution_id, project_id, workflow_version_id, title, task, workspace, status, outcome, failure, pending, trace, created_at, updated_at]
+      required: [execution_id, project_id, workflow_version_id, title, task, workspace, kind, status, outcome, failure, pending, trace, created_at, updated_at]
       properties:
         execution_id: {type: string, format: uuid}
         project_id: {type: string, format: uuid}
@@ -2291,6 +2313,7 @@ components:
         title: {type: string}
         task: {type: string}
         workspace: {type: string}
+        kind: {type: string, enum: [manual, test]}
         status: {type: string, enum: [queued, running, waiting, awaiting_decision, completed, failed, cancelled]}
         outcome: {type: string, description: "success ou failure, quando concluída"}
         failure: {type: string}

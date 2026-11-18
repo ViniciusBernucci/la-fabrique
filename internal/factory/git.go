@@ -45,6 +45,15 @@ func (e *Executor) git(ctx context.Context, info runner.Info, n workflows.Node) 
 		}
 		return workflows.ExecResult{Outputs: map[string]any{"ok": true, "branch": branch, "commit": sha, "alteracoes": committed}}, nil
 	case "push", "draft_pr":
+		if info.Run.Kind == runner.KindTest {
+			// o teste do fluxo nunca envia nada ao GitHub: só confirma que a branch está pronta
+			sha, _, err := e.commit(ctx, repo, info.Run.Title, "Teste da fábrica")
+			if err != nil {
+				return fail(info, n, "commit antes do envio: %v", err), nil
+			}
+			emit("modo teste: " + op + " SIMULADO (nada é enviado ao GitHub); branch " + branch + " em " + sha[:12])
+			return workflows.ExecResult{Outputs: map[string]any{"ok": true, "branch": branch, "commit": sha, "simulado": true, "pr_url": "(simulada)"}}, nil
+		}
 		if !e.Cfg.AllowPush {
 			return fail(info, n, "o envio ao GitHub está desligado: ligue FACTORY_PUSH=true no worker para a fábrica enviar a branch e abrir a Draft PR"), nil
 		}
